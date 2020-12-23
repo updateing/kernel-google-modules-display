@@ -595,6 +595,20 @@ static const struct file_operations dpu_event_fops = {
 	.release = seq_release,
 };
 
+static bool is_dqe_supported(struct drm_device *drm_dev, u32 dqe_id)
+{
+	struct drm_crtc *crtc;
+	struct decon_device *decon;
+
+	drm_for_each_crtc(crtc, drm_dev) {
+		decon = crtc_to_decon(crtc);
+		if ((decon->id == dqe_id) && decon->dqe)
+			return true;
+	}
+
+	return false;
+}
+
 static int dump_show(struct seq_file *s, void *unused)
 {
 	struct debugfs_dump *dump = s->private;
@@ -604,23 +618,28 @@ static int dump_show(struct seq_file *s, void *unused)
 	if (!drm_dev || !is_power_on(drm_dev))
 		return 0;
 
+	if (dump->type <= DUMP_TYPE_DQE_MAX)
+		if (!is_dqe_supported(drm_dev, dump->id))
+			return 0;
+
 	if (dump->type == DUMP_TYPE_CGC_LUT)
-		dqe_reg_print_cgc_lut(CGC_LUT_SIZE, &p);
+		dqe_reg_print_cgc_lut(dump->id, CGC_LUT_SIZE, &p);
 	else if (dump->type == DUMP_TYPE_DEGAMMA_LUT)
-		dqe_reg_print_degamma_lut(&p);
+		dqe_reg_print_degamma_lut(dump->id, &p);
 	else if (dump->type == DUMP_TYPE_REGAMMA_LUT)
-		dqe_reg_print_regamma_lut(&p);
+		dqe_reg_print_regamma_lut(dump->id, &p);
 	else if (dump->type == DUMP_TYPE_GAMMA_MATRIX)
-		dqe_reg_print_gamma_matrix(&p);
+		dqe_reg_print_gamma_matrix(dump->id, &p);
 	else if (dump->type == DUMP_TYPE_LINEAR_MATRIX)
-		dqe_reg_print_linear_matrix(&p);
+		dqe_reg_print_linear_matrix(dump->id, &p);
 	else if (dump->type == DUMP_TYPE_ATC)
-		dqe_reg_print_atc(&p);
+		dqe_reg_print_atc(dump->id, &p);
 	else if (dump->type == DUMP_TYPE_DISP_DITHER ||
 			dump->type == DUMP_TYPE_CGC_DIHTER)
-		dqe_reg_print_dither(dump->dither_type, &p);
+		dqe_reg_print_dither(dump->id, dump->dither_type, &p);
 	else if (dump->type == DUMP_TYPE_HISTOGRAM)
-		dqe_reg_print_hist(&p);
+		dqe_reg_print_hist(dump->id, &p);
+
 	else if (dump->type == DUMP_TYPE_HDR_EOTF)
 		hdr_reg_print_eotf_lut(dump->id, &p);
 	else if (dump->type == DUMP_TYPE_HDR_OETF)

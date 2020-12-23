@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * dpu30/cal_9845/dpp_regs.c
+ * cal_9845/dpp_regs.c
  *
  * Copyright (c) 2019 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
@@ -23,7 +23,6 @@
 
 #include <exynos_dpp_coef.h>
 #include <exynos_hdr_lut.h>
-#include <cal_config.h>
 #include <dpp_cal.h>
 #include <hdr_cal.h>
 
@@ -39,27 +38,6 @@
 #define DPP_SC_RATIO_4_8	((1 << 20) * 8 / 4)
 #define DPP_SC_RATIO_3_8	((1 << 20) * 8 / 3)
 
-static struct cal_regs_desc regs_dpp[REGS_DPP_TYPE_MAX][REGS_DPP_ID_MAX];
-
-#define dpp_regs_desc(id)			(&regs_dpp[REGS_DPP][id])
-#define dpp_read(id, offset)			\
-	cal_read(dpp_regs_desc(id), offset)
-#define dpp_write(id, offset, val)		\
-	cal_write(dpp_regs_desc(id), offset, val)
-#define dpp_read_mask(id, offset, mask)	\
-	cal_read_mask(dpp_regs_desc(id), offset, mask)
-#define dpp_write_mask(id, offset, val, mask)	\
-	cal_write_mask(dpp_regs_desc(id), offset, val, mask)
-
-#define dma_regs_desc(id)			(&regs_dpp[REGS_DMA][id])
-#define dma_read(id, offset)			\
-	cal_read(dma_regs_desc(id), offset)
-#define dma_write(id, offset, val)		\
-	cal_write(dma_regs_desc(id), offset, val)
-#define dma_read_mask(id, offset, mask)	\
-	cal_read_mask(dma_regs_desc(id), offset, mask)
-#define dma_write_mask(id, offset, val, mask)	\
-	cal_write_mask(dma_regs_desc(id), offset, val, mask)
 
 void dpp_regs_desc_init(void __iomem *regs, const char *name,
 		enum dpp_regs_type type, unsigned int id)
@@ -245,7 +223,7 @@ static void idma_reg_print_irqs_msg(u32 id, u32 irqs)
 		cal_log_err(id, "IDMA FBC error irq occur\n");
 
 	if (irqs & IDMA_READ_SLAVE_ERROR)
-		cal_log_err(id, "IDMA read slave error irq occur\n");
+		cal_log_err(id, "IDMA read error irq occur\n");
 
 	if (irqs & IDMA_STATUS_DEADLOCK_IRQ)
 		cal_log_err(id, "IDMA deadlock irq occur\n");
@@ -345,7 +323,7 @@ static void odma_reg_print_irqs_msg(u32 id, u32 irqs)
 	u32 cfg_err;
 
 	if (irqs & ODMA_WRITE_SLAVE_ERR_IRQ)
-		cal_log_err(id, "ODMA write slave error irq occur\n");
+		cal_log_err(id, "ODMA write error irq occur\n");
 
 	if (irqs & ODMA_DEADLOCK_IRQ)
 		cal_log_err(id, "ODMA deadlock error irq occur\n");

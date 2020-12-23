@@ -13,6 +13,7 @@
 #ifndef __SAMSUNG_DECON_CAL_H__
 #define __SAMSUNG_DECON_CAL_H__
 
+#include <cal_config.h>
 #include <exynos_panel.h>
 
 #define MAX_WIN_PER_DECON	6
@@ -38,6 +39,69 @@ enum decon_regs_type {
 	REGS_DECON_WINCON,
 	REGS_DECON_TYPE_MAX
 };
+
+static struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
+
+#define decon_regs_desc(id)			(&regs_decon[REGS_DECON][id])
+#define decon_read(id, offset)			\
+	cal_read(decon_regs_desc(id), offset)
+#define decon_write(id, offset, val)		\
+	cal_write(decon_regs_desc(id), offset, val)
+#define decon_read_mask(id, offset, mask)	\
+	cal_read_mask(decon_regs_desc(id), offset, mask)
+#define decon_write_mask(id, offset, val, mask)	\
+	cal_write_mask(decon_regs_desc(id), offset, val, mask)
+
+#define win_regs_desc(id)			\
+	(&regs_decon[REGS_DECON_WIN][id])
+#define win_read(id, offset)			\
+	cal_read(win_regs_desc(id), offset)
+#define win_write(id, offset, val)		\
+	cal_write(win_regs_desc(id), offset, val)
+#define win_read_mask(id, offset, mask)		\
+	cal_read_mask(win_regs_desc(id), offset, mask)
+#define win_write_mask(id, offset, val, mask)	\
+	cal_write_mask(win_regs_desc(id), offset, val, mask)
+
+#define wincon_regs_desc(id)				\
+	(&regs_decon[REGS_DECON_WINCON][id])
+#define wincon_read(id, offset)				\
+	cal_read(wincon_regs_desc(id), offset)
+#define wincon_write(id, offset, val)			\
+	cal_write(wincon_regs_desc(id), offset, val)
+#define wincon_read_mask(id, offset, mask)		\
+	cal_read_mask(wincon_regs_desc(id), offset, mask)
+#define wincon_write_mask(id, offset, val, mask)	\
+	cal_write_mask(wincon_regs_desc(id), offset, val, mask)
+
+#define sub_regs_desc(id)			\
+	(&regs_decon[REGS_DECON_SUB][id])
+#define dsimif_read(id, offset)			\
+	cal_read(sub_regs_desc(id), offset)
+#define dsimif_write(id, offset, val)		\
+	cal_write(sub_regs_desc(id), offset, val)
+#define dsimif_read_mask(id, offset, mask)		\
+	cal_read_mask(sub_regs_desc(id), offset, mask)
+#define dsimif_write_mask(id, offset, val, mask)	\
+	cal_write_mask(sub_regs_desc(id), offset, val, mask)
+
+#define dpif_read(id, offset)			\
+	cal_read(sub_regs_desc(id), offset)
+#define dpif_write(id, offset, val)			\
+	cal_write(sub_regs_desc(id), offset, val)
+#define dpif_read_mask(id, offset, mask)		\
+	cal_read_mask(sub_regs_desc(id), offset, mask)
+#define dpif_write_mask(id, offset, val, mask)	\
+	cal_write_mask(sub_regs_desc(id), offset, val, mask)
+
+#define dsc_read(id, offset)			\
+	cal_read(sub_regs_desc(id), offset)
+#define dsc_write(id, offset, val)			\
+	cal_write(sub_regs_desc(id), offset, val)
+#define dsc_read_mask(id, offset, mask)		\
+	cal_read_mask(sub_regs_desc(id), offset, mask)
+#define dsc_write_mask(id, offset, val, mask)	\
+	cal_write_mask(sub_regs_desc(id), offset, val, mask)
 
 enum decon_idma_type {
 	IDMA_G0 = 0,
@@ -114,6 +178,9 @@ enum decon_enhance_path {
 	ENHANCEPATH_DITHER_ON		= 0x1,
 	ENHANCEPATH_DQE_ON		= 0x2,
 	ENHANCEPATH_DQE_DITHER_ON	= 0x3, /* post ENH stage is 8bpc */
+	ENHANCEPATH_RCD_ON		= 0x4,
+	ENHANCEPATH_RCD_DQE_ON		= 0x6,
+	ENHANCEPATH_RCD_DQE_DITHER_ON	= 0x7,
 };
 
 enum decon_path_cfg {
@@ -138,6 +205,12 @@ enum decon_trig_mode {
 	DECON_SW_TRIG
 };
 
+enum decon_enh_path {
+	DECON_ENH_DITHER = 1 << 0,
+	DECON_ENH_DQE    = 1 << 1,
+	DECON_ENH_RCD    = 1 << 2,
+};
+
 enum decon_out_type {
 	DECON_OUT_DSI0 = 1 << 0,
 	DECON_OUT_DSI1 = 1 << 1,
@@ -148,6 +221,11 @@ enum decon_out_type {
 	DECON_OUT_DP  = DECON_OUT_DP0 | DECON_OUT_DP1,
 
 	DECON_OUT_WB  = 1 << 8,
+};
+
+enum decon_src_cwb_path {
+	SRC_ENHANCER_OUT = 0,
+	SRC_ENHANCER_IN
 };
 
 enum decon_rgb_order {
@@ -209,6 +287,7 @@ struct decon_urgent {
 
 struct decon_config {
 	enum decon_out_type	out_type;
+	enum decon_enh_path	enh_path;
 	enum decon_te_from	te_from;
 	unsigned int		image_height;
 	unsigned int		image_width;
@@ -313,7 +392,7 @@ int decon_reg_get_interrupt_and_clear(u32 id, u32 *ext_irq);
 int decon_reg_get_fs_interrupt_and_clear(u32 id);
 
 /* DECON SFR dump */
-void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en);
+void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en, bool dqe_en);
 
 void decon_reg_set_start_crc(u32 id, u32 en);
 void decon_reg_get_crc_data(u32 id, u32 crc_data[3]);

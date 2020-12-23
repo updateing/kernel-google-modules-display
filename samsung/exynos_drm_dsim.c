@@ -1375,6 +1375,9 @@ static int dsim_register_irq(struct dsim_device *dsim)
 
 static int dsim_get_phys(struct dsim_device *dsim)
 {
+	if (IS_ENABLED(CONFIG_BOARD_EMULATOR))
+		return 0;
+
 	dsim->res.phy = devm_phy_get(dsim->dev, "dsim_dphy");
 	if (IS_ERR(dsim->res.phy)) {
 		dsim_err(dsim, "failed to get dsim phy\n");

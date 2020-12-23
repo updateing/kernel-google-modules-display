@@ -14,6 +14,7 @@
 #define __SAMSUNG_DPP_CAL_H__
 
 #include <drm/samsung_drm.h>
+#include <cal_config.h>
 
 #include "../exynos_drm_format.h"
 
@@ -105,6 +106,28 @@ enum dpp_regs_type {
 	REGS_DPP,
 	REGS_DPP_TYPE_MAX
 };
+
+static struct cal_regs_desc regs_dpp[REGS_DPP_TYPE_MAX][REGS_DPP_ID_MAX];
+
+#define dpp_regs_desc(id)			(&regs_dpp[REGS_DPP][id])
+#define dpp_read(id, offset)			\
+	cal_read(dpp_regs_desc(id), offset)
+#define dpp_write(id, offset, val)		\
+	cal_write(dpp_regs_desc(id), offset, val)
+#define dpp_read_mask(id, offset, mask)	\
+	cal_read_mask(dpp_regs_desc(id), offset, mask)
+#define dpp_write_mask(id, offset, val, mask)	\
+	cal_write_mask(dpp_regs_desc(id), offset, val, mask)
+
+#define dma_regs_desc(id)			(&regs_dpp[REGS_DMA][id])
+#define dma_read(id, offset)			\
+	cal_read(dma_regs_desc(id), offset)
+#define dma_write(id, offset, val)		\
+	cal_write(dma_regs_desc(id), offset, val)
+#define dma_read_mask(id, offset, mask)	\
+	cal_read_mask(dma_regs_desc(id), offset, mask)
+#define dma_write_mask(id, offset, val, mask)	\
+	cal_write_mask(dma_regs_desc(id), offset, val, mask)
 
 struct decon_frame {
 	int x;

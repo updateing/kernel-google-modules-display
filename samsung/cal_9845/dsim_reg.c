@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * dpu30/cal_9845/dsim_reg.c
+ * cal_9845/dsim_reg.c
  *
  * Copyright (c) 2019 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
@@ -530,7 +530,7 @@ static void dsim_reg_set_dphy_param_dither(u32 id, const struct stdphy_pms *dphy
 
 	/* FEED_EN */
 	val = ((dphy_pms->feed_en) ? ~0 : 0) | ((dphy_pms->fout_mask) ? ~0 : 0);
-	mask = DSIM_PHY_DITHER_FEED_EN | DSIM_PHY_DITHER_FOUT_MASK;
+	mask = DSIM_PHY_DITHER_FEED_EN_MASK | DSIM_PHY_DITHER_FOUT_MASK;
 	dsim_phy_write_mask(id, DSIM_PHY_PLL_CON2, val, mask);
 }
 

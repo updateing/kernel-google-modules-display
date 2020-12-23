@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * dpu30/cal_9845/decon_reg.c
+ * cal_9845/decon_reg.c
  *
  * Copyright (c) 2019 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
@@ -15,7 +15,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <cal_config.h>
 #include <decon_cal.h>
 #include <dqe_cal.h>
 #ifdef __linux__
@@ -54,68 +53,6 @@ enum decon_win_alpha_sel {
 	ALPHA_MULT_SRC_SEL_AB = 3,
 };
 
-static struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
-
-#define decon_regs_desc(id)			(&regs_decon[REGS_DECON][id])
-#define decon_read(id, offset)			\
-	cal_read(decon_regs_desc(id), offset)
-#define decon_write(id, offset, val)		\
-	cal_write(decon_regs_desc(id), offset, val)
-#define decon_read_mask(id, offset, mask)	\
-	cal_read_mask(decon_regs_desc(id), offset, mask)
-#define decon_write_mask(id, offset, val, mask)	\
-	cal_write_mask(decon_regs_desc(id), offset, val, mask)
-
-#define win_regs_desc(id)			\
-	(&regs_decon[REGS_DECON_WIN][id])
-#define win_read(id, offset)			\
-	cal_read(win_regs_desc(id), offset)
-#define win_write(id, offset, val)		\
-	cal_write(win_regs_desc(id), offset, val)
-#define win_read_mask(id, offset, mask)		\
-	cal_read_mask(win_regs_desc(id), offset, mask)
-#define win_write_mask(id, offset, val, mask)	\
-	cal_write_mask(win_regs_desc(id), offset, val, mask)
-
-#define wincon_regs_desc(id)				\
-	(&regs_decon[REGS_DECON_WINCON][id])
-#define wincon_read(id, offset)				\
-	cal_read(wincon_regs_desc(id), offset)
-#define wincon_write(id, offset, val)			\
-	cal_write(wincon_regs_desc(id), offset, val)
-#define wincon_read_mask(id, offset, mask)		\
-	cal_read_mask(wincon_regs_desc(id), offset, mask)
-#define wincon_write_mask(id, offset, val, mask)	\
-	cal_write_mask(wincon_regs_desc(id), offset, val, mask)
-
-#define sub_regs_desc(id)			\
-	(&regs_decon[REGS_DECON_SUB][id])
-#define dsimif_read(id, offset)			\
-	cal_read(sub_regs_desc(id), offset)
-#define dsimif_write(id, offset, val)		\
-	cal_write(sub_regs_desc(id), offset, val)
-#define dsimif_read_mask(id, offset, mask)		\
-	cal_read_mask(sub_regs_desc(id), offset, mask)
-#define dsimif_write_mask(id, offset, val, mask)	\
-	cal_write_mask(sub_regs_desc(id), offset, val, mask)
-
-#define dpif_read(id, offset)			\
-	cal_read(sub_regs_desc(id), offset)
-#define dpif_write(id, offset, val)			\
-	cal_write(sub_regs_desc(id), offset, val)
-#define dpif_read_mask(id, offset, mask)		\
-	cal_read_mask(sub_regs_desc(id), offset, mask)
-#define dpif_write_mask(id, offset, val, mask)	\
-	cal_write_mask(sub_regs_desc(id), offset, val, mask)
-
-#define dsc_read(id, offset)			\
-	cal_read(sub_regs_desc(id), offset)
-#define dsc_write(id, offset, val)			\
-	cal_write(sub_regs_desc(id), offset, val)
-#define dsc_read_mask(id, offset, mask)		\
-	cal_read_mask(sub_regs_desc(id), offset, mask)
-#define dsc_write_mask(id, offset, val, mask)	\
-	cal_write_mask(sub_regs_desc(id), offset, val, mask)
 
 void decon_regs_desc_init(void __iomem *regs, const char *name,
 		enum decon_regs_type type, unsigned int id)
@@ -144,7 +81,7 @@ static void decon_reg_set_operation_mode(u32 id, enum decon_op_mode mode)
 {
 	u32 val, mask;
 
-	mask = GLOBAL_CON_OPERATION_MODE_F;
+	mask = GLOBAL_CON_OPERATION_MODE_F_MASK;
 	if (mode == DECON_COMMAND_MODE)
 		val = GLOBAL_CON_OPERATION_MODE_CMD_F;
 	else
@@ -206,7 +143,7 @@ static void decon_reg_set_clkgate_mode(u32 id, u32 en)
 	val = en ? ~0 : 0;
 	/* all unmask */
 	mask = CLOCK_CON_AUTO_CG_MASK | CLOCK_CON_QACTIVE_MASK;
-	decon_write_mask(id, CLOCK_CON(id), val, mask);
+	decon_write_mask(id, CLOCK_CON, val, mask);
 }
 
 static void decon_reg_set_qactive_pll_mode(u32 id, u32 en)
@@ -216,7 +153,7 @@ static void decon_reg_set_qactive_pll_mode(u32 id, u32 en)
 	val = en ? ~0 : 0;
 	/* all unmask */
 	mask = CLOCK_CON_QACTIVE_PLL_ON;
-	decon_write_mask(id, CLOCK_CON(id), val, mask);
+	decon_write_mask(id, CLOCK_CON, val, mask);
 }
 
 /*
@@ -464,7 +401,7 @@ static void decon_reg_set_data_path(u32 id, struct decon_config *cfg)
 		val |= COMP_DSC(id);
 	}
 
-	decon_write_mask(id, DATA_PATH_CON, COMP_OUTIF_PATH_F(val),
+	decon_write_mask(id, DATA_PATH_CON_0, COMP_OUTIF_PATH_F(val),
 			COMP_OUTIF_PATH_MASK);
 }
 
@@ -472,7 +409,7 @@ void decon_reg_set_cwb_enable(u32 id, u32 en)
 {
 	u32 val, mask, d_path;
 
-	val = decon_read(id, DATA_PATH_CON);
+	val = decon_read(id, DATA_PATH_CON_0);
 	d_path = COMP_OUTIF_PATH_GET(val);
 
 	if (en)
@@ -481,7 +418,7 @@ void decon_reg_set_cwb_enable(u32 id, u32 en)
 		d_path &= ~CWB_PATH_EN;
 
 	mask = COMP_OUTIF_PATH_MASK;
-	decon_write_mask(id, DATA_PATH_CON, d_path, mask);
+	decon_write_mask(id, DATA_PATH_CON_0, d_path, mask);
 }
 
 void decon_reg_set_dqe_enable(u32 id, bool en)
@@ -490,7 +427,7 @@ void decon_reg_set_dqe_enable(u32 id, bool en)
 
 	val = en ? ENHANCE_DQE_ON : 0;
 	mask = en ? ENHANCE_DQE_ON : ENHANCE_PATH_MASK;
-	decon_write_mask(id, DATA_PATH_CON, val, mask);
+	decon_write_mask(id, DATA_PATH_CON_0, val, mask);
 }
 
 /*
@@ -507,7 +444,7 @@ static u32 decon_reg_get_data_path_cfg(u32 id, enum decon_path_cfg con_id)
 	u32 d_path;
 	u32 bRet = 0;
 
-	val = decon_read(id, DATA_PATH_CON);
+	val = decon_read(id, DATA_PATH_CON_0);
 	d_path = COMP_OUTIF_PATH_GET(val);
 
 	switch (con_id) {
@@ -571,7 +508,7 @@ static void decon_reg_set_data_path_size(u32 id, u32 width, u32 height,
 }
 
 /*
- * 'DATA_PATH_CON' SFR must be set before calling this function!!
+ * 'DATA_PATH_CON_0' SFR must be set before calling this function!!
  * [width]
  * - no compression  : x-resolution
  * - dsc compression : width_per_enc
@@ -694,7 +631,7 @@ static void decon_reg_update_req_compress(u32 id)
 
 static void dsc_reg_swreset(u32 id, u32 dsc_id)
 {
-	dsc_write_mask(id, DSC_CONTROL1(dsc_id), 1, DSC_SW_RESET);
+	dsc_write_mask(id, DSC_CONTROL_1(dsc_id), 1, DSC_SW_RESET);
 }
 
 static void dsc_reg_set_slice_mode_change(u32 id, u32 dsc_id, u32 en)
@@ -702,7 +639,7 @@ static void dsc_reg_set_slice_mode_change(u32 id, u32 dsc_id, u32 en)
 	u32 val;
 
 	val = DSC_SLICE_MODE_CH_F(en);
-	dsc_write_mask(id, DSC_CONTROL1(dsc_id), val, DSC_SLICE_MODE_CH_MASK);
+	dsc_write_mask(id, DSC_CONTROL_1(dsc_id), val, DSC_SLICE_MODE_CH_MASK);
 }
 
 static void dsc_reg_set_dual_slice(u32 id, u32 dsc_id, u32 en)
@@ -710,7 +647,7 @@ static void dsc_reg_set_dual_slice(u32 id, u32 dsc_id, u32 en)
 	u32 val;
 
 	val = DSC_DUAL_SLICE_EN_F(en);
-	dsc_write_mask(id, DSC_CONTROL1(dsc_id), val, DSC_DUAL_SLICE_EN_MASK);
+	dsc_write_mask(id, DSC_CONTROL_1(dsc_id), val, DSC_DUAL_SLICE_EN_MASK);
 }
 
 /*
@@ -828,13 +765,13 @@ static void dsc_reg_config_control(u32 id, u32 dsc_id, u32 ds_en, u32 sm_ch,
 	val |= DSC_DUAL_SLICE_EN_F(ds_en);
 	val |= DSC_SLICE_MODE_CH_F(sm_ch);
 	val |= DSC_FLATNESS_DET_TH_F(0x2);
-	dsc_write(id, DSC_CONTROL1(dsc_id), val);
+	dsc_write(id, DSC_CONTROL_1(dsc_id), val);
 
 	remainder = slice_width % 3 ? : 3;
 	grpcntline = (slice_width + 2) / 3;
 
 	val = DSC_REMAINDER_F(remainder) | DSC_GRPCNTLINE_F(grpcntline);
-	dsc_write(id, DSC_CONTROL3(dsc_id), val);
+	dsc_write(id, DSC_CONTROL_3(dsc_id), val);
 }
 
 /*
@@ -1009,7 +946,7 @@ static void dsc_reg_set_pps(u32 id, u32 dsc_id, struct decon_dsc *dsc_enc)
 	val |= PPS06_07_PIC_HEIGHT(dsc_enc->pic_height);
 	dsc_write(id, DSC_PPS04_07(dsc_id), val);
 
-	val = PPS08_09_PIC_WIDHT(dsc_enc->pic_width);
+	val = PPS08_09_PIC_WIDTH(dsc_enc->pic_width);
 	val |= PPS10_11_SLICE_HEIGHT(dsc_enc->slice_height);
 	dsc_write(id, DSC_PPS08_11(dsc_id), val);
 
@@ -1670,7 +1607,7 @@ static void decon_reg_set_dither_path(u32 id, bool en)
 	 * which is placed between blender and DSC.
 	 */
 	val = en ? ENHANCE_PATH_F(ENHANCEPATH_DITHER_ON) : 0;
-	decon_write_mask(id, DATA_PATH_CON, val, ENHANCE_DITHER_ON);
+	decon_write_mask(id, DATA_PATH_CON_0, val, ENHANCE_DITHER_ON);
 }
 
 static void decon_reg_set_urgent(u32 id, struct decon_config *config)
@@ -2156,7 +2093,7 @@ void decon_reg_get_crc_data(u32 id, u32 crc_data[3])
 	crc_data[2] = dsimif_read(id, DSIMIF_CRC_DATA_B(id));
 }
 
-void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en)
+void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en, bool dqe_en)
 {
 	int i;
 	void __iomem *main_regs = regs->regs;
@@ -2236,7 +2173,8 @@ void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en)
 		}
 	}
 
-	dqe_dump();
+	if (dqe_en)
+		dqe_dump(id);
 }
 
 u32 decon_reg_get_rsc_ch(u32 id)

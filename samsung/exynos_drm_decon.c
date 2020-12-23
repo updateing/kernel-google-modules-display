@@ -92,7 +92,7 @@ void decon_dump(struct decon_device *decon)
 			continue;
 		}
 
-		__decon_dump(d->id, &d->regs, d->config.dsc.enabled);
+		__decon_dump(d->id, &d->regs, d->config.dsc.enabled, d->dqe != NULL);
 	}
 
 	for (i = 0; i < decon->dpp_cnt; ++i)
