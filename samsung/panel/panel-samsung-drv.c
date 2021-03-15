@@ -26,6 +26,7 @@
 #include <drm/drm_probe_helper.h>
 #include <video/mipi_display.h>
 
+#include <trace/dpu_trace.h>
 #include "../exynos_drm_connector.h"
 #include "panel-samsung-drv.h"
 
@@ -35,6 +36,7 @@
 #define PANEL_ID_READ_SIZE	(PANEL_ID_LEN + PANEL_ID_OFFSET)
 
 static const char ext_info_regs[] = { 0xDA, 0xDB, 0xDC };
+#define EXT_INFO_SIZE ARRAY_SIZE(ext_info_regs)
 
 #define exynos_connector_to_panel(c)					\
 	container_of((c), struct exynos_panel, exynos_connector)
@@ -135,11 +137,10 @@ static int exynos_panel_read_id(struct exynos_panel *ctx)
 static int exynos_panel_read_extinfo(struct exynos_panel *ctx)
 {
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
-	const size_t extinfo_len = ARRAY_SIZE(ext_info_regs);
-	char buf[extinfo_len];
+	char buf[EXT_INFO_SIZE];
 	int i, ret;
 
-	for (i = 0; i < extinfo_len; i++) {
+	for (i = 0; i < EXT_INFO_SIZE; i++) {
 		ret = mipi_dsi_dcs_read(dsi, ext_info_regs[i], buf + i, 1);
 		if (ret != 1) {
 			dev_warn(ctx->dev,
@@ -1309,8 +1310,13 @@ static ssize_t hbm_mode_store(struct device *dev,
 		return -ENOTSUPP;
 	}
 
-	if (!ctx->enabled || !ctx->initialized) {
+	if (!ctx->enabled || !ctx->initialized || !ctx->current_mode) {
 		dev_err(ctx->dev, "panel is not enabled\n");
+		return -EPERM;
+	}
+
+	if (ctx->current_mode->exynos_mode.is_lp_mode) {
+		dev_dbg(ctx->dev, "hbm unsupported in LP mode\n");
 		return -EPERM;
 	}
 
@@ -1769,6 +1775,7 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_atomic_state *state = old_bridge_state->base.state;
 	const struct drm_crtc_state *old_crtc_state = exynos_panel_get_old_crtc_state(ctx, state);
+	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 	/* this handles the case where panel may be enabled while booting already */
 	if (ctx->enabled && !exynos_panel_init(ctx))
@@ -1782,7 +1789,8 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	drm_panel_enable(&ctx->panel);
 
 skip_enable:
-	exynos_panel_set_backlight_state(ctx, PANEL_STATE_ON);
+	exynos_panel_set_backlight_state(ctx, pmode->exynos_mode.is_lp_mode ?
+					 PANEL_STATE_LP : PANEL_STATE_ON);
 }
 
 static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
@@ -1880,7 +1888,8 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 			need_update_backlight = true;
 		} else if (was_lp_mode && !is_lp_mode && funcs->set_nolp_mode) {
 			funcs->set_nolp_mode(ctx, pmode);
-			exynos_panel_set_backlight_state(ctx, PANEL_STATE_ON);
+			exynos_panel_set_backlight_state(ctx, ctx->enabled ?
+							 PANEL_STATE_ON : PANEL_STATE_OFF);
 			need_update_backlight = true;
 		} else if (funcs->mode_set) {
 			funcs->mode_set(ctx, pmode);
@@ -1892,6 +1901,8 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 
 	if (need_update_backlight && ctx->bl)
 		backlight_update_status(ctx->bl);
+
+	DPU_ATRACE_INT("panel_fps", drm_mode_vrefresh(mode));
 }
 
 static void local_hbm_timeout_work(struct work_struct *work)

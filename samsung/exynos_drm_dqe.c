@@ -9,6 +9,8 @@
  *
  */
 
+#define pr_fmt(fmt)  "%s: " fmt, __func__
+
 #include <linux/of_address.h>
 #include <linux/device.h>
 #include <drm/drm_drv.h>
@@ -32,6 +34,8 @@ exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 	const struct exynos_drm_crtc_state *exynos_crtc_state =
 		container_of(state, struct exynos_drm_crtc_state, dqe);
 	const struct drm_crtc_state *crtc_state = &exynos_crtc_state->base;
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
 
 	if (drm_atomic_crtc_needs_modeset(crtc_state) || dqe->dstep_changed ||
 			exynos_crtc_state->seamless_mode_changed) {
@@ -41,6 +45,13 @@ exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 			get_actual_dstep(dqe->force_atc_config.dstep, vrefresh);
 		dqe->dstep_changed = false;
 	}
+
+	pr_debug("en(%d) dirty(%d) vrefresh(%d) dstep(%d/%d)\n",
+			dqe->force_atc_config.en,
+			dqe->force_atc_config.dirty,
+			drm_mode_vrefresh(&crtc_state->mode),
+			dqe->force_atc_config.dstep,
+			dqe->force_atc_config.actual_dstep);
 
 	if (dqe->force_atc_config.dirty) {
 		if (dqe->force_atc_config.en) {
@@ -52,14 +63,7 @@ exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 	}
 
 	if (dqe->verbose_atc)
-		dqe_reg_print_atc();
-
-	pr_debug("%s: en(%d) dirty(%d) vrefresh(%d) dstep(%d/%d)\n",
-			__func__, dqe->force_atc_config.en,
-			dqe->force_atc_config.dirty,
-			drm_mode_vrefresh(&crtc_state->mode),
-			dqe->force_atc_config.dstep,
-			dqe->force_atc_config.actual_dstep);
+		dqe_reg_print_atc(&p);
 }
 
 static struct exynos_drm_pending_histogram_event *create_histogram_event(
@@ -141,7 +145,7 @@ int histogram_cancel_ioctl(struct drm_device *dev, void *data,
 
 	obj = drm_mode_object_find(dev, file, *crtc_id, DRM_MODE_OBJECT_CRTC);
 	if (!obj) {
-		pr_err("%s: failed to find crtc object\n", __func__);
+		pr_err("failed to find crtc object\n");
 		return -ENOENT;
 	}
 
@@ -151,8 +155,7 @@ int histogram_cancel_ioctl(struct drm_device *dev, void *data,
 	decon = exynos_crtc->ctx;
 	dqe = decon->dqe;
 	if (!dqe) {
-		pr_err("%s: failed to get dqe from decon%d\n", __func__,
-				decon->id);
+		pr_err("failed to get dqe from decon%d\n", decon->id);
 		return -ENODEV;
 	}
 
@@ -183,9 +186,172 @@ void handle_histogram_event(struct exynos_dqe *dqe)
 }
 
 static void
+exynos_degamma_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
+{
+	struct degamma_debug_override *degamma = &dqe->degamma;
+	struct exynos_debug_info *info = &degamma->info;
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
+
+	pr_debug("en(%d) dirty(%d)\n", info->force_en, info->dirty);
+
+	if (info->force_en)
+		state->degamma_lut = degamma->force_lut;
+
+	if (dqe->state.degamma_lut != state->degamma_lut || info->dirty) {
+		dqe_reg_set_degamma_lut(state->degamma_lut);
+		dqe->state.degamma_lut = state->degamma_lut;
+		info->dirty = false;
+	}
+
+	if (info->verbose)
+		dqe_reg_print_degamma_lut(&p);
+}
+
+static void
+exynos_cgc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
+{
+	struct cgc_debug_override *cgc = &dqe->cgc;
+	struct exynos_debug_info *info = &cgc->info;
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
+
+	pr_debug("en(%d) dirty(%d)\n", info->force_en, info->dirty);
+
+	if (info->force_en)
+		state->cgc_lut = &cgc->force_lut;
+
+	if (dqe->state.cgc_lut != state->cgc_lut || info->dirty) {
+		dqe_reg_set_cgc_lut(state->cgc_lut);
+		dqe->state.cgc_lut = state->cgc_lut;
+		cgc->first_write = true;
+		info->dirty = false;
+	} else if (cgc->first_write) {
+		dqe_reg_set_cgc_lut(dqe->state.cgc_lut);
+		cgc->first_write = false;
+	}
+
+	if (info->verbose)
+		dqe_reg_print_cgc_lut(cgc->verbose_cnt, &p);
+}
+
+static void
+exynos_regamma_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
+{
+	struct regamma_debug_override *regamma = &dqe->regamma;
+	struct exynos_debug_info *info = &regamma->info;
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
+
+	pr_debug("en(%d) dirty(%d)\n", info->force_en, info->dirty);
+
+	if (info->force_en)
+		state->regamma_lut = regamma->force_lut;
+
+	if (dqe->state.regamma_lut != state->regamma_lut || info->dirty) {
+		dqe_reg_set_regamma_lut(state->regamma_lut);
+		dqe->state.regamma_lut = state->regamma_lut;
+		info->dirty = false;
+	}
+
+	if (info->verbose)
+		dqe_reg_print_regamma_lut(&p);
+}
+
+static void exynos_gamma_matrix_update(struct exynos_dqe *dqe,
+					struct exynos_dqe_state *state)
+{
+	struct matrix_debug_override *gamma = &dqe->gamma;
+	struct exynos_debug_info *info = &gamma->info;
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
+
+	pr_debug("en(%d) dirty(%d)\n", info->force_en, info->dirty);
+
+	if (info->force_en)
+		state->gamma_matrix = &gamma->force_matrix;
+
+	if (dqe->state.gamma_matrix != state->gamma_matrix || info->dirty) {
+		dqe_reg_set_gamma_matrix(state->gamma_matrix);
+		dqe->state.gamma_matrix = state->gamma_matrix;
+		info->dirty = false;
+	}
+
+	if (info->verbose)
+		dqe_reg_print_gamma_matrix(&p);
+}
+
+static void exynos_linear_matrix_update(struct exynos_dqe *dqe,
+					struct exynos_dqe_state *state)
+{
+	struct matrix_debug_override *linear = &dqe->linear;
+	struct exynos_debug_info *info = &linear->info;
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
+
+	pr_debug("en(%d) dirty(%d)\n", info->force_en, info->dirty);
+
+	if (info->force_en)
+		state->linear_matrix = &linear->force_matrix;
+
+	if (dqe->state.linear_matrix != state->linear_matrix || info->dirty) {
+		dqe_reg_set_linear_matrix(state->linear_matrix);
+		dqe->state.linear_matrix = state->linear_matrix;
+		info->dirty = false;
+	}
+
+	if (info->verbose)
+		dqe_reg_print_linear_matrix(&p);
+}
+
+static void
+exynos_dither_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
+{
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
+
+	if (dqe->cgc_dither_override.force_en) {
+		dqe_reg_set_cgc_dither(&dqe->cgc_dither_override.val);
+		dqe->state.cgc_dither_config = &dqe->cgc_dither_override.val;
+	} else if (dqe->state.cgc_dither_config != state->cgc_dither_config) {
+		dqe_reg_set_cgc_dither(state->cgc_dither_config);
+		dqe->state.cgc_dither_config = state->cgc_dither_config;
+	}
+
+	if (dqe->cgc_dither_override.verbose)
+		dqe_reg_print_dither(CGC_DITHER, &p);
+
+	if (dqe->disp_dither_override.force_en) {
+		dqe_reg_set_disp_dither(&dqe->disp_dither_override.val);
+		dqe->state.disp_dither_config = &dqe->disp_dither_override.val;
+	} else if (!state->disp_dither_config) {
+		const struct decon_device *decon;
+		struct dither_config dither_config;
+
+		decon = dqe->decon;
+		memset(&dither_config, 0, sizeof(dither_config));
+		if (decon->config.in_bpc == 10 && decon->config.out_bpc == 8)
+			dither_config.en = DITHER_EN(1);
+		else
+			dither_config.en = DITHER_EN(0);
+
+		dqe_reg_set_disp_dither(&dither_config);
+		dqe->state.disp_dither_config = NULL;
+	} else if (dqe->state.disp_dither_config != state->disp_dither_config) {
+		dqe_reg_set_disp_dither(state->disp_dither_config);
+		dqe->state.disp_dither_config = state->disp_dither_config;
+	}
+
+	if (dqe->disp_dither_override.verbose)
+		dqe_reg_print_dither(DISP_DITHER, &p);
+}
+
+static void
 exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 {
 	enum histogram_state hist_state;
+	struct decon_device *decon = dqe->decon;
+	struct drm_printer p = drm_info_printer(decon->dev);
 
 	if (dqe->state.roi != state->roi) {
 		dqe_reg_set_histogram_roi(state->roi);
@@ -210,15 +376,15 @@ exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 		hist_state = HISTOGRAM_OFF;
 
 	dqe_reg_set_histogram(hist_state);
+
+	if (dqe->verbose_hist)
+		dqe_reg_print_hist(&p);
 }
 
 static void __exynos_dqe_update(struct exynos_dqe *dqe,
 		struct exynos_dqe_state *state, u32 width, u32 height)
 {
-	const struct decon_device *decon;
-	struct dither_config dither_config;
-
-	pr_debug("%s: enabled(%d) +\n", __func__, state->enabled);
+	pr_debug("enabled(%d) +\n", state->enabled);
 
 	dqe->state.enabled = state->enabled && !dqe->force_disabled;
 
@@ -231,76 +397,14 @@ static void __exynos_dqe_update(struct exynos_dqe *dqe,
 		dqe->initialized = true;
 	}
 
-	exynos_histogram_update(dqe, state);
-
-	if (dqe->force_lm)
-		state->linear_matrix = &dqe->force_linear_matrix;
-
-	if (dqe->force_gm)
-		state->gamma_matrix = &dqe->force_gamma_matrix;
-
-	if (dqe->cgc_dither_override.force_en) {
-		dqe_reg_set_cgc_dither(&dqe->cgc_dither_override.val);
-		dqe->state.cgc_dither_config = &dqe->cgc_dither_override.val;
-	} else if (dqe->state.cgc_dither_config != state->cgc_dither_config) {
-		dqe_reg_set_cgc_dither(state->cgc_dither_config);
-		dqe->state.cgc_dither_config = state->cgc_dither_config;
-	}
-
-	if (dqe->cgc_dither_override.verbose)
-		dqe_reg_print_dither(CGC_DITHER);
-
-	if (dqe->disp_dither_override.force_en) {
-		dqe_reg_set_disp_dither(&dqe->disp_dither_override.val);
-		dqe->state.disp_dither_config = &dqe->disp_dither_override.val;
-	} else if (!state->disp_dither_config) {
-		decon = dqe->decon;
-		memset(&dither_config, 0, sizeof(dither_config));
-		if (decon->config.in_bpc == 10 && decon->config.out_bpc == 8)
-			dither_config.en = DITHER_EN(1);
-		else
-			dither_config.en = DITHER_EN(0);
-
-		dqe_reg_set_disp_dither(&dither_config);
-		dqe->state.disp_dither_config = NULL;
-	} else if (dqe->state.disp_dither_config != state->disp_dither_config) {
-		dqe_reg_set_disp_dither(state->disp_dither_config);
-		dqe->state.disp_dither_config = state->disp_dither_config;
-	}
-
-	if (dqe->disp_dither_override.verbose)
-		dqe_reg_print_dither(DISP_DITHER);
-
-	if (dqe->state.degamma_lut != state->degamma_lut) {
-		dqe_reg_set_degamma_lut(state->degamma_lut);
-		dqe->state.degamma_lut = state->degamma_lut;
-	}
-
-	if (dqe->state.cgc_lut != state->cgc_lut) {
-		dqe_reg_set_cgc_lut(state->cgc_lut);
-		dqe->state.cgc_lut = state->cgc_lut;
-		dqe->cgc_first_write = true;
-	} else if (dqe->cgc_first_write) {
-		dqe_reg_set_cgc_lut(dqe->state.cgc_lut);
-		dqe->cgc_first_write = false;
-	}
-
-	if (dqe->state.linear_matrix != state->linear_matrix) {
-		dqe_reg_set_linear_matrix(state->linear_matrix);
-		dqe->state.linear_matrix = state->linear_matrix;
-	}
-
-	if (dqe->state.gamma_matrix != state->gamma_matrix) {
-		dqe_reg_set_gamma_matrix(state->gamma_matrix);
-		dqe->state.gamma_matrix = state->gamma_matrix;
-	}
-
-	if (dqe->state.regamma_lut != state->regamma_lut) {
-		dqe_reg_set_regamma_lut(state->regamma_lut);
-		dqe->state.regamma_lut = state->regamma_lut;
-	}
-
 	exynos_atc_update(dqe, state);
+	exynos_gamma_matrix_update(dqe, state);
+	exynos_degamma_update(dqe, state);
+	exynos_linear_matrix_update(dqe, state);
+	exynos_cgc_update(dqe, state);
+	exynos_regamma_update(dqe, state);
+	exynos_dither_update(dqe, state);
+	exynos_histogram_update(dqe, state);
 
 	/*
 	 * Currently, the parameter of this function is fixed to zero because
@@ -309,7 +413,7 @@ static void __exynos_dqe_update(struct exynos_dqe *dqe,
 	 */
 	decon_reg_update_req_dqe(0);
 
-	pr_debug("%s -\n", __func__);
+	pr_debug("-\n");
 }
 
 static const struct exynos_dqe_funcs dqe_funcs = {
@@ -332,7 +436,7 @@ void exynos_dqe_reset(struct exynos_dqe *dqe)
 	dqe->state.regamma_lut = NULL;
 	dqe->state.disp_dither_config = NULL;
 	dqe->state.cgc_dither_config = NULL;
-	dqe->cgc_first_write = false;
+	dqe->cgc.first_write = false;
 	dqe->force_atc_config.dirty = true;
 	dqe->state.histogram_threshold = 0;
 	dqe->state.roi = NULL;

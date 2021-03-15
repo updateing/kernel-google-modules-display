@@ -102,6 +102,7 @@ struct bts_dpp_info {
 	u32 src_w;
 	struct bts_layer_position dst;
 	u32 bw;
+	u32 rt_bw;
 	bool rotation;
 };
 
@@ -139,7 +140,7 @@ struct dpu_bts {
 	u32 vsa;
 	u32 fps;
 	/* includes writeback dpp */
-	struct dpu_bts_bw bw[MAX_DPP_CNT];
+	struct dpu_bts_bw rt_bw[MAX_DPP_CNT];
 
 	/* each decon must know other decon's BW to get overall BW */
 	u32 ch_bw[3][MAX_DECON_CNT];
@@ -443,4 +444,21 @@ decon_get_wb(struct decon_device *decon)
 
 	return container_of(wb_connector, struct writeback_device, writeback);
 }
+
+#define crtc_to_decon(crtc)                                                    \
+	(container_of((crtc), struct exynos_drm_crtc, base)->ctx)
+static inline bool is_power_on(struct drm_device *drm_dev)
+{
+	struct drm_crtc *crtc;
+	struct decon_device *decon;
+	bool ret = false;
+
+	drm_for_each_crtc(crtc, drm_dev) {
+		decon = crtc_to_decon(crtc);
+		ret |= pm_runtime_active(decon->dev);
+	}
+
+	return ret;
+}
+
 #endif /* __EXYNOS_DRM_DECON_H__ */

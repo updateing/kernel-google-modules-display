@@ -463,7 +463,7 @@ static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
 			       struct exynos_drm_plane *exynos_plane)
 {
 	const struct drm_plane_state *plane_state = exynos_plane->base.state;
-	const struct exynos_drm_plane_state *exynos_plane_state =
+	struct exynos_drm_plane_state *exynos_plane_state =
 		to_exynos_plane_state(plane_state);
 	const struct drm_crtc_state *crtc_state = exynos_crtc->base.state;
 	struct dpp_device *dpp = plane_to_dpp(exynos_plane);
@@ -1244,7 +1244,7 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 		decon->bts.rot_util_pct = 60;
 		decon_warn(decon, "WARN: rot_util_pct is not defined in DT.\n");
 	}
-	decon_info(decon, "bus_width(%d) bus_util_pct(%d) rot_util_pct(%d)\n",
+	decon_info(decon, "bus_width(%u) bus_util_pct(%u) rot_util_pct(%u)\n",
 			decon->bts.bus_width, decon->bts.bus_util_pct,
 			decon->bts.rot_util_pct);
 
