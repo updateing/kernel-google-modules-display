@@ -23,7 +23,7 @@
 static inline struct exynos_drm_connector_properties *
 dev_get_exynos_connector_properties(struct drm_device *dev)
 {
-	struct exynos_drm_private *priv = dev->dev_private;
+	struct exynos_drm_private *priv = drm_to_exynos_dev(dev);
 
 	return &priv->connector_props;
 }
@@ -173,6 +173,11 @@ static int exynos_drm_connector_create_brightness_properties(struct drm_device *
 		return -ENOMEM;
 	p->hbm_on = prop;
 
+	prop = drm_property_create_bool(dev, 0, "dimming_on");
+	if (!prop)
+		return -ENOMEM;
+	p->dimming_on = prop;
+
 	prop = drm_property_create_range(dev, 0, "brightness_level", 0, UINT_MAX);
 	if (!prop)
 		return -ENOMEM;
@@ -230,6 +235,11 @@ int exynos_drm_connector_create_properties(struct drm_device *dev)
 					 "lp_mode", 0);
 	if (IS_ERR(p->lp_mode))
                 return PTR_ERR(p->lp_mode);
+
+	p->is_partial = drm_property_create_bool(dev, DRM_MODE_PROP_IMMUTABLE,
+			"is_partial");
+	if (IS_ERR(p->is_partial))
+		return PTR_ERR(p->is_partial);
 
 	ret = exynos_drm_connector_create_luminance_properties(dev);
 	if (ret)

@@ -31,7 +31,6 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_dsim.h"
 #include "exynos_drm_fb.h"
-#include "exynos_drm_fbdev.h"
 #include "exynos_drm_gem.h"
 #include "exynos_drm_plane.h"
 #include "exynos_drm_writeback.h"
@@ -50,7 +49,8 @@ EXPORT_TRACEPOINT_SYMBOL(tracing_mark_write);
 
 static struct exynos_drm_priv_state *exynos_drm_get_priv_state(struct drm_atomic_state *state)
 {
-	struct exynos_drm_private *priv = state->dev->dev_private;
+	struct exynos_drm_private *priv = drm_to_exynos_dev(state->dev);
+
 	struct drm_private_state *priv_state;
 
 	priv_state = drm_atomic_get_private_obj_state(state, &priv->obj);
@@ -159,6 +159,36 @@ static int exynos_atomic_check_windows(struct drm_device *dev, struct drm_atomic
 		}
 	}
 
+	for_each_new_crtc_in_state(state, crtc, new_crtc_state, i) {
+		struct exynos_drm_crtc_state *new_exynos_crtc_state =
+			to_exynos_crtc_state(new_crtc_state);
+		const unsigned long reserved_win_mask =
+			new_exynos_crtc_state->reserved_win_mask;
+		unsigned long visible_zpos = 0;
+		struct drm_plane *plane;
+		const struct drm_plane_state *plane_state;
+		unsigned int pmask, bit;
+
+		new_exynos_crtc_state->visible_win_mask = 0;
+
+		if (!new_crtc_state->plane_mask)
+			continue;
+
+		drm_atomic_crtc_state_for_each_plane_state(plane, plane_state,
+				new_crtc_state)
+			if (plane_state->visible)
+				visible_zpos |= BIT(plane_state->normalized_zpos);
+
+		pmask = 1;
+		for_each_set_bit(bit, &reserved_win_mask, MAX_WIN_PER_DECON) {
+			if (pmask & visible_zpos)
+				new_exynos_crtc_state->visible_win_mask |= BIT(bit);
+			pmask <<= 1;
+		}
+		pr_debug("%s: visible_win_mask(0x%x)\n", __func__,
+				new_exynos_crtc_state->visible_win_mask);
+	}
+
 	if (freed_win_mask) {
 		exynos_priv_state = exynos_drm_get_priv_state(state);
 		if (IS_ERR(exynos_priv_state))
@@ -178,10 +208,50 @@ static int exynos_atomic_check_windows(struct drm_device *dev, struct drm_atomic
 	return 0;
 }
 
+static void exynos_atomic_prepare_partial_update(struct drm_atomic_state *state)
+{
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+	struct exynos_drm_crtc_state *old_exynos_crtc_state, *new_exynos_crtc_state;
+	struct decon_device *decon;
+	struct exynos_partial *partial;
+	int i;
+
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+		decon = to_exynos_crtc(crtc)->ctx;
+
+		if (!new_crtc_state->active)
+			continue;
+
+		if (drm_atomic_crtc_needs_modeset(new_crtc_state)) {
+			const struct exynos_drm_connector_state *exynos_conn_state =
+				crtc_get_exynos_connector_state(state, new_crtc_state);
+
+			if (exynos_conn_state) {
+				const struct exynos_display_partial *p =
+					&exynos_conn_state->partial;
+
+				decon->partial = exynos_partial_initialize(decon,
+						p, &new_crtc_state->mode);
+			}
+		}
+
+		partial = decon->partial;
+		if (!partial)
+			continue;
+
+		new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
+		old_exynos_crtc_state = to_exynos_crtc_state(old_crtc_state);
+
+		exynos_partial_prepare(partial, old_exynos_crtc_state,
+						new_exynos_crtc_state);
+	}
+}
+
 int exynos_atomic_check(struct drm_device *dev,
 			struct drm_atomic_state *state)
 {
-	const struct exynos_drm_private *private = dev->dev_private;
+	const struct exynos_drm_private *private = drm_to_exynos_dev(dev);
 	int ret;
 
 	if (private->tui_enabled) {
@@ -193,15 +263,17 @@ int exynos_atomic_check(struct drm_device *dev,
 	if (ret)
 		return ret;
 
+	exynos_atomic_prepare_partial_update(state);
+
 	ret = drm_atomic_normalize_zpos(dev, state);
 	if (ret)
 		return ret;
 
-	ret = exynos_atomic_check_windows(dev, state);
+	ret = drm_atomic_helper_check_planes(dev, state);
 	if (ret)
 		return ret;
 
-	ret = drm_atomic_helper_check_planes(dev, state);
+	ret = exynos_atomic_check_windows(dev, state);
 	if (ret)
 		return ret;
 
@@ -386,8 +458,8 @@ int exynos_atomic_enter_tui(void)
 	struct drm_crtc *crtc;
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_state;
-	struct exynos_drm_private *private = dev->dev_private;
 	u32 tui_crtc_mask = 0;
+	struct exynos_drm_private *private = drm_to_exynos_dev(dev);
 
 	pr_debug("%s +\n", __func__);
 
@@ -491,7 +563,7 @@ int exynos_atomic_exit_tui(void)
 	struct drm_atomic_state *state;
 	struct drm_mode_config *mode_config = &dev->mode_config;
 	struct drm_modeset_acquire_ctx ctx;
-	struct exynos_drm_private *private = dev->dev_private;
+	struct exynos_drm_private *private = drm_to_exynos_dev(dev);
 
 	pr_debug("%s +\n", __func__);
 
@@ -548,10 +620,6 @@ static void exynos_drm_postclose(struct drm_device *dev, struct drm_file *file)
 	file->driver_priv = NULL;
 }
 
-static void exynos_drm_lastclose(struct drm_device *dev)
-{
-	exynos_drm_fbdev_restore_mode(dev);
-}
 
 static const struct drm_ioctl_desc exynos_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(EXYNOS_HISTOGRAM_REQUEST, histogram_request_ioctl, 0),
@@ -573,7 +641,6 @@ static struct drm_driver exynos_drm_driver = {
 	.driver_features	   = DRIVER_MODESET | DRIVER_ATOMIC |
 				     DRIVER_RENDER | DRIVER_GEM,
 	.open			   = exynos_drm_open,
-	.lastclose		   = exynos_drm_lastclose,
 	.postclose		   = exynos_drm_postclose,
 	.gem_free_object_unlocked  = exynos_drm_gem_free_object,
 	.gem_vm_ops		   = &exynos_drm_gem_vm_ops,
@@ -673,25 +740,23 @@ static int exynos_drm_bind(struct device *dev)
 	u32 encoder_mask = 0;
 	int ret;
 
-	drm = drm_dev_alloc(&exynos_drm_driver, dev);
-	if (IS_ERR(drm))
-		return PTR_ERR(drm);
-
-	private = kzalloc(sizeof(struct exynos_drm_private), GFP_KERNEL);
-	if (!private) {
-		ret = -ENOMEM;
-		goto err_free_drm;
+	private = devm_drm_dev_alloc(dev, &exynos_drm_driver, struct exynos_drm_private, drm);
+	if (IS_ERR(private)) {
+		dev_err(dev, "[" DRM_NAME ":%s] devm_drm_dev_alloc failed: %li\n",
+			__func__, PTR_ERR(private));
+		return PTR_ERR(private);
 	}
+
+	drm = &private->drm;
 
 	init_waitqueue_head(&private->wait);
 	spin_lock_init(&private->lock);
 
 	dev_set_drvdata(dev, drm);
-	drm->dev_private = (void *)private;
 
-	ret = drm_mode_config_init(drm);
+	ret = drmm_mode_config_init(drm);
 	if (ret)
-		goto err_free_drm;
+		return ret;
 
 	exynos_drm_mode_config_init(drm);
 
@@ -701,7 +766,7 @@ static int exynos_drm_bind(struct device *dev)
 	priv_state = kzalloc(sizeof(*priv_state), GFP_KERNEL);
 	if (!priv_state) {
 		ret = -ENOMEM;
-		goto err_mode_config_cleanup;
+		goto err_free_drm;
 	}
 
 	priv_state->available_win_mask = BIT(MAX_WIN_PER_DECON) - 1;
@@ -710,7 +775,7 @@ static int exynos_drm_bind(struct device *dev)
 				    &exynos_priv_state_funcs);
 
 	/* Try to bind all sub drivers. */
-	ret = component_bind_all(drm->dev, drm);
+	ret = component_bind_all(dev, drm);
 	if (ret)
 		goto err_priv_state_cleanup;
 
@@ -757,30 +822,21 @@ static int exynos_drm_bind(struct device *dev)
 	/* init kms poll for handling hpd */
 	drm_kms_helper_poll_init(drm);
 
-	ret = exynos_drm_fbdev_init(drm);
-	if (ret)
-		goto err_cleanup_poll;
-
 	/* register the DRM device */
 	ret = drm_dev_register(drm, 0);
 	if (ret < 0)
-		goto err_cleanup_fbdev;
-
+		goto err_cleanup_poll;
 	return 0;
 
-err_cleanup_fbdev:
-	exynos_drm_fbdev_fini(drm);
+
 err_cleanup_poll:
 	drm_kms_helper_poll_fini(drm);
 err_unbind_all:
-	component_unbind_all(drm->dev, drm);
+	component_unbind_all(dev, drm);
 err_priv_state_cleanup:
 	drm_atomic_private_obj_fini(&private->obj);
-err_mode_config_cleanup:
-	drm_mode_config_cleanup(drm);
 err_free_drm:
 	drm_dev_put(drm);
-	kfree(private);
 
 	return ret;
 }
@@ -788,21 +844,15 @@ err_free_drm:
 static void exynos_drm_unbind(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
-	struct exynos_drm_private *private = drm->dev_private;
+	struct exynos_drm_private *private = drm_to_exynos_dev(drm);
 
 	drm_dev_unregister(drm);
 
 	drm_atomic_private_obj_fini(&private->obj);
 
-	exynos_drm_fbdev_fini(drm);
 	drm_kms_helper_poll_fini(drm);
 
-	component_unbind_all(drm->dev, drm);
-	drm_mode_config_cleanup(drm);
-
-	kfree(drm->dev_private);
-	drm->dev_private = NULL;
-	dev_set_drvdata(dev, NULL);
+	component_unbind_all(dev, drm);
 
 	drm_dev_put(drm);
 }
@@ -919,11 +969,6 @@ fail:
 static int exynos_drm_init(void)
 {
 	int ret;
-
-	if (enable_fbdev_display) {
-		pr_info("DRM/KMS not selected\n");
-		return -EINVAL;
-	}
 
 	ret = exynos_drm_register_devices();
 	if (ret)

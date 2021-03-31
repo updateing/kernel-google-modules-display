@@ -154,6 +154,9 @@ static int exynos_hibernation_exit(struct exynos_hibernation *hiber)
 		hiber->wb = NULL;
 	}
 
+	if (decon->partial)
+		exynos_partial_restore(decon->partial);
+
 	DPU_EVENT_LOG(DPU_EVT_EXIT_HIBERNATION_OUT, decon->id, NULL);
 	DPU_ATRACE_END("exynos_hibernation_exit");
 
@@ -250,6 +253,12 @@ exynos_hibernation_register(struct decon_device *decon)
 	struct device *dev = decon->dev;
 
 	np = dev->of_node;
+
+	if (of_property_read_bool(np, "override-hibernation")) {
+		pr_info("display hibernation is overridden\n");
+		return NULL;
+	}
+
 	if (!of_property_read_bool(np, "hibernation")) {
 		pr_info("display hibernation is not supported\n");
 		return NULL;

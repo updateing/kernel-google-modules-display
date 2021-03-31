@@ -173,7 +173,7 @@ static dma_addr_t dpp_alloc_map_buf_test(void)
 	dma_addr_t dma_addr;
 	struct decon_device *decon = get_decon_drvdata(0);
 	struct drm_device *drm_dev = decon->drm_dev;
-	struct exynos_drm_private *priv = drm_dev->dev_private;
+	struct exynos_drm_private *priv = drm_to_exynos_dev(drm_dev);
 
 	size = PAGE_ALIGN(1440 * 3040 * 4);
 	dma_heap = dma_heap_find("system");
@@ -274,18 +274,17 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 	unsigned int simplified_rot;
 
 	pr_debug("mode(%dx%d)\n", mode->hdisplay, mode->vdisplay);
-
-	config->src.x = state->base.src_x >> 16;
-	config->src.y = state->base.src_y >> 16;
-	config->src.w = state->base.src_w >> 16;
-	config->src.h = state->base.src_h >> 16;
+	config->src.x = state->base.src.x1 >> 16;
+	config->src.y = state->base.src.y1 >> 16;
+	config->src.w = drm_rect_width(&state->base.src) >> 16;
+	config->src.h = drm_rect_height(&state->base.src) >> 16;
 	config->src.f_w = fb->width;
 	config->src.f_h = fb->height;
 
-	config->dst.x = state->crtc.x;
-	config->dst.y = state->crtc.y;
-	config->dst.w = state->crtc.w;
-	config->dst.h = state->crtc.h;
+	config->dst.x = state->base.dst.x1;
+	config->dst.y = state->base.dst.y1;
+	config->dst.w = drm_rect_width(&state->base.dst);
+	config->dst.h = drm_rect_height(&state->base.dst);
 	config->dst.f_w = mode->hdisplay;
 	config->dst.f_h = mode->vdisplay;
 	config->rot = 0;

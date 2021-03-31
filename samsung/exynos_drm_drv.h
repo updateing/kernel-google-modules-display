@@ -36,11 +36,6 @@
 
 #define DEFAULT_WIN	0
 
-#if !defined(MODULE) && defined(CONFIG_EXYNOS_DPU30)
-extern bool enable_fbdev_display;
-#else
-#define enable_fbdev_display 0
-#endif
 
 #define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc, base)
 #define to_exynos_plane(x)	container_of(x, struct exynos_drm_plane, base)
@@ -113,10 +108,6 @@ struct exynos_hdr_state {
 
 struct exynos_drm_plane_state {
 	struct drm_plane_state base;
-	struct exynos_drm_rect crtc;
-	struct exynos_drm_rect src;
-	unsigned int h_ratio;
-	unsigned int v_ratio;
 	uint32_t blob_id_restriction;
 	uint32_t max_luminance;
 	uint32_t min_luminance;
@@ -255,6 +246,10 @@ struct exynos_drm_crtc_state {
 	 */
 	u8 bypass : 1;
 	unsigned int reserved_win_mask;
+	unsigned int visible_win_mask;
+	struct drm_rect partial_region;
+	struct drm_property_blob *partial;
+	bool needs_reconfigure;
 };
 
 static inline struct exynos_drm_crtc_state *
@@ -291,6 +286,7 @@ struct exynos_drm_crtc {
 		struct drm_property *histogram_roi;
 		struct drm_property *histogram_weights;
 		struct drm_property *histogram_threshold;
+		struct drm_property *partial;
 	} props;
 };
 
@@ -331,12 +327,10 @@ to_exynos_priv_state(const struct drm_private_state *state)
  * @wait: wait an atomic commit to finish
  */
 struct exynos_drm_private {
-	struct drm_fb_helper *fb_helper;
+	struct drm_device drm;
 	struct drm_atomic_state *suspend_state;
 	struct device *iommu_client;
-	struct device *dma_dev;
 	void *mapping;
-
 	bool tui_enabled;
 
 	/* for atomic commit */
@@ -348,12 +342,7 @@ struct exynos_drm_private {
 	struct drm_private_obj	obj;
 };
 
-static inline struct device *to_dma_dev(struct drm_device *dev)
-{
-	struct exynos_drm_private *priv = dev->dev_private;
-
-	return priv->dma_dev;
-}
+#define drm_to_exynos_dev(dev) container_of(dev, struct exynos_drm_private, drm)
 
 #ifdef CONFIG_DRM_EXYNOS_DPI
 struct drm_encoder *exynos_dpi_probe(struct device *dev);

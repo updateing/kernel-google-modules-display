@@ -40,6 +40,7 @@
 #include "exynos_drm_fb.h"
 #include "exynos_drm_hibernation.h"
 #include "exynos_drm_writeback.h"
+#include "exynos_drm_partial.h"
 
 enum decon_state {
 	DECON_STATE_INIT = 0,
@@ -118,6 +119,7 @@ struct dpu_bts {
 	bool enabled;
 	u32 resol_clk;
 	u32 peak;
+	u32 prev_peak;
 	u32 read_bw;
 	u32 write_bw;
 	u32 total_bw;
@@ -212,6 +214,11 @@ enum dpu_event_type {
 	DPU_EVT_BTS_CALC_BW,
 	DPU_EVT_BTS_UPDATE_BW,
 
+	DPU_EVT_PARTIAL_INIT,
+	DPU_EVT_PARTIAL_PREPARE,
+	DPU_EVT_PARTIAL_UPDATE,
+	DPU_EVT_PARTIAL_RESTORE,
+
 	DPU_EVT_DSIM_CRC,
 	DPU_EVT_DSIM_ECC,
 
@@ -276,6 +283,15 @@ struct dpu_log_freqs {
 	unsigned long disp_freq;
 };
 
+struct dpu_log_partial {
+	u32 min_w;
+	u32 min_h;
+	struct drm_rect prev;
+	struct drm_rect req;
+	struct drm_rect adj;
+	bool reconfigure;
+};
+
 struct dpu_log_bts_event {
 	struct dpu_log_freqs freqs;
 	unsigned int value;
@@ -295,6 +311,7 @@ struct dpu_log {
 		struct dpu_log_crtc_info crtc_info;
 		struct dpu_log_freqs freqs;
 		struct dpu_log_bts_event bts_event;
+		struct dpu_log_partial partial;
 		unsigned int value;
 	} data;
 };
@@ -361,6 +378,7 @@ struct decon_device {
 	wait_queue_head_t framedone_wait;
 
 	bool keep_unmask;
+	struct exynos_partial *partial;
 };
 
 extern struct dpu_bts_ops dpu_bts_control;

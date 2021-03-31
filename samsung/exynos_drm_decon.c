@@ -107,9 +107,9 @@ static inline u32 win_start_pos(int x, int y)
 	return (WIN_STRPTR_Y_F(y) | WIN_STRPTR_X_F(x));
 }
 
-static inline u32 win_end_pos(int x, int y,  u32 xres, u32 yres)
+static inline u32 win_end_pos(int x2, int y2)
 {
-	return (WIN_ENDPTR_Y_F(y + yres - 1) | WIN_ENDPTR_X_F(x + xres - 1));
+	return (WIN_ENDPTR_Y_F(y2 - 1) | WIN_ENDPTR_X_F(x2 - 1));
 }
 
 /* ARGB value */
@@ -129,7 +129,7 @@ static void decon_set_color_map(struct decon_device *decon, u32 win_id,
 
 	memset(&win_info, 0, sizeof(struct decon_window_regs));
 	win_info.start_pos = win_start_pos(0, 0);
-	win_info.end_pos = win_end_pos(0, 0, hactive, vactive);
+	win_info.end_pos = win_end_pos(hactive, vactive);
 	win_info.start_time = 0;
 	win_info.colormap = 0x000000; /* black */
 	win_info.blend = DECON_BLENDING_NONE;
@@ -428,7 +428,7 @@ static int decon_get_win_id(const struct drm_crtc_state *crtc_state, int zpos)
 static bool decon_is_win_used(const struct drm_crtc_state *crtc_state, int win_id)
 {
 	const struct exynos_drm_crtc_state *exynos_crtc_state = to_exynos_crtc_state(crtc_state);
-	const unsigned long win_mask = exynos_crtc_state->reserved_win_mask;
+	const unsigned long win_mask = exynos_crtc_state->visible_win_mask;
 
 	if (win_id > MAX_WIN_PER_DECON)
 		return false;
@@ -499,9 +499,10 @@ static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
 	if (is_colormap)
 		win_info.colormap = exynos_plane_state->colormap;
 
-	win_info.start_pos = win_start_pos(exynos_plane_state->crtc.x, exynos_plane_state->crtc.y);
-	win_info.end_pos = win_end_pos(exynos_plane_state->crtc.x, exynos_plane_state->crtc.y,
-			exynos_plane_state->crtc.w, exynos_plane_state->crtc.h);
+	win_info.start_pos = win_start_pos(exynos_plane_state->base.dst.x1,
+					exynos_plane_state->base.dst.y1);
+	win_info.end_pos = win_end_pos(exynos_plane_state->base.dst.x2,
+					exynos_plane_state->base.dst.y2);
 	win_info.start_time = 0;
 
 	win_info.ch = dpp->id; /* DPP's id is DPP channel number */
@@ -565,6 +566,8 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 	struct exynos_drm_crtc_state *old_exynos_crtc_state =
 					to_exynos_crtc_state(old_crtc_state);
 	struct exynos_dqe *dqe = decon->dqe;
+	struct exynos_partial *partial = decon->partial;
+	u32 width, height;
 	unsigned long flags;
 
 	decon_debug(decon, "%s +\n", __func__);
@@ -614,10 +617,23 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 			new_exynos_crtc_state->in_bpc, decon->config.out_bpc,
 			new_exynos_crtc_state->force_bpc);
 
-	if (dqe)
+	if (dqe) {
+		if (partial && new_exynos_crtc_state->partial) {
+			width = drm_rect_width(
+					&new_exynos_crtc_state->partial_region);
+			height = drm_rect_height(
+					&new_exynos_crtc_state->partial_region);
+		} else {
+			width = decon->config.image_width;
+			height = decon->config.image_height;
+		}
 		exynos_dqe_update(dqe, &new_exynos_crtc_state->dqe,
-				decon->config.image_width,
-				decon->config.image_height);
+				width, height);
+	}
+
+	if (partial)
+		exynos_partial_update(partial, &old_exynos_crtc_state->partial_region,
+				&new_exynos_crtc_state->partial_region);
 
 	decon_reg_all_win_shadow_update_req(decon->id);
 
@@ -699,7 +715,6 @@ static void _decon_enable(struct decon_device *decon)
 static void decon_mode_update_bts(struct decon_device *decon, const struct drm_display_mode *mode)
 {
 	struct videomode vm;
-	int i;
 
 	drm_display_mode_to_videomode(mode, &vm);
 
@@ -707,9 +722,6 @@ static void decon_mode_update_bts(struct decon_device *decon, const struct drm_d
 	decon->bts.vfp = vm.vfront_porch;
 	decon->bts.vsa = vm.vsync_len;
 	decon->bts.fps = drm_mode_vrefresh(mode);
-
-	for (i = 0; i < MAX_WIN_PER_DECON; i++)
-		decon->bts.win_config[i].state = DPU_WIN_STATE_DISABLED;
 }
 
 static void decon_mode_set(struct exynos_drm_crtc *crtc,
@@ -717,6 +729,10 @@ static void decon_mode_set(struct exynos_drm_crtc *crtc,
 			   const struct drm_display_mode *adjusted_mode)
 {
 	struct decon_device *decon = crtc->ctx;
+	int i;
+
+	for (i = 0; i < MAX_WIN_PER_DECON; i++)
+		decon->bts.win_config[i].state = DPU_WIN_STATE_DISABLED;
 
 	decon_mode_update_bts(decon, adjusted_mode);
 }
@@ -983,7 +999,7 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 {
 	struct decon_device *decon = dev_get_drvdata(dev);
 	struct drm_device *drm_dev = data;
-	struct exynos_drm_private *priv = drm_dev->dev_private;
+	struct exynos_drm_private *priv = drm_to_exynos_dev(drm_dev);
 	struct drm_plane *default_plane;
 	int i;
 
@@ -1237,11 +1253,11 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 		decon_warn(decon, "WARN: bus_width is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "bus_util", &decon->bts.bus_util_pct)) {
-		decon->bts.bus_util_pct = 65;
+		decon->bts.bus_util_pct = 70;
 		decon_warn(decon, "WARN: bus_util_pct is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "rot_util", &decon->bts.rot_util_pct)) {
-		decon->bts.rot_util_pct = 60;
+		decon->bts.rot_util_pct = 65;
 		decon_warn(decon, "WARN: rot_util_pct is not defined in DT.\n");
 	}
 	decon_info(decon, "bus_width(%u) bus_util_pct(%u) rot_util_pct(%u)\n",

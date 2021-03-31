@@ -48,6 +48,7 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 					enum exynos_panel_state panel_state);
 static ssize_t exynos_panel_parse_byte_buf(char *input_str, size_t input_len,
 					   const char **out_buf);
+static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len);
 
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
@@ -62,6 +63,117 @@ static inline bool is_backlight_lp_state(const struct backlight_device *bl)
 static void backlight_state_changed(struct backlight_device *bl)
 {
 	sysfs_notify(&bl->dev.kobj, NULL, "state");
+}
+
+int exynos_panel_configure_te2_edges(struct exynos_panel *ctx,
+				     u32 *timings, bool lp_mode)
+{
+	struct te2_mode_data *data;
+	const u32 *t;
+	int i;
+
+	if (!ctx || !timings)
+		return -EINVAL;
+
+	t = timings;
+
+	for_each_te2_timing(ctx, lp_mode, data, i) {
+		data->timing.rising_edge = t[0];
+		data->timing.falling_edge = t[1];
+		t += 2;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(exynos_panel_configure_te2_edges);
+
+ssize_t exynos_panel_get_te2_edges(struct exynos_panel *ctx,
+				   char *buf, bool lp_mode)
+{
+	struct te2_mode_data *data;
+	size_t len = 0;
+	int i;
+
+	if (!ctx)
+		return -EINVAL;
+
+	for_each_te2_timing(ctx, lp_mode, data, i) {
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%dx%d@%d",
+				 data->mode->hdisplay, data->mode->vdisplay,
+				 drm_mode_vrefresh(data->mode));
+
+		if (data->binned_lp)
+			len += scnprintf(buf + len, PAGE_SIZE - len, "-lp_%s",
+					 data->binned_lp->name);
+
+		len += scnprintf(buf + len, PAGE_SIZE - len,
+				 " rising %u falling %u\n",
+				 data->timing.rising_edge,
+				 data->timing.falling_edge);
+	}
+
+	return len;
+}
+EXPORT_SYMBOL(exynos_panel_get_te2_edges);
+
+int exynos_panel_get_current_mode_te2(struct exynos_panel *ctx,
+				      struct exynos_panel_te2_timing *timing)
+{
+	struct te2_mode_data *data;
+	const struct drm_display_mode *mode;
+	u32 bl_th = 0;
+	bool lp_mode;
+	int i;
+
+	if (!ctx)
+		return -EINVAL;
+
+	if (!ctx->current_mode)
+		return -EAGAIN;
+
+	if (ctx->desc->num_binned_lp && !ctx->current_binned_lp)
+		return -EAGAIN;
+
+	mode = &ctx->current_mode->mode;
+	if (ctx->current_binned_lp)
+		bl_th = ctx->current_binned_lp->bl_threshold;
+	lp_mode = ctx->current_mode->exynos_mode.is_lp_mode;
+
+	for_each_te2_timing(ctx, lp_mode, data, i) {
+		if (data->mode != mode)
+			continue;
+
+		if (data->binned_lp && data->binned_lp->bl_threshold != bl_th)
+			continue;
+
+		timing->rising_edge = data->timing.rising_edge;
+		timing->falling_edge = data->timing.falling_edge;
+
+		dev_dbg(ctx->dev,
+			"found TE2 timing %s at %dHz: rising %u falling %u\n",
+			!lp_mode ? "normal" : "LP", drm_mode_vrefresh(mode),
+			timing->rising_edge, timing->falling_edge);
+
+		return 0;
+	}
+
+	dev_warn(ctx->dev, "failed to find %s TE2 timing at %dHz\n",
+		 !lp_mode ? "normal" : "LP", drm_mode_vrefresh(mode));
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(exynos_panel_get_current_mode_te2);
+
+static void exynos_panel_update_te2(struct exynos_panel *ctx)
+{
+	if (!ctx->initialized || !ctx->desc->exynos_panel_func->update_te2)
+		return;
+
+	mutex_lock(&ctx->te2.timing_lock);
+
+	ctx->desc->exynos_panel_func->update_te2(ctx);
+
+	mutex_unlock(&ctx->te2.timing_lock);
 }
 
 static int exynos_panel_parse_gpios(struct exynos_panel *ctx)
@@ -113,6 +225,18 @@ static int exynos_panel_parse_regulators(struct exynos_panel *ctx)
 		ctx->vddd = reg;
 	}
 
+	reg = devm_regulator_get_optional(dev, "vddr_en");
+	if (!PTR_ERR_OR_ZERO(reg)) {
+		dev_dbg(ctx->dev, "panel vddr_en found\n");
+		ctx->vddr_en = reg;
+	}
+
+	reg = devm_regulator_get_optional(dev, "vddr");
+	if (!PTR_ERR_OR_ZERO(reg)) {
+		dev_dbg(ctx->dev, "panel vddr found\n");
+		ctx->vddr = reg;
+	}
+
 	return 0;
 }
 
@@ -155,7 +279,42 @@ static int exynos_panel_read_extinfo(struct exynos_panel *ctx)
 	return 0;
 }
 
-static int exynos_panel_init(struct exynos_panel *ctx)
+static void exynos_panel_get_panel_rev(struct exynos_panel *ctx)
+{
+	u32 id, rev;
+
+	if (kstrtou32(ctx->panel_extinfo, 16, &id)) {
+		dev_err(ctx->dev, "failed to get panel extinfo\n");
+		return;
+	}
+
+	rev = ctx->desc->exynos_panel_func->get_panel_rev(id);
+
+	switch (rev) {
+	case 0:
+		ctx->panel_rev = PANEL_REV_PROTO1;
+		break;
+	case 1:
+		ctx->panel_rev = PANEL_REV_PROTO1_1;
+		break;
+	case 8:
+		ctx->panel_rev = PANEL_REV_EVT;
+		break;
+	case 0xC:
+		ctx->panel_rev = PANEL_REV_DVT;
+		break;
+	case 0x10:
+		ctx->panel_rev = PANEL_REV_PVT;
+		break;
+	default:
+		dev_err(ctx->dev, "unknown rev from panel (0x%x)\n", rev);
+		break;
+	}
+
+	dev_dbg(ctx->dev, "panel_rev: 0x%x\n", ctx->panel_rev);
+}
+
+int exynos_panel_init(struct exynos_panel *ctx)
 {
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	int ret;
@@ -171,11 +330,17 @@ static int exynos_panel_init(struct exynos_panel *ctx)
 	if (!ret)
 		ctx->initialized = true;
 
+	if (funcs && funcs->get_panel_rev)
+		exynos_panel_get_panel_rev(ctx);
+
 	if (funcs && funcs->panel_init)
 		funcs->panel_init(ctx);
 
+	exynos_panel_update_te2(ctx);
+
 	return ret;
 }
+EXPORT_SYMBOL(exynos_panel_init);
 
 void exynos_panel_reset(struct exynos_panel *ctx)
 {
@@ -234,10 +399,43 @@ int exynos_panel_set_power(struct exynos_panel *ctx, bool on)
 				return ret;
 			}
 		}
+
+		if (ctx->vddr_en) {
+			ret = regulator_enable(ctx->vddr_en);
+			if (ret) {
+				dev_err(ctx->dev, "vddr_en enable failed\n");
+				return ret;
+			}
+			usleep_range(2 * 1000, 2 * 1000 + 10);
+		}
+
+		if (ctx->vddr) {
+			ret = regulator_enable(ctx->vddr);
+			if (ret) {
+				dev_err(ctx->dev, "vddr enable failed\n");
+				return ret;
+			}
+		}
 	} else {
 		gpiod_set_value(ctx->reset_gpio, 0);
 		if (ctx->enable_gpio)
 			gpiod_set_value(ctx->enable_gpio, 0);
+
+		if (ctx->vddr) {
+			ret = regulator_disable(ctx->vddr);
+			if (ret) {
+				dev_err(ctx->dev, "vddr disable failed\n");
+				return ret;
+			}
+		}
+
+		if (ctx->vddr_en) {
+			ret = regulator_disable(ctx->vddr_en);
+			if (ret) {
+				dev_err(ctx->dev, "vddr_en disable failed\n");
+				return ret;
+			}
+		}
 
 		if (ctx->vddd) {
 			ret = regulator_disable(ctx->vddd);
@@ -366,6 +564,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 
 	ctx->enabled = false;
 	ctx->hbm_mode = false;
+	ctx->dimming_on = false;
 
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func) {
@@ -420,6 +619,10 @@ void exynos_panel_send_cmd_set(struct exynos_panel *ctx,
 	for (i = 0; i < cmd_set->num_cmd; i++) {
 		u32 delay_ms = cmd_set->cmds[i].delay_ms;
 
+		if (ctx->panel_rev &&
+		    !(cmd_set->cmds[i].panel_rev & ctx->panel_rev))
+			continue;
+
 		exynos_dcs_write(ctx, cmd_set->cmds[i].cmd,
 				cmd_set->cmds[i].cmd_len);
 		if (delay_ms)
@@ -465,6 +668,8 @@ void exynos_panel_set_binned_lp(struct exynos_panel *ctx, const u16 brightness)
 
 	if (bl)
 		sysfs_notify(&bl->dev.kobj, NULL, "lp_state");
+
+	exynos_panel_update_te2(ctx);
 }
 EXPORT_SYMBOL(exynos_panel_set_binned_lp);
 
@@ -648,16 +853,156 @@ static ssize_t gamma_store(struct device *dev, struct device_attribute *attr,
 	return ret ? : count;
 }
 
+static ssize_t set_te2_timing(struct exynos_panel *ctx, size_t count,
+			      const char *buf, bool lp_mode)
+{
+	char *buf_dup;
+	ssize_t type_len, data_len;
+	u32 timing[MAX_TE2_TYPE * 2] = {0};
+
+	if (!ctx->desc->exynos_panel_func->configure_te2_edges ||
+	    !ctx->desc->exynos_panel_func->update_te2)
+		return -EINVAL;
+
+	if (!count)
+		return -EINVAL;
+
+	buf_dup = kstrndup(buf, count, GFP_KERNEL);
+	if (!buf_dup)
+		return -ENOMEM;
+
+	type_len = lp_mode ? (ctx->desc->num_binned_lp - 1) :
+			     ctx->desc->num_modes;
+	data_len = parse_u32_buf(buf_dup, count + 1, timing, type_len * 2);
+	if (data_len != type_len * 2) {
+		dev_warn(ctx->dev,
+			 "invalid number of TE2 %s timing: expected %ld but actual %ld\n",
+			 lp_mode ? "LP" : "normal",
+			 type_len * 2, data_len);
+		kfree(buf_dup);
+		return -EINVAL;
+	}
+
+	ctx->desc->exynos_panel_func->configure_te2_edges(ctx, timing, lp_mode);
+	ctx->desc->exynos_panel_func->update_te2(ctx);
+
+	kfree(buf_dup);
+
+	return count;
+}
+
+static ssize_t get_te2_timing(struct exynos_panel *ctx, char *buf, bool lp_mode)
+{
+	if (!ctx->desc->exynos_panel_func->get_te2_edges)
+		return -EPERM;
+
+	return ctx->desc->exynos_panel_func->get_te2_edges(ctx, buf, lp_mode);
+}
+
+static ssize_t te2_timing_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	ssize_t ret;
+
+	if (!ctx->initialized)
+		return -EAGAIN;
+
+	mutex_lock(&ctx->te2.timing_lock);
+
+	ret = set_te2_timing(ctx, count, buf, false);
+	if (ret < 0)
+		dev_err(ctx->dev,
+			"failed to set normal mode TE2 timing: ret %ld\n", ret);
+
+	mutex_unlock(&ctx->te2.timing_lock);
+
+	return ret;
+}
+
+static ssize_t te2_timing_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	ssize_t ret;
+
+	if (!ctx->initialized)
+		return -EAGAIN;
+
+	mutex_lock(&ctx->te2.timing_lock);
+
+	ret = get_te2_timing(ctx, buf, false);
+	if (ret < 0)
+		dev_err(ctx->dev,
+			"failed to get normal mode TE2 timing: ret %ld\n", ret);
+
+	mutex_unlock(&ctx->te2.timing_lock);
+
+	return ret;
+}
+
+static ssize_t te2_lp_timing_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	ssize_t ret;
+
+	if (!ctx->initialized)
+		return -EAGAIN;
+
+	mutex_lock(&ctx->te2.timing_lock);
+
+	ret = set_te2_timing(ctx, count, buf, true);
+	if (ret < 0)
+		dev_err(ctx->dev,
+			"failed to set LP mode TE2 timing: ret %ld\n", ret);
+
+	mutex_unlock(&ctx->te2.timing_lock);
+
+	return ret;
+}
+
+static ssize_t te2_lp_timing_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	ssize_t ret;
+
+	if (!ctx->initialized)
+		return -EAGAIN;
+
+	mutex_lock(&ctx->te2.timing_lock);
+
+	ret = get_te2_timing(ctx, buf, true);
+	if (ret < 0)
+		dev_err(ctx->dev,
+			"failed to get LP mode TE2 timing: ret %ld\n", ret);
+
+	mutex_unlock(&ctx->te2.timing_lock);
+
+	return ret;
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
 static DEVICE_ATTR_WO(gamma);
+static DEVICE_ATTR_RW(te2_timing);
+static DEVICE_ATTR_RW(te2_lp_timing);
 
 static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
 	&dev_attr_panel_extinfo.attr,
 	&dev_attr_panel_name.attr,
 	&dev_attr_gamma.attr,
+	&dev_attr_te2_timing.attr,
+	&dev_attr_te2_lp_timing.attr,
 	NULL
 };
 
@@ -682,6 +1027,8 @@ static void exynos_panel_connector_print_state(struct drm_printer *p,
 		   desc->max_avg_luminance);
 	drm_printf(p, "\thdr_formats: 0x%x\n", desc->hdr_formats);
 	drm_printf(p, "\thbm_on: %s\n", ctx->hbm_mode ? "true" : "false");
+	drm_printf(p, "\tdimming_on: %s\n", ctx->dimming_on ? "true" : "false");
+	drm_printf(p, "\tis_partial: %s\n", desc->is_partial ? "true" : "false");
 }
 
 static int exynos_panel_connector_get_property(
@@ -700,6 +1047,9 @@ static int exynos_panel_connector_get_property(
 	} else if (property == p->hbm_on) {
 		*val = exynos_state->hbm_on;
 		dev_dbg(ctx->dev, "%s: hbm_on(%s)\n", __func__, *val ? "true" : "false");
+	} else if (property == p->dimming_on) {
+		*val = exynos_state->dimming_on;
+		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__, *val ? "true" : "false");
 	} else
 		return -EINVAL;
 
@@ -723,6 +1073,10 @@ static int exynos_panel_connector_set_property(
 		exynos_state->hbm_on = val;
 		dev_dbg(ctx->dev, "%s: hbm_on(%s)\n", __func__,
 			 exynos_state->hbm_on ? "true" : "false");
+	} else if (property == p->dimming_on) {
+		exynos_state->dimming_on = val;
+		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__,
+			 exynos_state->dimming_on ? "true" : "false");
 	} else
 		return -EINVAL;
 
@@ -741,12 +1095,11 @@ static void exynos_panel_connector_atomic_commit(
 			    struct exynos_drm_connector_state *exynos_new_state)
 {
 	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_connector);
-	const struct exynos_panel_funcs *exynos_panel_func;
+	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
 
 	ctx->hbm.global_hbm.update_hbm = false;
 	ctx->hbm.global_hbm.update_bl = false;
 	if (exynos_old_state->hbm_on != exynos_new_state->hbm_on) {
-		exynos_panel_func = ctx->desc->exynos_panel_func;
 		if (exynos_panel_func && exynos_panel_func->set_hbm_mode) {
 			ctx->hbm.global_hbm.update_hbm = true;
 			ctx->hbm.global_hbm.hbm_mode = exynos_new_state->hbm_on;
@@ -756,6 +1109,11 @@ static void exynos_panel_connector_atomic_commit(
 	if (exynos_old_state->brightness_level != exynos_new_state->brightness_level) {
 		ctx->bl->props.brightness = exynos_new_state->brightness_level;
 		ctx->hbm.global_hbm.update_bl = true;
+	}
+
+	if (exynos_old_state->dimming_on != exynos_new_state->dimming_on) {
+		if (exynos_panel_func && exynos_panel_func->set_dimming_on)
+			exynos_panel_func->set_dimming_on(ctx, exynos_new_state->dimming_on);
 	}
 
 	if (ctx->hbm.global_hbm.update_hbm || ctx->hbm.global_hbm.update_bl)
@@ -842,6 +1200,25 @@ static bool exynos_panel_is_mode_seamless(const struct exynos_panel *ctx,
 	return funcs->is_mode_seamless(ctx, mode);
 }
 
+static void exynos_panel_set_partial(struct exynos_display_partial *partial,
+			const struct exynos_panel_mode *pmode, bool is_partial)
+{
+	const struct exynos_display_dsc *dsc = &pmode->exynos_mode.dsc;
+	const struct drm_display_mode *mode = &pmode->mode;
+
+	partial->enabled = is_partial;
+	if (!partial->enabled)
+		return;
+
+	if (dsc->enabled) {
+		partial->min_width = DIV_ROUND_UP(mode->hdisplay, dsc->slice_count);
+		partial->min_height = dsc->slice_height;
+	} else {
+		partial->min_width = MIN_WIN_BLOCK_WIDTH;
+		partial->min_height = MIN_WIN_BLOCK_HEIGHT;
+	}
+}
+
 static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 					   struct drm_connector_state *connector_state,
 					   const struct drm_display_mode *mode)
@@ -857,6 +1234,8 @@ static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 
 	exynos_connector_state->seamless_possible = exynos_panel_is_mode_seamless(ctx, pmode);
 	exynos_connector_state->exynos_mode = pmode->exynos_mode;
+	exynos_panel_set_partial(&exynos_connector_state->partial, pmode,
+			ctx->desc->is_partial);
 
 	return 0;
 }
@@ -970,6 +1349,8 @@ static int panel_debugfs_add(struct exynos_panel *ctx, struct dentry *parent)
 	const struct exynos_panel_desc *desc = ctx->desc;
 	const struct exynos_panel_funcs *funcs = desc->exynos_panel_func;
 	struct dentry *root;
+
+	debugfs_create_u32("rev", 0600, parent, &ctx->panel_rev);
 
 	if (!funcs)
 		return -EINVAL;
@@ -1342,6 +1723,57 @@ static ssize_t hbm_mode_show(struct device *dev,
 
 static DEVICE_ATTR_RW(hbm_mode);
 
+static ssize_t dimming_on_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	struct drm_connector_state *conn_state;
+	struct drm_mode_config *config;
+	bool dimming_on;
+	int ret;
+
+	if (!ctx->enabled || !ctx->initialized) {
+		dev_err(ctx->dev, "panel is not enabled\n");
+		return -EPERM;
+	}
+
+	ret = kstrtobool(buf, &dimming_on);
+	if (ret) {
+		dev_err(ctx->dev, "invalid dimming_on value\n");
+		return ret;
+	}
+
+	if (funcs && funcs->set_dimming_on) {
+		config = &ctx->exynos_connector.base.dev->mode_config;
+
+		drm_modeset_lock(&config->connection_mutex, NULL);
+		conn_state = ctx->exynos_connector.base.state;
+		if (conn_state) {
+			struct exynos_drm_connector_state *exynos_connector_state =
+				to_exynos_connector_state(conn_state);
+			exynos_connector_state->dimming_on = dimming_on;
+		}
+		drm_modeset_unlock(&config->connection_mutex);
+
+		funcs->set_dimming_on(ctx, dimming_on);
+	}
+
+	return count;
+}
+
+static ssize_t dimming_on_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->dimming_on);
+}
+static DEVICE_ATTR_RW(dimming_on);
+
 static ssize_t local_hbm_mode_store(struct device *dev,
 			       struct device_attribute *attr,
 			       const char *buf, size_t count)
@@ -1585,6 +2017,7 @@ static DEVICE_ATTR_RW(als_table);
 
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_hbm_mode.attr,
+	&dev_attr_dimming_on.attr,
 	&dev_attr_local_hbm_mode.attr,
 	&dev_attr_local_hbm_max_timeout.attr,
 	&dev_attr_state.attr,
@@ -1670,6 +2103,8 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->hdr_formats, desc->hdr_formats);
 	drm_object_attach_property(obj, p->brightness_level, 0);
 	drm_object_attach_property(obj, p->hbm_on, 0);
+	drm_object_attach_property(obj, p->dimming_on, 0);
+	drm_object_attach_property(obj, p->is_partial, desc->is_partial);
 
 	if (desc->brt_capability) {
 		ret = exynos_panel_attach_brightness_capability(&ctx->exynos_connector,
@@ -1791,6 +2226,8 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 skip_enable:
 	exynos_panel_set_backlight_state(ctx, pmode->exynos_mode.is_lp_mode ?
 					 PANEL_STATE_LP : PANEL_STATE_ON);
+
+	exynos_panel_update_te2(ctx);
 }
 
 static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
@@ -1899,6 +2336,9 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	}
 	ctx->current_mode = pmode;
 
+	if (!pmode->exynos_mode.is_lp_mode)
+		exynos_panel_update_te2(ctx);
+
 	if (need_update_backlight && ctx->bl)
 		backlight_update_status(ctx->bl);
 
@@ -1948,6 +2388,39 @@ static void local_hbm_data_init(struct exynos_panel *ctx)
 	else {
 		INIT_DELAYED_WORK(&ctx->hbm.local_hbm.timeout_work, local_hbm_timeout_work);
 		INIT_WORK(&ctx->hbm.global_hbm.ghbm_work, global_hbm_work);
+	}
+}
+
+static void exynos_panel_te2_init(struct exynos_panel *ctx)
+{
+	struct te2_mode_data *data;
+	const struct exynos_binned_lp *binned_lp;
+	int i;
+	int lp_idx = ctx->desc->num_modes;
+
+	mutex_init(&ctx->te2.timing_lock);
+
+	for (i = 0; i < ctx->desc->num_modes; i++) {
+		const struct exynos_panel_mode *pmode = &ctx->desc->modes[i];
+
+		data = &ctx->te2.mode_data[i];
+		data->mode = &pmode->mode;
+		data->timing.rising_edge = pmode->te2_timing.rising_edge;
+		data->timing.falling_edge = pmode->te2_timing.falling_edge;
+	}
+
+	for_each_exynos_binned_lp(i, binned_lp, ctx) {
+		/* ignore the first binned entry (off) */
+		if (i == 0)
+			continue;
+
+		data = &ctx->te2.mode_data[i - 1 + lp_idx];
+		data->mode = &ctx->desc->lp_mode->mode;
+		data->binned_lp = binned_lp;
+		data->timing.rising_edge =
+				binned_lp->te2_timing.rising_edge;
+		data->timing.falling_edge =
+				binned_lp->te2_timing.falling_edge;
 	}
 }
 
@@ -2002,6 +2475,11 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	if (exynos_panel_func && (exynos_panel_func->set_hbm_mode
 				  || exynos_panel_func->set_local_hbm_mode))
 		local_hbm_data_init(ctx);
+
+	if (exynos_panel_func && exynos_panel_func->get_te2_edges &&
+	    exynos_panel_func->configure_te2_edges &&
+	    exynos_panel_func->update_te2)
+		exynos_panel_te2_init(ctx);
 
 	if (ctx->desc->bl_num_ranges) {
 		ctx->bl_notifier.num_ranges = ctx->desc->bl_num_ranges;
