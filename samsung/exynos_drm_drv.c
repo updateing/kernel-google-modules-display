@@ -82,11 +82,12 @@ static unsigned int find_set_bits_mask(unsigned int mask, size_t count)
 static unsigned int exynos_drm_crtc_get_win_cnt(struct drm_crtc_state *crtc_state)
 {
 	unsigned int num_planes;
+	const struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc_state->crtc);
 
 	if (!crtc_state->enable || !drm_atomic_crtc_effectively_active(crtc_state))
 		return 0;
 
-	num_planes = hweight32(crtc_state->plane_mask);
+	num_planes = hweight32(crtc_state->plane_mask & ~exynos_crtc->rcd_plane_mask);
 
 	/* at least one window is required for color map when active and there are no planes */
 	return num_planes ? : 1;

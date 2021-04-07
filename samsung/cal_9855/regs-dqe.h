@@ -134,7 +134,7 @@
 
 // new DQE_RCD register for 9855
 #define DQE_RCD				(0x3000)
-#define RCD_EN				(1 << 0)
+#define DQE_RCD_EN(_v)			((_v) << 0)
 
 /*----------------------[HIST]-----------------------------------------------*/
 

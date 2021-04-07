@@ -101,6 +101,10 @@ static const uint32_t dpp_vg_formats[] = {
 	DRM_FORMAT_YUV420_10BIT,
 };
 
+static const uint32_t rcd_alpha_formats[] = {
+	DRM_FORMAT_C8,
+};
+
 const struct dpp_restriction dpp_drv_data = {
 	.src_f_w.min = 16,
 	.src_f_w.max = 65534,
@@ -159,6 +163,16 @@ void dpp_dump(struct dpp_device *dpp)
 		return;
 	}
 	__dpp_dump(dpp->id, dpp->regs.dpp_base_regs, dpp->regs.dma_base_regs,
+			dpp->attr);
+}
+
+void rcd_dump(struct dpp_device *dpp)
+{
+	if (dpp->state != DPP_STATE_ON) {
+		dpp_info(dpp, "rcd state is off\n");
+		return;
+	}
+	__rcd_dump(dpp->id, dpp->regs.dpp_base_regs, dpp->regs.dma_base_regs,
 			dpp->attr);
 }
 
@@ -379,7 +393,8 @@ static void __dpp_enable(struct dpp_device *dpp)
 
 	dpp->state = DPP_STATE_ON;
 	enable_irq(dpp->dma_irq);
-	enable_irq(dpp->dpp_irq);
+	if (test_bit(DPP_ATTR_DPP, &dpp->attr))
+		enable_irq(dpp->dpp_irq);
 
 	dpp_debug(dpp, "enabled\n");
 }
@@ -448,7 +463,8 @@ static void __dpp_disable(struct dpp_device *dpp)
 		hdr_reg_set_tm(dpp->id, NULL);
 	}
 
-	disable_irq(dpp->dpp_irq);
+	if (test_bit(DPP_ATTR_DPP, &dpp->attr))
+		disable_irq(dpp->dpp_irq);
 	disable_irq(dpp->dma_irq);
 
 	dpp_reg_deinit(dpp->id, false, dpp->attr);
@@ -790,7 +806,9 @@ static int dpp_update(struct dpp_device *dpp,
 	dpp_debug(dpp, "in/force bpc(%d/%d)\n", exynos_crtc_state->in_bpc,
 			exynos_crtc_state->force_bpc);
 
-	dpp_hdr_update(dpp, state);
+	if (test_bit(DPP_ATTR_HDR, &dpp->attr))
+		dpp_hdr_update(dpp, state);
+
 	set_protection(dpp, plane_state->fb->modifier);
 
 	dpp_reg_configure_params(dpp->id, config, dpp->attr);
@@ -895,6 +913,9 @@ static int exynos_dpp_parse_dt(struct dpp_device *dpp, struct device_node *np)
 	if (dpp->is_support & DPP_SUPPORT_VIDEO) {
 		dpp->pixel_formats = dpp_vg_formats;
 		dpp->num_pixel_formats = ARRAY_SIZE(dpp_vg_formats);
+	} else if (test_bit(DPP_ATTR_RCD, &dpp->attr)) {
+		dpp->pixel_formats = rcd_alpha_formats;
+		dpp->num_pixel_formats = ARRAY_SIZE(rcd_alpha_formats);
 	} else {
 		dpp->pixel_formats = dpp_gf_formats;
 		dpp->num_pixel_formats = ARRAY_SIZE(dpp_gf_formats);

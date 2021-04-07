@@ -24,6 +24,7 @@
 
 #include "regs-decon.h"
 #include "regs-dqe.h"
+#include "../cal_9855/decon_cal_internal.h"
 
 enum decon_dsc_id {
 	DECON_DSC_ENC0 = 0x0,
@@ -53,6 +54,7 @@ enum decon_win_alpha_sel {
 	ALPHA_MULT_SRC_SEL_AB = 3,
 };
 
+struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
 
 void decon_regs_desc_init(void __iomem *regs, const char *name,
 		enum decon_regs_type type, unsigned int id)
@@ -430,6 +432,11 @@ void decon_reg_set_dqe_enable(u32 id, bool en)
 	decon_write_mask(id, DATA_PATH_CON_0, val, mask);
 }
 
+
+void decon_reg_set_rcd_enable(u32 dqe_id, bool en)
+{
+	decon_reg_set_rcd_enable_internal(dqe_id, en);
+}
 /*
  * Check major configuration of data_path_control
  *    DSCC[7]

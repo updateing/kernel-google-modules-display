@@ -162,6 +162,7 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	struct drm_plane *plane;
 	const struct drm_plane_state *plane_state;
 	uint32_t max_bpc;
+	uint32_t rcd_mask;
 
 	DRM_DEBUG("%s +\n", __func__);
 
@@ -211,6 +212,18 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	} else if (old_crtc_state->self_refresh_active && !crtc_state->color_mgmt_changed &&
 	    !new_exynos_state->planes_updated)
 		new_exynos_state->skip_update = true;
+
+	new_exynos_state->dqe.rcd_enabled = false;
+	rcd_mask = crtc_state->plane_mask & exynos_crtc->rcd_plane_mask;
+
+	if (rcd_mask) {
+		drm_atomic_crtc_state_for_each_plane_state(plane, plane_state, crtc_state) {
+			if (rcd_mask & drm_plane_mask(plane)) {
+				new_exynos_state->dqe.rcd_enabled = plane_state->visible;
+				break;
+			}
+		}
+	}
 
 	DRM_DEBUG("%s -\n", __func__);
 

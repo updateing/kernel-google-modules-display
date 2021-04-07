@@ -14,5 +14,10 @@
 
 #include <dqe_cal.h>
 
-#include "../cal_9845/regs-dqe.h"
 #include "regs-dqe.h"
+#include "dqe_cal_internal.h"
+
+void dqe_reg_set_rcd_en_internal(u32 dqe_id, bool en)
+{
+	dqe_write(dqe_id, DQE_RCD, DQE_RCD_EN(en ? 1 : 0));
+}

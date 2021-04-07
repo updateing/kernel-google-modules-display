@@ -100,6 +100,8 @@ void decon_dump(struct decon_device *decon)
 	for (i = 0; i < decon->dpp_cnt; ++i)
 		dpp_dump(decon->dpp[i]);
 
+	rcd_dump(decon->rcd);
+
 	if (acquired)
 		console_unlock();
 }
@@ -498,6 +500,14 @@ static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
 
 	decon_debug(decon, "%s +\n", __func__);
 
+	dpp->decon_id = decon->id;
+
+	if (test_bit(DPP_ATTR_RCD, &dpp->attr)) {
+		decon_debug(decon, "%s -\n", __func__);
+		dpp->update(dpp, exynos_plane_state);
+		return;
+	}
+
 	zpos = plane_state->normalized_zpos;
 
 	if (!dpp->is_win_connected || crtc_state->zpos_changed) {
@@ -543,7 +553,6 @@ static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
 
 	decon_reg_set_window_control(decon->id, win_id, &win_info, is_colormap);
 
-	dpp->decon_id = decon->id;
 	if (!is_colormap) {
 		dpp->update(dpp, exynos_plane_state);
 		dpp->is_win_connected = true;
@@ -570,9 +579,10 @@ static void decon_disable_plane(struct exynos_drm_crtc *exynos_crtc,
 
 	decon_debug(decon, "%s +\n", __func__);
 
-	decon_disable_win(decon, dpp->win_id);
-
-	_dpp_disable(dpp);
+	if (!test_bit(DPP_ATTR_RCD, &dpp->attr)) {
+		decon_disable_win(decon, dpp->win_id);
+		_dpp_disable(dpp);
+	}
 
 	DPU_EVENT_LOG(DPU_EVT_PLANE_DISABLE, decon->id, dpp);
 	decon_debug(decon, "%s -\n", __func__);
@@ -1142,6 +1152,16 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 				plane->possible_crtcs);
 	}
 
+	if (decon->rcd) {
+		struct dpp_device *rcd = decon->rcd;
+		struct drm_plane *plane = &rcd->plane.base;
+
+		plane->possible_crtcs |= drm_crtc_mask(&decon->crtc->base);
+		decon_debug(decon, "plane possible_crtcs = 0x%x\n",
+				plane->possible_crtcs);
+		decon->crtc->rcd_plane_mask |= drm_plane_mask(plane);
+	}
+
 	priv->iommu_client = dev;
 
 	iommu_register_device_fault_handler(dev, dpu_sysmmu_fault_handler, decon);
@@ -1432,6 +1452,20 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 		if (dpp_np)
 			of_node_put(dpp_np);
 	}
+
+	/* RCD Function */
+	dpp_np = of_parse_phandle(np, "rcd", 0);
+	if (!dpp_np)
+		decon_debug(decon, "can't find rcd node\n");
+
+	decon->rcd = of_find_dpp_by_node(dpp_np);
+	if (!decon->rcd)
+		decon_debug(decon, "can't find rcd structure\n");
+	else
+		decon_debug(decon, "found rcd: dpp%d\n", decon->rcd->id);
+
+	if (dpp_np)
+		of_node_put(dpp_np);
 
 	of_property_for_each_u32(np, "connector", prop, cur, val)
 		decon->con_type |= val;

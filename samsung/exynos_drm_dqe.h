@@ -40,6 +40,7 @@ struct exynos_dqe_state {
 	struct histogram_bins *bins;
 	struct exynos_drm_pending_histogram_event *event;
 	u32 histogram_threshold;
+	bool rcd_enabled;
 };
 
 struct dither_debug_override {
@@ -145,7 +146,7 @@ int histogram_cancel_ioctl(struct drm_device *drm_dev, void *data,
 				struct drm_file *file);
 void handle_histogram_event(struct exynos_dqe *dqe);
 void exynos_dqe_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state,
-		u32 width, u32 height);
+			u32 width, u32 height);
 void exynos_dqe_reset(struct exynos_dqe *dqe);
 struct exynos_dqe *exynos_dqe_register(struct decon_device *decon);
 void exynos_dqe_save_lpd_data(struct exynos_dqe *dqe);

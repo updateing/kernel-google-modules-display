@@ -18,8 +18,13 @@
 
 #include "../exynos_drm_format.h"
 
+#ifdef CONFIG_SOC_GS201
+/* RDMA + ODMA + RCD */
+#define MAX_DPP_CNT		9
+#else
 /* RDMA + ODMA */
 #define MAX_DPP_CNT		7
+#endif
 
 #define DPP_CSC_IDX_BT601_625			0
 #define DPP_CSC_IDX_BT601_625_UNADJUSTED	2
@@ -52,6 +57,8 @@ enum dpp_attr {
 	DPP_ATTR_ODMA		= 17,
 	DPP_ATTR_DPP		= 18,
 	DPP_ATTR_WBMUX          = 19,
+
+	DPP_ATTR_RCD		= 20,
 };
 
 enum dpp_csc_defs {
@@ -88,6 +95,7 @@ struct dpp_regs {
 	void __iomem *dpp_base_regs;
 	void __iomem *dma_base_regs;
 	void __iomem *hdr_base_regs;
+	void __iomem *rcd_base_regs;
 };
 
 enum dpp_regs_id {
@@ -97,6 +105,8 @@ enum dpp_regs_id {
 	REGS_DPP3_ID,
 	REGS_DPP4_ID,
 	REGS_DPP5_ID,
+	REGS_DPP8_ID,
+	REGS_DPP9_ID,
 	REGS_DPP12_ID,
 	REGS_DPP_ID_MAX
 };
@@ -107,7 +117,7 @@ enum dpp_regs_type {
 	REGS_DPP_TYPE_MAX
 };
 
-static struct cal_regs_desc regs_dpp[REGS_DPP_TYPE_MAX][REGS_DPP_ID_MAX];
+extern struct cal_regs_desc regs_dpp[REGS_DPP_TYPE_MAX][REGS_DPP_ID_MAX];
 
 #define dpp_regs_desc(id)			(&regs_dpp[REGS_DPP][id])
 #define dpp_read(id, offset)			\
@@ -221,6 +231,9 @@ void dpp_reg_configure_params(u32 id, struct dpp_params_info *p,
 
 /* DPU_DMA, DPP DEBUG */
 void __dpp_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
+		unsigned long attr);
+
+void __rcd_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
 		unsigned long attr);
 
 /* DPP hw limitation check */

@@ -47,7 +47,7 @@ enum dqe_regs_id {
 	REGS_DQE_ID_MAX,
 };
 
-static struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
+extern struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
 
 /*
  * There are several types of DQE versions.
@@ -200,4 +200,5 @@ void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state);
 void dqe_reg_get_histogram_bins(u32 dqe_id, struct histogram_bins *bins);
 void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height);
 void dqe_dump(u32 dqe_id);
+void dqe_reg_set_rcd_en(u32 dqe_id, bool en);
 #endif /* __SAMSUNG_DQE_CAL_H__ */

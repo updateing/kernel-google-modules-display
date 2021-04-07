@@ -317,6 +317,7 @@ static int exynos_plane_atomic_check(struct drm_plane *plane,
 	if (!state->crtc || !state->fb)
 		return 0;
 
+	decon = to_exynos_crtc(state->crtc)->ctx;
 	new_crtc_state = drm_atomic_get_new_crtc_state(state->state,
 							state->crtc);
 
@@ -336,7 +337,6 @@ static int exynos_plane_atomic_check(struct drm_plane *plane,
 	if (ret)
 		return ret;
 
-	decon = to_exynos_crtc(state->crtc)->ctx;
 	if (decon->partial && new_exynos_crtc_state->needs_reconfigure)
 		exynos_partial_reconfig_coords(decon->partial, state,
 				&new_exynos_crtc_state->partial_region);
@@ -659,9 +659,17 @@ int exynos_plane_init(struct drm_device *dev,
 
 	exynos_plane->index = index;
 
-	drm_plane_create_alpha_property(plane);
-	drm_plane_create_blend_mode_property(plane, supported_modes);
-	drm_plane_create_zpos_property(plane, config->zpos, 0, MAX_PLANE - 1);
+	if (!test_bit(DPP_ATTR_RCD, &dpp->attr)) {
+		drm_plane_create_alpha_property(plane);
+		drm_plane_create_blend_mode_property(plane, supported_modes);
+		drm_plane_create_zpos_property(plane, config->zpos, 0, MAX_PLANE - 1);
+		exynos_drm_plane_create_standard_property(exynos_plane);
+		exynos_drm_plane_create_transfer_property(exynos_plane);
+		exynos_drm_plane_create_range_property(exynos_plane);
+		exynos_drm_plane_create_colormap_property(exynos_plane);
+	} else {
+		drm_plane_create_zpos_property(plane, MAX_PLANE - 1, 0, MAX_PLANE - 1);
+	}
 
 	if (test_bit(DPP_ATTR_ROT, &dpp->attr))
 		drm_plane_create_rotation_property(plane, DRM_MODE_ROTATE_0,
@@ -685,10 +693,6 @@ int exynos_plane_init(struct drm_device *dev,
 		exynos_drm_plane_create_tm_property(exynos_plane);
 
 	exynos_drm_plane_create_restriction_property(exynos_plane);
-	exynos_drm_plane_create_standard_property(exynos_plane);
-	exynos_drm_plane_create_transfer_property(exynos_plane);
-	exynos_drm_plane_create_range_property(exynos_plane);
-	exynos_drm_plane_create_colormap_property(exynos_plane);
 
 	return 0;
 }

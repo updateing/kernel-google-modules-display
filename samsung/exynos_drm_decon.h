@@ -386,6 +386,7 @@ struct decon_device {
 	struct exynos_drm_crtc		*crtc;
 	/* dpp information saved in dpp channel number order */
 	struct dpp_device		*dpp[MAX_WIN_PER_DECON];
+	struct dpp_device		*rcd;
 	u32				dpp_cnt;
 	u32				win_cnt;
 	enum exynos_drm_output_type	con_type;

@@ -317,12 +317,18 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 	struct drm_connector *conn;
 	const struct drm_connector_state *old_conn_state, *new_conn_state;
 	int i;
+	struct dpp_device *dpp;
+	struct exynos_drm_crtc *exynos_crtc;
 
 	if (!IS_ENABLED(CONFIG_EXYNOS_BTS))
 		return;
 
 	for_each_oldnew_plane_in_state(old_state, plane, old_plane_state,
 				       new_plane_state, i) {
+		dpp = plane_to_dpp(to_exynos_plane(plane));
+		if (test_bit(DPP_ATTR_RCD, &dpp->attr))
+			continue;
+
 		if (new_plane_state->crtc) {
 			const int zpos = new_plane_state->normalized_zpos;
 
@@ -369,22 +375,21 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 
 	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
 		decon = crtc_to_decon(crtc);
+		exynos_crtc = to_exynos_crtc(crtc);
 
 		if (!new_crtc_state->active)
 			continue;
 
 		if (new_crtc_state->planes_changed) {
-			const size_t max_planes =
-				dev->mode_config.num_total_plane;
 			const size_t num_planes =
-				hweight32(new_crtc_state->plane_mask);
+				hweight32(new_crtc_state->plane_mask &
+						~exynos_crtc->rcd_plane_mask);
 			int j;
 
-			for (j = num_planes; j < max_planes; j++) {
+			for (j = num_planes; j < MAX_WIN_PER_DECON; j++) {
 				win_config = &decon->bts.win_config[j];
 				win_config->state = DPU_WIN_STATE_DISABLED;
 			}
-
 		}
 
 		DPU_EVENT_LOG_ATOMIC_COMMIT(decon->id);

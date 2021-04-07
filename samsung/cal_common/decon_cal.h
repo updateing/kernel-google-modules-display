@@ -24,6 +24,12 @@
 #define DECON_BLENDING_COVERAGE		1
 #define DECON_BLENDING_NONE		2
 
+#ifdef CONFIG_SOC_GS201
+#define MAX_RCD_CNT		2
+#else
+#define MAX_RCD_CNT		0
+#endif
+
 enum decon_regs_id {
 	REGS_DECON0_ID = 0,
 	REGS_DECON1_ID,
@@ -40,7 +46,7 @@ enum decon_regs_type {
 	REGS_DECON_TYPE_MAX
 };
 
-static struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
+extern struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
 
 #define decon_regs_desc(id)			(&regs_decon[REGS_DECON][id])
 #define decon_read(id, offset)			\
@@ -423,6 +429,8 @@ void __decon_unmap_regs(struct decon_device *decon);
 #endif
 bool is_decon_using_ch(u32 id, u32 rsc_ch, u32 ch);
 bool is_decon_using_win(u32 id, u32 rsc_win, u32 win);
+
+void decon_reg_set_rcd_enable(u32 dqe_id, bool en);
 /*********************************************************************/
 
 #endif /* __SAMSUNG_DECON_CAL_H__ */

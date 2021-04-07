@@ -388,6 +388,18 @@ exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 		dqe_reg_print_hist(id, &p);
 }
 
+static void exynos_rcd_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
+{
+	const struct decon_device *decon = dqe->decon;
+	const u32 id = decon->id;
+
+	if (state->rcd_enabled != dqe->state.rcd_enabled) {
+		dqe_reg_set_rcd_en(id, state->rcd_enabled);
+		decon_reg_set_rcd_enable(id, state->rcd_enabled);
+		dqe->state.rcd_enabled = state->rcd_enabled;
+	}
+}
+
 static void __exynos_dqe_update(struct exynos_dqe *dqe,
 		struct exynos_dqe_state *state, u32 width, u32 height)
 {
@@ -408,6 +420,7 @@ static void __exynos_dqe_update(struct exynos_dqe *dqe,
 	}
 
 	exynos_atc_update(dqe, state);
+
 	exynos_gamma_matrix_update(dqe, state);
 	exynos_degamma_update(dqe, state);
 	exynos_linear_matrix_update(dqe, state);
@@ -415,6 +428,7 @@ static void __exynos_dqe_update(struct exynos_dqe *dqe,
 	exynos_regamma_update(dqe, state);
 	exynos_dither_update(dqe, state);
 	exynos_histogram_update(dqe, state);
+	exynos_rcd_update(dqe, state);
 
 	decon_reg_update_req_dqe(id);
 
@@ -446,6 +460,7 @@ void exynos_dqe_reset(struct exynos_dqe *dqe)
 	dqe->state.histogram_threshold = 0;
 	dqe->state.roi = NULL;
 	dqe->state.weights = NULL;
+	dqe->state.rcd_enabled = false;
 }
 
 void exynos_dqe_save_lpd_data(struct exynos_dqe *dqe)
@@ -706,6 +721,7 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 		return NULL;
 
 	dqe->regs = of_iomap(np, i);
+
 	if (IS_ERR(dqe->regs)) {
 		pr_err("failed to remap dqe registers\n");
 		return NULL;

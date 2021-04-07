@@ -309,6 +309,7 @@ struct exynos_drm_crtc {
 		struct drm_property *partial;
 	} props;
 	u8 active_state;
+	u32 rcd_plane_mask;
 };
 
 struct drm_exynos_file_private {

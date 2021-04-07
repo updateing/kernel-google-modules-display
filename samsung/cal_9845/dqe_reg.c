@@ -19,7 +19,9 @@
 #include <drm/drm_print.h>
 
 #include "regs-dqe.h"
+#include "../cal_9855/dqe_cal_internal.h"
 
+struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
 
 void dqe_regs_desc_init(void __iomem *regs, const char *name,
 			enum dqe_version ver, unsigned int dqe_id)
@@ -614,4 +616,12 @@ void dqe_dump(u32 dqe_id)
 
 	cal_log_info(0, "\n=== DQE_%d SFR ===\n", dqe_id);
 	dpu_print_hex_dump(dqe_regs, dqe_regs, 0x20);
+
+	cal_log_info(0, "\n=== DQE_%d RCD SFR ===\n", dqe_id);
+	dpu_print_hex_dump(dqe_regs, dqe_regs + 0x3000, 0x4);
+}
+
+void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
+{
+	dqe_reg_set_rcd_en_internal(dqe_id, en);
 }
