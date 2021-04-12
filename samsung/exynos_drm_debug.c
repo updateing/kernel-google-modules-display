@@ -1189,7 +1189,8 @@ int dpu_init_debug(struct decon_device *decon)
 	debugfs_create_x32("dta_hi_thres", 0664, urgent_dent, &decon->config.urgent.dta_hi_thres);
 	debugfs_create_x32("dta_lo_thres", 0664, urgent_dent, &decon->config.urgent.dta_lo_thres);
 
-	exynos_debugfs_add_dqe(dqe, crtc->debugfs_entry);
+	if (dqe)
+		exynos_debugfs_add_dqe(dqe, crtc->debugfs_entry);
 
 	return 0;
 
@@ -1503,6 +1504,8 @@ void dsim_diag_create_debugfs(struct dsim_device *dsim) {
 		pr_warn("%s: failed to create %s\n", __func__, dir_name);
 		return;
 	}
+
+	debugfs_create_u32("state", 0400, dsim->debugfs_entry, &dsim->state);
 
 	if (dsim->config.num_dphy_diags == 0)
 		return;

@@ -131,13 +131,19 @@ int exynos_panel_get_current_mode_te2(struct exynos_panel *ctx,
 	if (!ctx->current_mode)
 		return -EAGAIN;
 
-	if (ctx->desc->num_binned_lp && !ctx->current_binned_lp)
+	mode = &ctx->current_mode->mode;
+	lp_mode = ctx->current_mode->exynos_mode.is_lp_mode;
+
+	if (lp_mode && !ctx->desc->num_binned_lp) {
+		dev_warn(ctx->dev, "Missing LP mode command set\n");
+		return -EINVAL;
+	}
+
+	if (lp_mode && !ctx->current_binned_lp)
 		return -EAGAIN;
 
-	mode = &ctx->current_mode->mode;
 	if (ctx->current_binned_lp)
 		bl_th = ctx->current_binned_lp->bl_threshold;
-	lp_mode = ctx->current_mode->exynos_mode.is_lp_mode;
 
 	for_each_te2_timing(ctx, lp_mode, data, i) {
 		if (data->mode != mode)
@@ -335,8 +341,6 @@ int exynos_panel_init(struct exynos_panel *ctx)
 
 	if (funcs && funcs->panel_init)
 		funcs->panel_init(ctx);
-
-	exynos_panel_update_te2(ctx);
 
 	return ret;
 }
@@ -2339,7 +2343,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	}
 	ctx->current_mode = pmode;
 
-	if (!pmode->exynos_mode.is_lp_mode)
+	if (ctx->enabled && !pmode->exynos_mode.is_lp_mode)
 		exynos_panel_update_te2(ctx);
 
 	if (need_update_backlight && ctx->bl)
