@@ -27,9 +27,10 @@
 #include "exynos_drm_drv.h"
 
 enum dsim_state {
-	DSIM_STATE_HSCLKEN,
-	DSIM_STATE_ULPS,
-	DSIM_STATE_SUSPEND
+	DSIM_STATE_HSCLKEN,     /* dsim fully active */
+	DSIM_STATE_ULPS,	/* low power state */
+	DSIM_STATE_SUSPEND,	/* inactive */
+	DSIM_STATE_BYPASS,	/* bypass mode, dsim shouldn't be used */
 };
 
 struct dsim_pll_features {
@@ -92,6 +93,7 @@ struct dsim_device {
 	struct completion rd_comp;
 
 	enum dsim_state state;
+	enum dsim_state suspend_state;
 
 	/* set bist mode by sysfs */
 	unsigned int bist_mode;

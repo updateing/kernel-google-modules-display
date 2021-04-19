@@ -189,6 +189,9 @@ static void _dsim_exit_ulps_locked(struct dsim_device *dsim)
 {
 	WARN_ON(!mutex_is_locked(&dsim->state_lock));
 
+	if (dsim->state != DSIM_STATE_ULPS)
+		return;
+
 	dsim_debug(dsim, "%s +\n", __func__);
 
 	DPU_ATRACE_BEGIN(__func__);
@@ -281,11 +284,19 @@ static void dsim_encoder_enable(struct drm_encoder *encoder, struct drm_atomic_s
 		}
 	}
 
+	dsim_debug(dsim, "current state: %d\n", dsim->state);
+
 	if (dsim->state == DSIM_STATE_SUSPEND) {
 		_dsim_enable(dsim);
 		dsim_set_te_pinctrl(dsim, 1);
+	} else if (dsim->state == DSIM_STATE_BYPASS) {
+		pm_runtime_set_suspended(dsim->dev);
+		dsim->state = DSIM_STATE_SUSPEND;
+		_dsim_enable(dsim);
 	} else if (old_crtc_state->self_refresh_active) {
 		pm_runtime_get_sync(dsim->dev);
+	} else {
+		WARN(1, "unknown dsim state (%d)\n", dsim->state);
 	}
 }
 
@@ -370,7 +381,15 @@ static void dsim_encoder_disable(struct drm_encoder *encoder, struct drm_atomic_
 
 	DPU_ATRACE_BEGIN(__func__);
 	if (self_refresh_active) {
-		pm_runtime_put_sync(dsim->dev);
+		const struct exynos_drm_crtc_state *exynos_crtc_state =
+			to_exynos_crtc_state(crtc->state);
+
+		if (exynos_crtc_state->bypass) {
+			_dsim_disable(dsim);
+			dsim->state = DSIM_STATE_BYPASS;
+		} else {
+			pm_runtime_put_sync(dsim->dev);
+		}
 	} else {
 		_dsim_disable(dsim);
 
@@ -1313,9 +1332,10 @@ err:
 	return ret;
 }
 
-static void dsim_underrun_info(struct dsim_device *dsim)
+static void dsim_underrun_info(struct dsim_device *dsim, u32 underrun_cnt)
 {
-	printk_ratelimited("underrun irq occurs: MIF(%lu), INT(%lu), DISP(%lu)\n",
+	printk_ratelimited("underrun irq occurs(%u): MIF(%lu), INT(%lu), DISP(%lu)\n",
+			underrun_cnt,
 			exynos_devfreq_get_domain_freq(DEVFREQ_MIF),
 			exynos_devfreq_get_domain_freq(DEVFREQ_INT),
 			exynos_devfreq_get_domain_freq(DEVFREQ_DISP));
@@ -1370,9 +1390,19 @@ static irqreturn_t dsim_irq_handler(int irq, void *dev_id)
 
 	if (int_src & DSIM_INTSRC_UNDER_RUN) {
 		DPU_ATRACE_INT("DPU_UNDERRUN", 1);
-		dsim_underrun_info(dsim);
-		if (decon)
+		if (decon) {
+			static unsigned long last_dumptime;
+
+			dsim_underrun_info(dsim, decon->d.underrun_cnt + 1);
 			DPU_EVENT_LOG(DPU_EVT_DSIM_UNDERRUN, decon->id, NULL);
+			if (time_after(jiffies, last_dumptime + msecs_to_jiffies(5000))) {
+				decon_dump_event_condition(decon, DPU_EVT_CONDITION_UNDERRUN);
+				last_dumptime = jiffies;
+			}
+		} else {
+			dsim_underrun_info(dsim, 0);
+		}
+
 		DPU_ATRACE_INT("DPU_UNDERRUN", 0);
 	}
 
@@ -1858,8 +1888,10 @@ static ssize_t dsim_host_transfer(struct mipi_dsi_host *host,
 	DPU_ATRACE_BEGIN(__func__);
 
 	ret = pm_runtime_resume_and_get(dsim->dev);
-	if (ret)
+	if (ret) {
+		dsim_err(dsim, "runtime resume failed (%d). unable to transfer cmd\n", ret);
 		return ret;
+	}
 
 	mutex_lock(&dsim->cmd_lock);
 	if (WARN_ON(dsim->state != DSIM_STATE_HSCLKEN)) {
@@ -2282,7 +2314,7 @@ static int dsim_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int dsim_suspend(struct device *dev)
+static int dsim_runtime_suspend(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
 
@@ -2294,7 +2326,48 @@ static int dsim_suspend(struct device *dev)
 
 	dsim_debug(dsim, "%s\n", __func__);
 
+	dsim->suspend_state = dsim->state;
+	mutex_unlock(&dsim->state_lock);
 	DPU_ATRACE_END(__func__);
+
+	return 0;
+}
+
+static int dsim_runtime_resume(struct device *dev)
+{
+	struct dsim_device *dsim = dev_get_drvdata(dev);
+	int ret = 0;
+
+	DPU_ATRACE_BEGIN(__func__);
+
+	mutex_lock(&dsim->state_lock);
+	dsim_debug(dsim, "%s\n", __func__);
+
+	if (dsim->state == DSIM_STATE_BYPASS)
+		ret = -EPERM;
+	else if (dsim->state == DSIM_STATE_ULPS)
+		_dsim_exit_ulps_locked(dsim);
+
+	dsim->suspend_state = dsim->state;
+	mutex_unlock(&dsim->state_lock);
+
+	DPU_ATRACE_END(__func__);
+
+	return ret;
+}
+
+static int dsim_suspend(struct device *dev)
+{
+	struct dsim_device *dsim = dev_get_drvdata(dev);
+
+	mutex_lock(&dsim->state_lock);
+	dsim->suspend_state = dsim->state;
+
+	if (dsim->state == DSIM_STATE_HSCLKEN)
+		_dsim_enter_ulps_locked(dsim);
+
+	dsim_debug(dsim, "%s\n", __func__);
+
 	mutex_unlock(&dsim->state_lock);
 
 	return 0;
@@ -2304,24 +2377,21 @@ static int dsim_resume(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
 
-	DPU_ATRACE_BEGIN(__func__);
-
 	mutex_lock(&dsim->state_lock);
+	if (dsim->suspend_state == DSIM_STATE_HSCLKEN)
+		_dsim_exit_ulps_locked(dsim);
+
 	dsim_debug(dsim, "%s\n", __func__);
 
-	if (dsim->state == DSIM_STATE_ULPS)
-		_dsim_exit_ulps_locked(dsim);
 	mutex_unlock(&dsim->state_lock);
-
-	DPU_ATRACE_END(__func__);
 
 	return 0;
 }
 #endif
 
-
 static const struct dev_pm_ops dsim_pm_ops = {
-	SET_RUNTIME_PM_OPS(dsim_suspend, dsim_resume, NULL)
+	SET_RUNTIME_PM_OPS(dsim_runtime_suspend, dsim_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(dsim_suspend, dsim_resume)
 };
 
 struct platform_driver dsim_driver = {
