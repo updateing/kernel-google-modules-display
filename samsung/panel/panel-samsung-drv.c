@@ -574,6 +574,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	if (exynos_panel_func) {
 		if (exynos_panel_func->set_local_hbm_mode) {
 			ctx->hbm.local_hbm.enabled = false;
+			sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 			cancel_delayed_work_sync(&ctx->hbm.local_hbm.timeout_work);
 		}
 		if (exynos_panel_func->set_hbm_mode)
@@ -1803,6 +1804,7 @@ static ssize_t local_hbm_mode_store(struct device *dev,
 	}
 
 	ctx->desc->exynos_panel_func->set_local_hbm_mode(ctx, local_hbm_en);
+	sysfs_notify(&bd->dev.kobj, NULL, "local_hbm_mode");
 	if (local_hbm_en) {
 		queue_delayed_work(ctx->hbm.wq,
 			 &ctx->hbm.local_hbm.timeout_work,
@@ -1884,6 +1886,8 @@ static ssize_t state_show(struct device *dev,
 		rc = snprintf(buf, PAGE_SIZE, "%s\n", statestr);
 	}
 
+	dev_dbg(ctx->dev, "%s: %s\n", __func__, buf);
+
 	return rc;
 }
 
@@ -1915,6 +1919,8 @@ static ssize_t lp_state_show(struct device *dev,
 	mutex_unlock(&ctx->lp_state_lock);
 
 	mutex_unlock(&ctx->bl_state_lock);
+
+	dev_dbg(ctx->dev, "%s: %s\n", __func__, buf);
 
 	return rc;
 }
@@ -2327,22 +2333,32 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 		const bool was_lp_mode = ctx->current_mode &&
 					 ctx->current_mode->exynos_mode.is_lp_mode;
 		const bool is_lp_mode = pmode->exynos_mode.is_lp_mode;
+		bool state_changed = false;
 
 		if (is_lp_mode && funcs->set_lp_mode) {
 			funcs->set_lp_mode(ctx, pmode);
 			need_update_backlight = true;
 		} else if (was_lp_mode && !is_lp_mode && funcs->set_nolp_mode) {
 			funcs->set_nolp_mode(ctx, pmode);
-			exynos_panel_set_backlight_state(ctx, ctx->enabled ?
-							 PANEL_STATE_ON : PANEL_STATE_OFF);
+			state_changed = true;
 			need_update_backlight = true;
 		} else if (funcs->mode_set) {
 			funcs->mode_set(ctx, pmode);
-			if (ctx->bl)
+			state_changed = true;
+		}
+
+		ctx->current_mode = pmode;
+
+		if (state_changed) {
+			if (was_lp_mode)
+				exynos_panel_set_backlight_state(ctx, ctx->enabled ?
+								 PANEL_STATE_ON : PANEL_STATE_OFF);
+			else if (ctx->bl)
 				backlight_state_changed(ctx->bl);
 		}
+	} else {
+		ctx->current_mode = pmode;
 	}
-	ctx->current_mode = pmode;
 
 	if (ctx->enabled && !pmode->exynos_mode.is_lp_mode)
 		exynos_panel_update_te2(ctx);
@@ -2361,6 +2377,7 @@ static void local_hbm_timeout_work(struct work_struct *work)
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
 	ctx->desc->exynos_panel_func->set_local_hbm_mode(ctx, false);
+	sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 }
 
 static void global_hbm_work(struct work_struct *work)
