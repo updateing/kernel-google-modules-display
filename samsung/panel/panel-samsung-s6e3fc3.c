@@ -127,7 +127,7 @@ static const struct exynos_dsi_cmd s6e3fc3_init_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_on_f0),
 
 	/* TE rising time */
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1),
 			       0xB9, 0x01, 0x09, 0x5C, 0x00, 0x0B),
 
 	/* FQ CON setting */
@@ -140,8 +140,8 @@ static const struct exynos_dsi_cmd s6e3fc3_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1, 0x8F, 0x2B),
 
 	/* Enable FD in display PMIC for ELVDD and ELVSS */
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT), 0xB0, 0x0B, 0xF4),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT), 0xF4, 0x1C),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xB0, 0x0B, 0xF4),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xF4, 0x1C),
 
 	/* Local HBM circle location setting */
 	EXYNOS_DSI_CMD0(test_key_on_f1),
@@ -573,7 +573,7 @@ const struct brightness_capability s6e3fc3_brightness_capability = {
 		},
 		.percentage = {
 			.min = 0,
-			.max = 80,
+			.max = 62,
 		},
 	},
 	.hbm = {
@@ -586,7 +586,7 @@ const struct brightness_capability s6e3fc3_brightness_capability = {
 			.max = 4095,
 		},
 		.percentage = {
-			.min = 80,
+			.min = 62,
 			.max = 100,
 		},
 	},
