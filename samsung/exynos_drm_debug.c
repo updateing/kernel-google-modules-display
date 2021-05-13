@@ -22,7 +22,9 @@
 
 #include <cal_config.h>
 #include <dt-bindings/soc/google/gs101-devfreq.h>
+#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
 #include <soc/google/exynos-devfreq.h>
+#endif
 #include <dqe_cal.h>
 #include <hdr_cal.h>
 
@@ -60,12 +62,16 @@ static bool dpu_event_ignore
 	return true;
 }
 
+#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
 static void dpu_event_save_freqs(struct dpu_log_freqs *freqs)
 {
 	freqs->mif_freq = exynos_devfreq_get_domain_freq(DEVFREQ_MIF);
 	freqs->int_freq = exynos_devfreq_get_domain_freq(DEVFREQ_INT);
 	freqs->disp_freq = exynos_devfreq_get_domain_freq(DEVFREQ_DISP);
 }
+#else
+static void dpu_event_save_freqs(struct dpu_log_freqs *freqs) { }
+#endif
 
 /* ===== EXTERN APIs ===== */
 

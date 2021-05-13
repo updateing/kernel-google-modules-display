@@ -44,7 +44,9 @@
 #endif
 
 #include <dt-bindings/soc/google/gs101-devfreq.h>
+#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
 #include <soc/google/exynos-devfreq.h>
+#endif
 
 #include <regs-dsim.h>
 
@@ -1388,6 +1390,8 @@ err:
 	return ret;
 }
 
+
+#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
 static void dsim_underrun_info(struct dsim_device *dsim, u32 underrun_cnt)
 {
 	printk_ratelimited("underrun irq occurs(%u): MIF(%lu), INT(%lu), DISP(%lu)\n",
@@ -1396,6 +1400,12 @@ static void dsim_underrun_info(struct dsim_device *dsim, u32 underrun_cnt)
 			exynos_devfreq_get_domain_freq(DEVFREQ_INT),
 			exynos_devfreq_get_domain_freq(DEVFREQ_DISP));
 }
+#else
+static void dsim_underrun_info(struct dsim_device *dsim, u32 underrun_cnt)
+{
+	printk_ratelimited("underrun irq occurs(%u)\n", underrun_cnt);
+}
+#endif
 
 static irqreturn_t dsim_irq_handler(int irq, void *dev_id)
 {
