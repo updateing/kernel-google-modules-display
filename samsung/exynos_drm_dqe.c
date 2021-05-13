@@ -685,6 +685,7 @@ static enum dqe_version exynos_get_dqe_version(void)
 	return dqe_ver;
 }
 
+#define MAX_DQE_NAME_SIZE 10
 struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 {
 	struct device *dev = decon->dev;
@@ -692,6 +693,7 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 	struct exynos_dqe *dqe;
 	enum dqe_version dqe_version;
 	int i;
+	char dqe_name[MAX_DQE_NAME_SIZE] = "dqe";
 
 	i = of_property_match_string(np, "reg-names", "dqe");
 	if (i < 0) {
@@ -715,7 +717,8 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 	dqe->initialized = false;
 	dqe->decon = decon;
 
-	dqe->dqe_class = class_create(THIS_MODULE, "dqe");
+	scnprintf(dqe_name, MAX_DQE_NAME_SIZE, "dqe%u", decon->id);
+	dqe->dqe_class = class_create(THIS_MODULE, dqe_name);
 	if (IS_ERR(dqe->dqe_class)) {
 		pr_err("failed to create dqe class\n");
 		return NULL;
