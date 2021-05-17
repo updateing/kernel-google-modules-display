@@ -580,8 +580,13 @@ int exynos_panel_disable(struct drm_panel *panel)
 			sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 			cancel_delayed_work_sync(&ctx->hbm.local_hbm.timeout_work);
 		}
-		if (exynos_panel_func->set_hbm_mode)
+		if (exynos_panel_func->set_hbm_mode) {
 			cancel_work_sync(&ctx->hbm.global_hbm.ghbm_work);
+			if (ctx->hbm.global_hbm.commit) {
+				drm_crtc_commit_put(ctx->hbm.global_hbm.commit);
+				ctx->hbm.global_hbm.commit = NULL;
+			}
+		}
 	}
 
 	exynos_panel_send_cmd_set(ctx, ctx->desc->off_cmd_set);
@@ -997,12 +1002,33 @@ static ssize_t te2_lp_timing_show(struct device *dev,
 	return ret;
 }
 
+static ssize_t panel_idle_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	int ret;
+
+	ret = kstrtobool(buf, &ctx->panel_idle_enabled);
+
+	return ret ? : count;
+}
+
+static ssize_t panel_idle_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->panel_idle_enabled);
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
 static DEVICE_ATTR_WO(gamma);
 static DEVICE_ATTR_RW(te2_timing);
 static DEVICE_ATTR_RW(te2_lp_timing);
+static DEVICE_ATTR_RW(panel_idle);
 
 static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
@@ -1011,6 +1037,7 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_gamma.attr,
 	&dev_attr_te2_timing.attr,
 	&dev_attr_te2_lp_timing.attr,
+	&dev_attr_panel_idle.attr,
 	NULL
 };
 
@@ -1107,7 +1134,20 @@ static void exynos_panel_connector_atomic_commit(
 
 	if (exynos_old_state->hbm_on != exynos_new_state->hbm_on ||
 	    exynos_old_state->brightness_level != exynos_new_state->brightness_level) {
+		struct drm_crtc_commit *commit = exynos_new_state->base.commit;
+		struct drm_crtc_commit *old_commit;
+
+		cancel_work_sync(&ctx->hbm.global_hbm.ghbm_work);
+
+		if (commit)
+			drm_crtc_commit_get(commit);
+
 		mutex_lock(&ctx->hbm.global_hbm.ghbm_work_lock);
+		old_commit = ctx->hbm.global_hbm.commit;
+		if (WARN_ON(old_commit))
+			drm_crtc_commit_put(old_commit);
+
+		ctx->hbm.global_hbm.commit = commit;
 
 		if (exynos_old_state->hbm_on != exynos_new_state->hbm_on) {
 			if (exynos_panel_func && exynos_panel_func->set_hbm_mode) {
@@ -1129,6 +1169,11 @@ static void exynos_panel_connector_atomic_commit(
 		if (exynos_panel_func && exynos_panel_func->set_dimming_on)
 			exynos_panel_func->set_dimming_on(ctx, exynos_new_state->dimming_on);
 	}
+
+	if (exynos_panel_func && exynos_panel_func->commit_done)
+		exynos_panel_func->commit_done(ctx);
+
+	ctx->last_commit_ts = ktime_get();
 }
 
 static const struct exynos_drm_connector_helper_funcs exynos_panel_connector_helper_funcs = {
@@ -2170,6 +2215,8 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 	connector->funcs->reset(connector);
 	connector->status = connector_status_connected;
 	connector->state->self_refresh_aware = true;
+	if (ctx->desc->exynos_panel_func && ctx->desc->exynos_panel_func->commit_done)
+		ctx->exynos_connector.needs_commit = true;
 
 	ret = sysfs_create_link(&connector->kdev->kobj, &ctx->dev->kobj,
 				"panel");
@@ -2229,38 +2276,34 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	const struct drm_crtc_state *old_crtc_state = exynos_panel_get_old_crtc_state(ctx, state);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
-	/* this handles the case where panel may be enabled while booting already */
-	if (ctx->enabled && !exynos_panel_init(ctx))
-		goto skip_enable;
+	/* avoid turning on panel again if already enabled (ex. while booting or self refresh) */
+	if (!ctx->enabled || exynos_panel_init(ctx))
+		drm_panel_enable(&ctx->panel);
 
 	if (old_crtc_state && old_crtc_state->self_refresh_active) {
-		dev_dbg(ctx->dev, "self refresh state : skip %s\n", __func__);
-		goto skip_enable;
+		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
+
+		if (ctx->panel_idle_active && funcs && funcs->set_self_refresh)
+			funcs->set_self_refresh(ctx, false);
+	} else {
+		exynos_panel_set_backlight_state(ctx, pmode->exynos_mode.is_lp_mode ?
+						PANEL_STATE_LP : PANEL_STATE_ON);
+
+		exynos_panel_update_te2(ctx);
 	}
 
-	drm_panel_enable(&ctx->panel);
-
-skip_enable:
-	exynos_panel_set_backlight_state(ctx, pmode->exynos_mode.is_lp_mode ?
-					 PANEL_STATE_LP : PANEL_STATE_ON);
-
-	exynos_panel_update_te2(ctx);
+	ctx->panel_idle_active = false;
 }
 
 static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
 					   struct drm_bridge_state *old_bridge_state)
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
-	struct drm_atomic_state *state = old_bridge_state->base.state;
-	const struct drm_crtc_state *old_crtc_state = exynos_panel_get_old_crtc_state(ctx, state);
 
 	if (ctx->enabled)
 		return;
-
-	if (old_crtc_state && old_crtc_state->self_refresh_active) {
-		dev_dbg(ctx->dev, "self refresh state : skip %s\n", __func__);
-		return;
-	}
 
 	drm_panel_prepare(&ctx->panel);
 }
@@ -2274,7 +2317,14 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		conn_state->crtc->state->self_refresh_active;
 
 	if (self_refresh_active) {
-		dev_dbg(ctx->dev, "self refresh state : skip %s\n", __func__);
+		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
+
+		if (ctx->panel_idle_enabled && funcs && funcs->set_self_refresh) {
+			funcs->set_self_refresh(ctx, true);
+			ctx->panel_idle_active = true;
+		}
 		return;
 	}
 
@@ -2388,19 +2438,39 @@ static void global_hbm_work(struct work_struct *work)
 	struct exynos_panel *ctx =
 			 container_of(work, struct exynos_panel, hbm.global_hbm.ghbm_work);
 	const struct exynos_panel_funcs *exynos_panel_func;
+	struct drm_crtc_commit *commit = ctx->hbm.global_hbm.commit;
 	/* TODO: Change to ctx->current_mode->exynos_mode.vblank_usec when it's ready */
-	u32 delay_us = USEC_PER_SEC / drm_mode_vrefresh(&ctx->current_mode->mode) / 2;
+	const u32 fps = drm_mode_vrefresh(&ctx->current_mode->mode);
+	u32 delay_us = USEC_PER_SEC / fps / 2;
+	const u32 timeout_ms = (MSEC_PER_SEC / fps) + 20;
+
 	/* considering the variation */
 	delay_us = delay_us * 105 / 100;
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 	DPU_ATRACE_BEGIN("ghbm");
 	mutex_lock(&ctx->hbm.global_hbm.ghbm_work_lock);
+
+	WARN_ON(!commit);
+
+	if (commit) {
+		int ret;
+
+		DPU_ATRACE_BEGIN("wait_for_flip");
+		ctx->hbm.global_hbm.commit = NULL;
+		ret = wait_for_completion_timeout(&commit->flip_done, timeout_ms);
+		WARN_ON(ret < 0);
+		drm_crtc_commit_put(commit);
+		DPU_ATRACE_END("wait_for_flip");
+	}
+
 	usleep_range(delay_us, delay_us + 100);
 	if (ctx->hbm.global_hbm.update_hbm) {
+		DPU_ATRACE_BEGIN("set_hbm");
 		exynos_panel_func = ctx->desc->exynos_panel_func;
 		exynos_panel_func->set_hbm_mode(ctx, ctx->hbm.global_hbm.hbm_mode);
 		ctx->hbm.global_hbm.update_hbm = false;
+		DPU_ATRACE_END("set_hbm");
 	}
 
 	if (ctx->hbm.global_hbm.update_bl) {
@@ -2536,6 +2606,7 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 
 	drm_panel_add(&ctx->panel);
 
+	ctx->panel_idle_enabled = true;
 	ctx->bridge.funcs = &exynos_panel_bridge_funcs;
 #ifdef CONFIG_OF
 	ctx->bridge.of_node = ctx->dev->of_node;

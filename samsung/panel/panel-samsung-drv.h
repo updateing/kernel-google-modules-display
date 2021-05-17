@@ -252,6 +252,21 @@ struct exynos_panel_funcs {
 	 * changed.
 	 */
 	void (*update_te2)(struct exynos_panel *exynos_panel);
+
+	/**
+	 * @commit_done
+	 *
+	 * Called after atomic commit flush has completed but transfer may not have started yet
+	 */
+	void (*commit_done)(struct exynos_panel *exynos_panel);
+
+	/**
+	 * @set_self_refresh
+	 *
+	 * Called when display self refresh state has changed. While in self refresh state, the
+	 * panel can optimize for power assuming that there are no pending updates.
+	 */
+	void (*set_self_refresh)(struct exynos_panel *exynos_panel, bool enable);
 };
 
 /**
@@ -363,6 +378,11 @@ struct exynos_panel {
 	bool enabled;
 	bool initialized;
 
+	/* indicates whether panel idle feature is enabled */
+	bool panel_idle_enabled;
+	/* indicates if panel is currently in idle mode */
+	bool panel_idle_active;
+
 	bool hbm_mode;
 	bool dimming_on;
 	struct backlight_device *bl;
@@ -380,6 +400,7 @@ struct exynos_panel {
 	struct device_node *touch_dev;
 
 	struct te2_data te2;
+	ktime_t last_commit_ts;
 
 	struct {
 		struct local_hbm {
@@ -400,6 +421,7 @@ struct exynos_panel {
 			/* send ghbm mipi commands asynchronously after frame start */
 			struct work_struct ghbm_work;
 			struct mutex ghbm_work_lock;
+			struct drm_crtc_commit *commit;
 		} global_hbm;
 		struct workqueue_struct *wq;
 	} hbm;
