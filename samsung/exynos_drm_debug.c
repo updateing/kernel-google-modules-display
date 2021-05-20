@@ -259,6 +259,9 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	case DPU_EVT_DSIM_ECC:
 		log->data.value = decon->d.ecc_cnt;
 		break;
+	case DPU_EVT_TE_INTERRUPT:
+		log->data.value = decon->d.te_cnt;
+		break;
 	default:
 		break;
 	}
@@ -756,6 +759,11 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_DSIM_ECC:
 			scnprintf(buf + len, sizeof(buf) - len,
 					"\tecc count(%u)",
+					log->data.value);
+			break;
+		case DPU_EVT_TE_INTERRUPT:
+			scnprintf(buf + len, sizeof(buf) - len,
+					"\tte cnt(%u)",
 					log->data.value);
 			break;
 		default:
@@ -1361,6 +1369,51 @@ static void buf_dump_handler(struct kthread_work *work)
 	buf_dump_all(decon);
 }
 
+static ssize_t force_te_write(struct file *file, const char __user *buffer,
+			      size_t len, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct decon_device *decon = s->private;
+	unsigned long flags;
+	int ret;
+	bool en;
+
+	ret = kstrtobool_from_user(buffer, len, &en);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&decon->slock, flags);
+	if (en != decon->d.force_te_on) {
+		decon_enable_te_irq(decon, en);
+		decon->d.force_te_on = en;
+	}
+	spin_unlock_irqrestore(&decon->slock, flags);
+
+	return len;
+}
+
+static int force_te_show(struct seq_file *s, void *unused)
+{
+	struct decon_device *decon = s->private;
+
+	seq_printf(s, "%d\n", decon->d.force_te_on);
+
+	return 0;
+}
+
+static int force_te_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, force_te_show, inode->i_private);
+}
+
+static const struct file_operations force_te_fops = {
+	.open = force_te_open,
+	.read = seq_read,
+	.write = force_te_write,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
 int dpu_init_debug(struct decon_device *decon)
 {
 	int i;
@@ -1414,6 +1467,7 @@ int dpu_init_debug(struct decon_device *decon)
 		goto err_debugfs;
 	}
 
+	debugfs_create_file("force_te_on", 0664, crtc->debugfs_entry, decon, &force_te_fops);
 	debugfs_create_u32("underrun_cnt", 0664, crtc->debugfs_entry, &decon->d.underrun_cnt);
 	debugfs_create_u32("crc_cnt", 0444, crtc->debugfs_entry, &decon->d.crc_cnt);
 	debugfs_create_u32("ecc_cnt", 0444, crtc->debugfs_entry, &decon->d.ecc_cnt);
