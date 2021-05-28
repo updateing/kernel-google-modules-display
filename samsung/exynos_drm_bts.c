@@ -11,12 +11,22 @@
  */
 
 #include <soc/google/bts.h>
-#if defined(CONFIG_SOC_GS101)
-#include <soc/google/exynos-devfreq.h>
-#include <dt-bindings/soc/google/gs101-devfreq.h>
 #include <soc/google/cal-if.h>
-#include <dt-bindings/clock/gs101.h>
+
+#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
+#include <soc/google/exynos-devfreq.h>
+#if defined(CONFIG_SOC_GS101)
+#include <dt-bindings/soc/google/gs101-devfreq.h>
+#elif defined(CONFIG_SOC_GS201)
+#include <dt-bindings/soc/google/gs201-devfreq.h>
 #endif
+#endif
+#if defined(CONFIG_SOC_GS101)
+#include <dt-bindings/clock/gs101.h>
+#elif defined(CONFIG_SOC_GS201)
+#include <dt-bindings/clock/gs201.h>
+#endif
+
 #if defined(CONFIG_SOC_EXYNOS9610)
 #include <dt-bindings/clock/exynos9610.h>
 #elif defined(CONFIG_SOC_EXYNOS9820)
