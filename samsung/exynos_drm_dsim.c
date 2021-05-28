@@ -43,9 +43,13 @@
 #include <soc/google/exynos-cpupm.h>
 #endif
 
-#include <dt-bindings/soc/google/gs101-devfreq.h>
 #ifdef CONFIG_ARM_EXYNOS_DEVFREQ
 #include <soc/google/exynos-devfreq.h>
+#if defined(CONFIG_SOC_GS101)
+#include <dt-bindings/soc/google/gs101-devfreq.h>
+#elif defined(CONFIG_SOC_GS201)
+#include <dt-bindings/soc/google/gs201-devfreq.h>
+#endif
 #endif
 
 #include <regs-dsim.h>
