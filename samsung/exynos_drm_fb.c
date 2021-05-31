@@ -36,6 +36,8 @@
 #include "exynos_drm_gem.h"
 #include "exynos_drm_hibernation.h"
 
+extern const struct dpp_restriction dpp_drv_data;
+
 static const struct drm_framebuffer_funcs exynos_drm_fb_funcs = {
 	.destroy	= drm_gem_fb_destroy,
 	.create_handle	= drm_gem_fb_create_handle,
@@ -558,8 +560,9 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 		}
 	}
 
-	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
+	for_each_oldnew_crtc_in_state(old_state, crtc, old_crtc_state, new_crtc_state, i) {
 		struct decon_mode *mode;
+		struct drm_crtc_commit *commit = new_crtc_state->commit;
 		int fps;
 
 		decon = crtc_to_decon(crtc);
@@ -567,20 +570,21 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 		if (!new_crtc_state->active)
 			continue;
 
+		if (WARN_ON(!commit))
+			continue;
+
 		fps = drm_mode_vrefresh(&new_crtc_state->mode);
 		if (old_crtc_state->active)
 			fps = min(fps, drm_mode_vrefresh(&old_crtc_state->mode));
 
-		DPU_ATRACE_BEGIN("wait_for_frame_start");
-		if (!wait_for_completion_timeout(&decon->framestart_done,
-						 fps_timeout(fps))) {
-			DPU_EVENT_LOG(DPU_EVT_FRAMESTART_TIMEOUT,
-					decon->id, NULL);
+		DPU_ATRACE_BEGIN("wait_for_crtc_flip");
+		if (!wait_for_completion_timeout(&commit->flip_done, fps_timeout(fps))) {
+			DPU_EVENT_LOG(DPU_EVT_FRAMESTART_TIMEOUT, decon->id, NULL);
 			pr_warn("decon%u framestart timeout (%d fps)\n",
 					decon->id, fps);
 			decon_dump_all(decon);
 		}
-		DPU_ATRACE_END("wait_for_frame_start");
+		DPU_ATRACE_END("wait_for_crtc_flip");
 
 		mode = &decon->config.mode;
 		if (mode->op_mode == DECON_COMMAND_MODE && !decon->keep_unmask) {
@@ -629,12 +633,14 @@ void exynos_drm_mode_config_init(struct drm_device *dev)
 	dev->mode_config.min_height = 0;
 
 	/*
-	 * set max width and height as default value(4096x4096).
+	 * set min/max width and height respecting dpp_drv_data config.
 	 * this value would be used to check framebuffer size limitation
 	 * at drm_mode_addfb().
 	 */
-	dev->mode_config.max_width = 4096;
-	dev->mode_config.max_height = 4096;
+	dev->mode_config.max_width = dpp_drv_data.dst_f_w.max;
+	dev->mode_config.max_height = dpp_drv_data.dst_f_h.max;
+	dev->mode_config.min_width = dpp_drv_data.dst_f_w.min;
+	dev->mode_config.min_height = dpp_drv_data.dst_f_h.min;
 
 	dev->mode_config.funcs = &exynos_drm_mode_config_funcs;
 	dev->mode_config.helper_private = &exynos_drm_mode_config_helpers;

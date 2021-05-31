@@ -338,6 +338,7 @@ struct exynos_panel_desc {
 #define PANEL_ID_MAX		32
 #define PANEL_EXTINFO_MAX	16
 #define LOCAL_HBM_MAX_TIMEOUT_MS 1500 /* 1500 ms */
+#define LOCAL_HBM_GAMMA_CMD_SIZE_MAX 16
 
 struct exynos_bl_notifier {
 	u32 ranges[MAX_BL_RANGES];
@@ -356,7 +357,6 @@ struct te2_mode_data {
 
 struct te2_data {
 	struct te2_mode_data mode_data[MAX_TE2_TYPE];
-	struct mutex timing_lock;
 };
 
 struct exynos_panel {
@@ -386,6 +386,7 @@ struct exynos_panel {
 	bool hbm_mode;
 	bool dimming_on;
 	struct backlight_device *bl;
+	struct mutex mode_lock;
 	struct mutex bl_state_lock;
 	struct exynos_bl_notifier bl_notifier;
 
@@ -404,12 +405,12 @@ struct exynos_panel {
 
 	struct {
 		struct local_hbm {
+			bool gamma_para_ready;
+			u8 gamma_cmd[LOCAL_HBM_GAMMA_CMD_SIZE_MAX];
 			/* indicate if local hbm enabled or not */
 			bool enabled;
 			/* max local hbm on period in ms */
 			u32 max_timeout_ms;
-			/* used to protect local hbm operation */
-			struct mutex lock;
 			/* work used to turn off local hbm if reach max_timeout */
 			struct delayed_work timeout_work;
 		} local_hbm;
@@ -497,12 +498,18 @@ static inline void exynos_bin2hex(const void *buf, size_t len,
 	  .falling_edge = falling }						\
 }
 
+#define EXYNOS_DCS_WRITE_PRINT_ERR(ctx, cmd, len, ret) do {	\
+	dev_err(ctx->dev, "failed to write cmd (%d)\n", ret);	\
+	print_hex_dump(KERN_ERR, "command: ",			\
+		DUMP_PREFIX_NONE, 16, 1, cmd, len, false);	\
+} while (0)
+
 #define EXYNOS_DCS_WRITE_SEQ(ctx, seq...) do {				\
 	u8 d[] = { seq };						\
 	int ret;							\
 	ret = exynos_dcs_write(ctx, d, ARRAY_SIZE(d));			\
 	if (ret < 0)							\
-		dev_err(ctx->dev, "failed to write cmd(%d)\n", ret);	\
+		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, d, ARRAY_SIZE(d), ret);	\
 } while (0)
 
 #define EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, delay, seq...) do {		\
@@ -510,11 +517,11 @@ static inline void exynos_bin2hex(const void *buf, size_t len,
 	usleep_range(delay * 1000, delay * 1000 + 10);			\
 } while (0)
 
-#define EXYNOS_DCS_WRITE_TABLE(ctx, table) do {				\
-	int ret;							\
-	ret = exynos_dcs_write(ctx, table, ARRAY_SIZE(table));		\
-	if (ret < 0)							\
-		dev_err(ctx->dev, "failed to write cmd(%d)\n", ret);	\
+#define EXYNOS_DCS_WRITE_TABLE(ctx, table) do {					\
+	int ret;								\
+	ret = exynos_dcs_write(ctx, table, ARRAY_SIZE(table));			\
+	if (ret < 0)								\
+		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, table, ARRAY_SIZE(table), ret);	\
 } while (0)
 
 #define EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, delay, table) do {		\

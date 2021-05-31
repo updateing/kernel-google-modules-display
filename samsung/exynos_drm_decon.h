@@ -123,6 +123,8 @@ struct dpu_bts {
 	u32 resol_clk;
 	u32 peak;
 	u32 prev_peak;
+	u32 rt_avg_bw;
+	u32 prev_rt_avg_bw;
 	u32 read_bw;
 	u32 write_bw;
 	u32 total_bw;
@@ -301,6 +303,8 @@ struct dpu_log_bts_update {
 	struct dpu_log_freqs freqs;
 	u32 peak;
 	u32 prev_peak;
+	u32 rt_avg_bw;
+	u32 prev_rt_avg_bw;
 	u32 total_bw;
 	u32 prev_total_bw;
 };
@@ -309,6 +313,7 @@ struct dpu_log_bts_cal {
 	struct dpu_log_freqs freqs;
 	u32 disp_freq;
 	u32 peak;
+	u32 rt_avg_bw;
 	u32 read_bw;
 	u32 write_bw;
 	u32 fps;
@@ -389,7 +394,7 @@ struct decon_device {
 	struct dpu_bts			bts;
 	struct decon_debug		d;
 	struct exynos_hibernation	*hibernation;
-	struct completion		framestart_done;
+	struct drm_pending_vblank_event *event;
 	struct exynos_dqe		*dqe;
 	struct task_struct		*thread;
 	struct kthread_worker		worker;
