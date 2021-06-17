@@ -605,6 +605,15 @@ static void decon_send_vblank_event_locked(struct decon_device *decon)
 	decon->event = NULL;
 }
 
+void decon_force_vblank_event(struct decon_device *decon)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&decon->slock, flags);
+	decon_send_vblank_event_locked(decon);
+	spin_unlock_irqrestore(&decon->slock, flags);
+}
+
 static void decon_arm_event_locked(struct exynos_drm_crtc *exynos_crtc)
 {
 	struct drm_crtc *crtc = &exynos_crtc->base;
@@ -1770,6 +1779,8 @@ static int decon_runtime_suspend(struct device *dev)
 	if (decon->dqe)
 		exynos_dqe_reset(decon->dqe);
 
+	DPU_EVENT_LOG(DPU_EVT_DECON_RUNTIME_SUSPEND, decon->id, NULL);
+
 	decon_debug(decon, "suspended\n");
 
 	return 0;
@@ -1784,6 +1795,8 @@ static int decon_runtime_resume(struct device *dev)
 
 	if (decon->res.aclk_disp)
 		clk_prepare_enable(decon->res.aclk_disp);
+
+	DPU_EVENT_LOG(DPU_EVT_DECON_RUNTIME_RESUME, decon->id, NULL);
 
 	decon_debug(decon, "resumed\n");
 

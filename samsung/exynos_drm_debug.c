@@ -168,6 +168,10 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		log->data.rsc.rsc_win = decon_reg_get_rsc_win(decon->id);
 		pm_runtime_put_sync(decon->dev);
 		break;
+	case DPU_EVT_DECON_RUNTIME_SUSPEND:
+	case DPU_EVT_DECON_RUNTIME_RESUME:
+		log->data.pd.decon_state = decon->state;
+		break;
 	case DPU_EVT_ENTER_HIBERNATION_IN:
 	case DPU_EVT_ENTER_HIBERNATION_OUT:
 	case DPU_EVT_EXIT_HIBERNATION_IN:
@@ -428,8 +432,10 @@ static const char *get_event_name(enum dpu_event_type type)
 		"DSIM_DISABLED",		"DSIM_COMMAND",
 		"DSIM_ULPS_ENTER",		"DSIM_ULPS_EXIT",
 		"DSIM_UNDERRUN",		"DSIM_FRAMEDONE",
+		"DSIM_PH_FIFO_TIMEOUT",		"DSIM_PL_FIFO_TIMEOUT",
 		"DPP_FRAMEDONE",		"DMA_RECOVERY",
 		"ATOMIC_COMMIT",		"TE_INTERRUPT",
+		"DECON_RUNTIME_SUSPEND",	"DECON_RUNTIME_RESUME",
 		"ENTER_HIBERNATION_IN",		"ENTER_HIBERNATION_OUT",
 		"EXIT_HIBERNATION_IN",		"EXIT_HIBERNATION_OUT",
 		"ATOMIC_BEGIN",			"ATOMIC_FLUSH",
@@ -464,6 +470,8 @@ static bool is_skip_dpu_event_dump(enum dpu_event_type type, enum dpu_event_cond
 		case DPU_EVT_DSIM_UNDERRUN:
 		case DPU_EVT_ATOMIC_COMMIT:
 		case DPU_EVT_TE_INTERRUPT:
+		case DPU_EVT_DECON_RUNTIME_SUSPEND:
+		case DPU_EVT_DECON_RUNTIME_RESUME:
 		case DPU_EVT_ENTER_HIBERNATION_IN:
 		case DPU_EVT_ENTER_HIBERNATION_OUT:
 		case DPU_EVT_EXIT_HIBERNATION_IN:
@@ -488,6 +496,30 @@ static bool is_skip_dpu_event_dump(enum dpu_event_type type, enum dpu_event_cond
 		case DPU_EVT_BTS_RELEASE_BW:
 		case DPU_EVT_BTS_CALC_BW:
 		case DPU_EVT_BTS_UPDATE_BW:
+			return false;
+		default:
+			return true;
+		}
+	}
+
+	if (condition == DPU_EVT_CONDITION_FIFO_TIMEOUT) {
+		switch (type) {
+		case DPU_EVT_DECON_FRAMEDONE:
+		case DPU_EVT_DECON_FRAMESTART:
+		case DPU_EVT_DSIM_COMMAND:
+		case DPU_EVT_DSIM_ULPS_ENTER:
+		case DPU_EVT_DSIM_ULPS_EXIT:
+		case DPU_EVT_DSIM_FRAMEDONE:
+		case DPU_EVT_DSIM_PH_FIFO_TIMEOUT:
+		case DPU_EVT_DSIM_PL_FIFO_TIMEOUT:
+		case DPU_EVT_ATOMIC_COMMIT:
+		case DPU_EVT_TE_INTERRUPT:
+		case DPU_EVT_DECON_RUNTIME_SUSPEND:
+		case DPU_EVT_DECON_RUNTIME_RESUME:
+		case DPU_EVT_ENTER_HIBERNATION_OUT:
+		case DPU_EVT_EXIT_HIBERNATION_OUT:
+		case DPU_EVT_ATOMIC_BEGIN:
+		case DPU_EVT_ATOMIC_FLUSH:
 			return false;
 		default:
 			return true;
@@ -564,6 +596,12 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 					"\tID:%d SRC:%s COUNT:%d",
 					log->data.dpp.id, str_comp,
 					log->data.dpp.recovery_cnt);
+			break;
+		case DPU_EVT_DECON_RUNTIME_SUSPEND:
+		case DPU_EVT_DECON_RUNTIME_RESUME:
+			scnprintf(buf + len, sizeof(buf) - len,
+					"\tDecon state: %d",
+					log->data.pd.decon_state);
 			break;
 		case DPU_EVT_ENTER_HIBERNATION_IN:
 		case DPU_EVT_ENTER_HIBERNATION_OUT:
@@ -1482,6 +1520,7 @@ void decon_dump_event_condition(const struct decon_device *decon,
 
 	switch (condition) {
 	case DPU_EVT_CONDITION_UNDERRUN:
+	case DPU_EVT_CONDITION_FIFO_TIMEOUT:
 		print_log_size = dpu_event_print_underrun;
 		break;
 	case DPU_EVT_CONDITION_FAIL_UPDATE_BW:

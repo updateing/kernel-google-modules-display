@@ -189,6 +189,8 @@ enum dpu_event_type {
 	DPU_EVT_DSIM_ULPS_EXIT,
 	DPU_EVT_DSIM_UNDERRUN,
 	DPU_EVT_DSIM_FRAMEDONE,
+	DPU_EVT_DSIM_PH_FIFO_TIMEOUT,
+	DPU_EVT_DSIM_PL_FIFO_TIMEOUT,
 
 	DPU_EVT_DPP_FRAMEDONE,
 	DPU_EVT_DMA_RECOVERY,
@@ -196,6 +198,8 @@ enum dpu_event_type {
 	DPU_EVT_ATOMIC_COMMIT,
 	DPU_EVT_TE_INTERRUPT,
 
+	DPU_EVT_DECON_RUNTIME_SUSPEND,
+	DPU_EVT_DECON_RUNTIME_RESUME,
 	DPU_EVT_ENTER_HIBERNATION_IN,
 	DPU_EVT_ENTER_HIBERNATION_OUT,
 	DPU_EVT_EXIT_HIBERNATION_IN,
@@ -244,6 +248,7 @@ enum dpu_event_condition {
 	DPU_EVT_CONDITION_ALL = 0,
 	DPU_EVT_CONDITION_UNDERRUN,
 	DPU_EVT_CONDITION_FAIL_UPDATE_BW,
+	DPU_EVT_CONDITION_FIFO_TIMEOUT,
 };
 
 #define DPU_CALLSTACK_MAX 10
@@ -281,6 +286,7 @@ struct dpu_log_atomic {
 
 /* Event log structure for DPU power domain status */
 struct dpu_log_pd {
+	enum decon_state decon_state;
 	bool rpm_active;
 };
 
@@ -440,6 +446,7 @@ int dpu_init_debug(struct decon_device *decon);
 void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv);
 void DPU_EVENT_LOG_ATOMIC_COMMIT(int index);
 void DPU_EVENT_LOG_CMD(struct dsim_device *dsim, u8 type, u8 d0, u16 len);
+void decon_force_vblank_event(struct decon_device *decon);
 
 #if IS_ENABLED(CONFIG_EXYNOS_ITMON)
 int dpu_itmon_notifier(struct notifier_block *nb, unsigned long action,

@@ -43,7 +43,8 @@ static bool is_camera_operating(struct exynos_hibernation *hiber)
 
 static inline bool is_hibernation_enabled(struct exynos_hibernation *hiber)
 {
-	return hiber && hiber->enabled;
+	/* hibernation is only supported in command mode */
+	return hiber && hiber->enabled && hiber->decon->config.mode.op_mode == DECON_COMMAND_MODE;
 }
 
 static inline bool is_hibernaton_blocked(struct exynos_hibernation *hiber)
@@ -325,7 +326,11 @@ int exynos_hibernation_suspend(struct exynos_hibernation *hiber)
 	if (!hiber)
 		return 0;
 
+	/* cancel any scheduled delayed work, do it synchronously instead */
 	kthread_cancel_delayed_work_sync(&hiber->dwork);
+
+	/* make sure all work is complete (including async commits) */
+	kthread_flush_worker(&hiber->decon->worker);
 
 	return _exynos_hibernation_run(hiber, false);
 }
