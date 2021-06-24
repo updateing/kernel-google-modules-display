@@ -140,8 +140,8 @@
 /*----------------------[HIST]-----------------------------------------------*/
 
 // new field in DQE_HIST register for 9855
-#define HIST_POS_SEL_POST_DQE		(0 << 3)
-#define HIST_POS_SEL_PRE_DQE		(1 << 3)
+#define HIST_POS_SEL(_v)		((_v) << 3)
+#define HIST_POS_SEL_MASK		(1 << 3)
 
 /*
  * HIST_BIN (0~127) : 0x3800 ~ 0x39FC

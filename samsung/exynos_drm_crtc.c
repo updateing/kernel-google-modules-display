@@ -541,6 +541,11 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 		ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
 				&exynos_crtc_state->histogram_weights, val,
 				sizeof(struct histogram_weights), -1, &replaced);
+	} else if (property == exynos_crtc->props.histogram_pos) {
+		if (val != exynos_crtc_state->dqe.histogram_pos) {
+			exynos_crtc_state->dqe.histogram_pos = val;
+			replaced = true;
+		}
 	} else if (property == exynos_crtc->props.partial) {
 		ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
 				&exynos_crtc_state->partial, val,
@@ -607,6 +612,8 @@ static int exynos_drm_crtc_get_property(struct drm_crtc *crtc,
 	else if (property == exynos_crtc->props.histogram_weights)
 		*val = (exynos_crtc_state->histogram_weights) ?
 			exynos_crtc_state->histogram_weights->base.id : 0;
+	else if (property == exynos_crtc->props.histogram_pos)
+		*val = exynos_crtc_state->dqe.histogram_pos;
 	else if (property == exynos_crtc->props.partial)
 		*val = (exynos_crtc_state->partial) ?
 			exynos_crtc_state->partial->base.id : 0;
@@ -801,6 +808,31 @@ static int exynos_drm_crtc_create_blob(struct drm_crtc *crtc, const char *name,
 	return 0;
 }
 
+static int exynos_drm_crtc_histogram_pos_property(struct exynos_drm_crtc *exynos_crtc)
+{
+	struct drm_crtc *crtc = &exynos_crtc->base;
+	struct drm_property *prop;
+	static const struct drm_prop_enum_list histogram_pos_list[] = {
+		{ POST_DQE, "Post DQE" },
+		{ PRE_DQE, "Pre DQE" },
+	};
+	u32 flags = 0;
+
+	if (IS_ENABLED(CONFIG_SOC_GS101))
+		flags |= DRM_MODE_PROP_IMMUTABLE;
+
+	prop = drm_property_create_enum(crtc->dev, flags, "histogram_pos",
+				histogram_pos_list, ARRAY_SIZE(histogram_pos_list));
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, prop, POST_DQE);
+	exynos_crtc->props.histogram_pos = prop;
+
+	return 0;
+}
+
+
 static int exynos_drm_crtc_create_histogram_properties(
 			struct exynos_drm_crtc *exynos_crtc)
 {
@@ -820,6 +852,10 @@ static int exynos_drm_crtc_create_histogram_properties(
 	ret = exynos_drm_crtc_create_range(crtc, "histogram_threshold",
 				&exynos_crtc->props.histogram_threshold,
 				0, GENMASK(9, 0));
+	if (ret)
+		return ret;
+
+	ret = exynos_drm_crtc_histogram_pos_property(exynos_crtc);
 	if (ret)
 		return ret;
 

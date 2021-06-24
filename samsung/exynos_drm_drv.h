@@ -314,6 +314,7 @@ struct exynos_drm_crtc {
 		struct drm_property *histogram_roi;
 		struct drm_property *histogram_weights;
 		struct drm_property *histogram_threshold;
+		struct drm_property *histogram_pos;
 		struct drm_property *partial;
 		struct drm_property *cgc_lut_fd;
 		struct drm_property *expected_present_time;

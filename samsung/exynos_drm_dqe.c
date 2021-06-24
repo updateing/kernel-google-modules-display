@@ -389,6 +389,11 @@ exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 		dqe->state.histogram_threshold = state->histogram_threshold;
 	}
 
+	if (dqe->state.histogram_pos != state->histogram_pos) {
+		dqe_reg_set_histogram_pos(id, state->histogram_pos);
+		dqe->state.histogram_pos = state->histogram_pos;
+	}
+
 	if (dqe->state.event && state->roi)
 		hist_state = HISTOGRAM_ROI;
 	else if (dqe->state.event && !state->roi)
@@ -523,6 +528,7 @@ void exynos_dqe_reset(struct exynos_dqe *dqe)
 	dqe->cgc.first_write = false;
 	dqe->force_atc_config.dirty = true;
 	dqe->state.histogram_threshold = 0;
+	dqe->state.histogram_pos = POST_DQE;
 	dqe->state.roi = NULL;
 	dqe->state.weights = NULL;
 	dqe->state.rcd_enabled = false;

@@ -568,6 +568,11 @@ void dqe_reg_set_histogram_threshold(u32 dqe_id, u32 threshold)
 	hist_write(dqe_id, DQE_HIST_THRESH, threshold);
 }
 
+void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_prog_pos pos)
+{
+	dqe_reg_set_histogram_pos_internal(dqe_id, pos);
+}
+
 void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
 {
 	u32 val = 0;
@@ -624,6 +629,9 @@ void dqe_dump(u32 dqe_id)
 
 	cal_log_info(0, "\n=== DQE_%d RCD SFR ===\n", dqe_id);
 	dpu_print_hex_dump(dqe_regs, dqe_regs + 0x3000, 0x4);
+
+	cal_log_info(0, "\n=== DQE_%d HIST SFR ===\n", dqe_id);
+	dpu_print_hex_dump(dqe_regs, dqe_regs + 0x3400, 0x4);
 }
 
 void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
