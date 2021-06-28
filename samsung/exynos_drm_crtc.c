@@ -159,6 +159,8 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 						to_exynos_crtc_state(crtc_state);
 	const struct drm_crtc_state *old_crtc_state =
 		drm_atomic_get_old_crtc_state(crtc_state->state, crtc);
+	struct exynos_drm_crtc_state *old_exynos_state =
+						to_exynos_crtc_state(old_crtc_state);
 	struct drm_plane *plane;
 	const struct drm_plane_state *plane_state;
 	const struct decon_device *decon = exynos_crtc->ctx;
@@ -199,6 +201,9 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 			new_exynos_state->force_bpc == EXYNOS_BPC_MODE_10 ?
 			10 : 8;
 	}
+
+	if (old_exynos_state->in_bpc != new_exynos_state->in_bpc)
+		crtc_state->color_mgmt_changed = true;
 
 	/*
 	 * if the the following conditions are met then skip the update to keep self refresh
