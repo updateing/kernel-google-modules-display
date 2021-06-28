@@ -23,12 +23,13 @@
 
 struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
 
-void dqe_regs_desc_init(void __iomem *regs, const char *name,
+void dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 			enum dqe_version ver, unsigned int dqe_id)
 {
 	regs_dqe[dqe_id].desc.regs = regs;
 	regs_dqe[dqe_id].desc.name = name;
 	regs_dqe[dqe_id].version = ver;
+        regs_dqe[dqe_id].desc.start = start;
 }
 
 static void dqe_reg_set_img_size(u32 dqe_id, u32 width, u32 height)
@@ -571,7 +572,7 @@ void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
 {
 	u32 val = 0;
 
-	if (regs_dqe.desc.write_protected) {
+	if (regs_dqe[dqe_id].desc.write_protected) {
 		cal_log_debug(0, "%s: ignored in protected status\n", __func__);
 		return;
 	}
@@ -630,7 +631,7 @@ void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
 	dqe_reg_set_rcd_en_internal(dqe_id, en);
 }
 
-void dqe_reg_set_drm_write_protected(bool protected)
+void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected)
 {
-	cal_set_write_protected(&regs_dqe.desc, protected);
+	cal_set_write_protected(&regs_dqe[dqe_id].desc, protected);
 }

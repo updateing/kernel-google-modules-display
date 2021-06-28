@@ -404,12 +404,14 @@ static void __dpp_enable(struct dpp_device *dpp)
 static void set_resource_protection(bool dpu_protected)
 {
 	u32 decon_id;
+	u32 dqe_id;
 	u32 dsim_id;
 
 	pr_debug("%s DPU protection status changed to %d", __func__, dpu_protected);
 	for (decon_id = 0; decon_id < MAX_DECON_CNT; ++decon_id)
 		decon_reg_set_drm_write_protected(decon_id, dpu_protected);
-	dqe_reg_set_drm_write_protected(dpu_protected);
+	for (dqe_id = 0; dqe_id < REGS_DQE_ID_MAX; ++dqe_id)
+		dqe_reg_set_drm_write_protected(dqe_id, dpu_protected);
 	for (dsim_id = 0; dsim_id < MAX_DSI_CNT; ++dsim_id)
 		dsim_reg_set_drm_write_protected(dsim_id, dpu_protected);
 }
