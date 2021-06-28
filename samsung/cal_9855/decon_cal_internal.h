@@ -15,8 +15,10 @@
 
 #ifdef CONFIG_SOC_GS201
 void decon_reg_set_rcd_enable_internal(u32 id, bool en);
+void decon_reg_update_req_cgc_internal(u32 id);
 #else
 static void decon_reg_set_rcd_enable_internal(u32 id, bool en) {}
+static void decon_reg_update_req_cgc_internal(u32 id) {}
 #endif
 
 #endif /* __SAMSUNG_DPP_CAL_INTERNAL_H__ */
