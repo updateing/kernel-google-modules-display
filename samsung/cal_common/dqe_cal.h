@@ -170,7 +170,7 @@ struct exynos_atc {
 	__u8 lt_calc_ab_shift;
 };
 
-void dqe_regs_desc_init(void __iomem *regs, const char *name,
+void dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 			enum dqe_version ver, u32 dqe_id);
 void dqe_reg_init(u32 dqe_id, u32 width, u32 height);
 void dqe_reg_set_degamma_lut(u32 dqe_id, const struct drm_color_lut *lut);
@@ -201,4 +201,5 @@ void dqe_reg_get_histogram_bins(u32 dqe_id, struct histogram_bins *bins);
 void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height);
 void dqe_dump(u32 dqe_id);
 void dqe_reg_set_rcd_en(u32 dqe_id, bool en);
+void dqe_reg_set_drm_write_protected(bool protected);
 #endif /* __SAMSUNG_DQE_CAL_H__ */

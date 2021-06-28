@@ -56,11 +56,11 @@ enum decon_win_alpha_sel {
 
 struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
 
-void decon_regs_desc_init(void __iomem *regs, const char *name,
+void decon_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 		enum decon_regs_type type, unsigned int id)
 {
 	cal_regs_desc_check(type, id, REGS_DECON_TYPE_MAX, REGS_DECON_ID_MAX);
-	cal_regs_desc_set(regs_decon, regs, name, type, id);
+	cal_regs_desc_set(regs_decon, regs, start, name, type, id);
 }
 
 /******************* DECON CAL functions *************************/
@@ -1414,7 +1414,7 @@ void decon_reg_set_win_enable(u32 id, u32 win_idx, u32 en)
  * argb_color : 32-bit
  * A[31:24] - R[23:16] - G[15:8] - B[7:0]
  */
-static void decon_reg_set_win_mapcolor(u32 id, u32 win_idx, u32 argb_color)
+static void decon_reg_set_win_mapcolor(u32 id, u32 win_idx, u32 argb_color, u32 in_bpc)
 {
 	u32 val, mask;
 	u32 mc_alpha = 0, mc_red = 0;
@@ -1425,14 +1425,13 @@ static void decon_reg_set_win_mapcolor(u32 id, u32 win_idx, u32 argb_color)
 	mc_green = (argb_color >> 8) & 0xFF;
 	mc_blue = (argb_color >> 0) & 0xFF;
 
-	val = decon_read(id, GLOBAL_CON) & GLOBAL_CON_TEN_BPC_MODE_F;
-	if (val) {
+	if (in_bpc == 10) {
 		mc_red = (mc_red << 2) | ((mc_red >> 6) & 0x3);
 		mc_green = (mc_green << 2) | ((mc_green >> 6) & 0x3);
 		mc_blue = (mc_blue << 2) | ((mc_blue >> 6) & 0x3);
 	}
 	cal_log_debug(id, "TEN_BPC=%d : A=%02Xh, R=%03Xh, G=%03Xh, B=%03Xh\n",
-			val ? 1 : 0, mc_alpha, mc_red, mc_green, mc_blue);
+			in_bpc ? 1 : 0, mc_alpha, mc_red, mc_green, mc_blue);
 
 
 	val = WIN_MAPCOLOR_A_F(mc_alpha) | WIN_MAPCOLOR_R_F(mc_red);
@@ -1453,7 +1452,7 @@ static void decon_reg_set_win_plane_alpha(u32 id, u32 win_idx, u32 a0, u32 a1)
 	win_write_mask(id, WIN_FUNC_CON_0(win_idx), val, mask);
 }
 
-static void decon_reg_set_winmap(u32 id, u32 win_idx, u32 color, u32 en)
+static void decon_reg_set_winmap(u32 id, u32 win_idx, u32 color, u32 in_bpc, u32 en)
 {
 	u32 val, mask;
 
@@ -1465,7 +1464,7 @@ static void decon_reg_set_winmap(u32 id, u32 win_idx, u32 color, u32 en)
 			wincon_read(id, DECON_CON_WIN(win_idx)));
 
 	/* Color Set */
-	decon_reg_set_win_mapcolor(id, win_idx, color);
+	decon_reg_set_win_mapcolor(id, win_idx, color, in_bpc);
 }
 
 /* ALPHA_MULT selection used in (a',b',c',d') coefficient */
@@ -1833,7 +1832,7 @@ void decon_reg_set_window_control(u32 id, int win_idx,
 	win_write(id, WIN_START_POSITION(win_idx), regs->start_pos);
 	win_write(id, WIN_END_POSITION(win_idx), regs->end_pos);
 	win_write(id, WIN_START_TIME_CON(win_idx), regs->start_time);
-	decon_reg_set_winmap(id, win_idx, regs->colormap, winmap_en);
+	decon_reg_set_winmap(id, win_idx, regs->colormap, regs->in_bpc, winmap_en);
 
 	decon_reg_config_win_channel(id, win_idx, regs->ch);
 	decon_reg_set_win_enable(id, win_idx, 1);
@@ -2089,6 +2088,11 @@ int decon_reg_get_fs_interrupt_and_clear(u32 id)
 /* id: dsim_id */
 void decon_reg_set_start_crc(u32 id, u32 en)
 {
+	if (sub_regs_desc(id)->write_protected) {
+		pr_debug("ignored dsim%d crc in protected status\n", id);
+		return;
+	}
+
 	dsimif_write_mask(id, DSIMIF_CRC_CON(id), en ? ~0 : 0, CRC_START);
 }
 
@@ -2197,38 +2201,51 @@ u32 decon_reg_get_rsc_win(u32 id)
 #ifdef __linux__
 int __decon_init_resources(struct decon_device *decon)
 {
+	struct resource res;
 	struct device *dev = decon->dev;
 	struct device_node *np = dev->of_node;
 	int i, ret = 0;
 
 	i = of_property_match_string(np, "reg-names", "win");
-	decon->regs.win_regs = of_iomap(np, i);
+	if (of_address_to_resource(np, i, &res)) {
+		cal_log_err(decon->id, "failed to get win resource\n");
+		goto err;
+	}
+	decon->regs.win_regs = ioremap(res.start, resource_size(&res));
 	if (IS_ERR(decon->regs.win_regs)) {
 		cal_log_err(decon->id, "failed decon win ioremap\n");
 		ret = PTR_ERR(decon->regs.win_regs);
 		goto err;
 	}
-	decon_regs_desc_init(decon->regs.win_regs, "decon_win",
+	decon_regs_desc_init(decon->regs.win_regs, res.start, "decon_win",
 			REGS_DECON_WIN, decon->id);
 
 	i = of_property_match_string(np, "reg-names", "sub");
-	decon->regs.sub_regs = of_iomap(np, i);
+	if (of_address_to_resource(np, i, &res)) {
+		cal_log_err(decon->id, "failed to get sub resource\n");
+		goto err_win;
+	}
+	decon->regs.sub_regs = ioremap(res.start, resource_size(&res));
 	if (IS_ERR(decon->regs.sub_regs)) {
 		cal_log_err(decon->id, "failed decon sub ioremap\n");
 		ret = PTR_ERR(decon->regs.sub_regs);
 		goto err_win;
 	}
-	decon_regs_desc_init(decon->regs.sub_regs, "decon_sub",
+	decon_regs_desc_init(decon->regs.sub_regs, res.start, "decon_sub",
 			REGS_DECON_SUB, decon->id);
 
 	i = of_property_match_string(np, "reg-names", "wincon");
-	decon->regs.wincon_regs = of_iomap(np, i);
+	if (of_address_to_resource(np, i, &res)) {
+		cal_log_err(decon->id, "failed to get wincon resource\n");
+		goto err_sub;
+	}
+	decon->regs.wincon_regs = ioremap(res.start, resource_size(&res));
 	if (IS_ERR(decon->regs.wincon_regs)) {
 		cal_log_err(decon->id, "failed wincon ioremap\n");
 		ret = PTR_ERR(decon->regs.wincon_regs);
 		goto err_sub;
 	}
-	decon_regs_desc_init(decon->regs.wincon_regs, "decon_wincon",
+	decon_regs_desc_init(decon->regs.wincon_regs, res.start, "decon_wincon",
 			REGS_DECON_WINCON, decon->id);
 
 	return ret;
@@ -2258,4 +2275,9 @@ bool is_decon_using_ch(u32 id, u32 rsc_ch, u32 ch)
 bool is_decon_using_win(u32 id, u32 rsc_win, u32 win)
 {
 	return ((rsc_win >> (win * 4)) & 0xF) == OCCUPIED_BY_DECON(id);
+}
+
+void decon_reg_set_drm_write_protected(u32 id, bool protected)
+{
+	cal_set_write_protected(sub_regs_desc(id), protected);
 }

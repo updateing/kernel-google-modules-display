@@ -82,13 +82,16 @@ static void wb_convert_connector_state_to_config(struct dpp_params_info *config,
 				const struct exynos_drm_writeback_state *state)
 {
 	struct drm_framebuffer *fb = state->base.writeback_job->fb;
+	const struct drm_crtc_state *crtc_state = state->base.crtc->state;
 
 	pr_debug("%s +\n", __func__);
 
 	config->src.x = 0;
 	config->src.y = 0;
-	config->src.w = config->src.f_w = fb->width;
-	config->src.h = config->src.f_h = fb->height;
+	config->src.w = crtc_state->mode.hdisplay;
+	config->src.h = crtc_state->mode.vdisplay;
+	config->src.f_w = fb->width;
+	config->src.f_h = fb->height;
 
 	config->comp_type = COMP_TYPE_NONE;
 
@@ -126,12 +129,6 @@ static int writeback_atomic_check(struct drm_encoder *encoder,
 		return 0;
 
 	fb = conn_state->writeback_job->fb;
-	if (fb->width != crtc_state->mode.hdisplay ||
-			fb->height != crtc_state->mode.vdisplay) {
-		pr_err("Invalid framebuffer size %ux%u\n", fb->width,
-				fb->height);
-		return -EINVAL;
-	}
 
 	for (i = 0; i < ARRAY_SIZE(writeback_formats); i++)
 		if (fb->format->format == writeback_formats[i])
@@ -590,6 +587,7 @@ irq_end:
 
 static int wb_init_resources(struct writeback_device *wb)
 {
+	struct resource res;
 	int ret = 0;
 	struct device *dev = wb->dev;
 	struct device_node *np = dev->of_node;
@@ -601,12 +599,16 @@ static int wb_init_resources(struct writeback_device *wb)
 	pdev = container_of(dev, struct platform_device, dev);
 
 	i = of_property_match_string(np, "reg-names", "dma");
-	wb->regs.dma_base_regs = of_iomap(np, i);
+	if (of_address_to_resource(np, i, &res)) {
+		pr_err("failed to get dma resource\n");
+		return -EINVAL;
+	}
+	wb->regs.dma_base_regs = ioremap(res.start, resource_size(&res));
 	if (!wb->regs.dma_base_regs) {
 		pr_err("failed to remap DPU_DMA SFR region\n");
 		return -EINVAL;
 	}
-	dpp_regs_desc_init(wb->regs.dma_base_regs, "dma", REGS_DMA, wb->id);
+	dpp_regs_desc_init(wb->regs.dma_base_regs, res.start, "dma", REGS_DMA, wb->id);
 
 	wb->odma_irq = of_irq_get_byname(np, "dma");
 	pr_info("dma irq no = %d\n", wb->odma_irq);
@@ -620,12 +622,16 @@ static int wb_init_resources(struct writeback_device *wb)
 
 	if (test_bit(DPP_ATTR_DPP, &wb->attr)) {
 		i = of_property_match_string(np, "reg-names", "dpp");
-		wb->regs.dpp_base_regs = of_iomap(np, i);
+		if (of_address_to_resource(np, i, &res)) {
+			pr_err("failed to get dpp resource\n");
+			return -EINVAL;
+		}
+		wb->regs.dpp_base_regs = ioremap(res.start, resource_size(&res));
 		if (!wb->regs.dpp_base_regs) {
 			pr_err("failed to remap DPP SFR region\n");
 			return -EINVAL;
 		}
-		dpp_regs_desc_init(wb->regs.dpp_base_regs, "dpp", REGS_DPP,
+		dpp_regs_desc_init(wb->regs.dpp_base_regs, res.start, "dpp", REGS_DPP,
 				wb->id);
 	}
 

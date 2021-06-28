@@ -703,6 +703,7 @@ static enum dqe_version exynos_get_dqe_version(void)
 #define MAX_DQE_NAME_SIZE 10
 struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 {
+	struct resource res;
 	struct device *dev = decon->dev;
 	struct device_node *np = dev->of_node;
 	struct exynos_dqe *dqe;
@@ -713,6 +714,10 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 	i = of_property_match_string(np, "reg-names", "dqe");
 	if (i < 0) {
 		pr_info("display quality enhancer is not supported\n");
+		return NULL;
+	}
+	if (of_address_to_resource(np, i, &res)) {
+		pr_err("failed to get dqe resource\n");
 		return NULL;
 	}
 
@@ -728,7 +733,7 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 	}
 
 	dqe_version = exynos_get_dqe_version();
-	dqe_regs_desc_init(dqe->regs, "dqe", dqe_version, decon->id);
+	dqe_regs_desc_init(dqe->regs, res.start, "dqe", dqe_version, decon->id);
 	dqe->funcs = &dqe_funcs;
 	dqe->initialized = false;
 	dqe->decon = decon;

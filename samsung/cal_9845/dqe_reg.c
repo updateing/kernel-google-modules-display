@@ -120,7 +120,6 @@ void dqe_reg_set_cgc_lut(u32 dqe_id, const struct cgc_lut *lut)
 		cgc_write_mask(dqe_id, DQE_CGC_CON, 0, CGC_EN);
 		return;
 	}
-
 	for (i = 0; i < DRM_SAMSUNG_CGC_LUT_REG_CNT; ++i) {
 		dqe_write_relaxed(dqe_id, DQE_CGC_LUT_R(i), lut->r_values[i]);
 		dqe_write_relaxed(dqe_id, DQE_CGC_LUT_G(i), lut->g_values[i]);
@@ -572,6 +571,11 @@ void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
 {
 	u32 val = 0;
 
+	if (regs_dqe.desc.write_protected) {
+		cal_log_debug(0, "%s: ignored in protected status\n", __func__);
+		return;
+	}
+
 	if (state == HISTOGRAM_OFF)
 		val = 0;
 	else if (state == HISTOGRAM_FULL)
@@ -624,4 +628,9 @@ void dqe_dump(u32 dqe_id)
 void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
 {
 	dqe_reg_set_rcd_en_internal(dqe_id, en);
+}
+
+void dqe_reg_set_drm_write_protected(bool protected)
+{
+	cal_set_write_protected(&regs_dqe.desc, protected);
 }

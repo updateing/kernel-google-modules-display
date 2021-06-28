@@ -490,6 +490,8 @@ static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
 	struct exynos_drm_plane_state *exynos_plane_state =
 		to_exynos_plane_state(plane_state);
 	const struct drm_crtc_state *crtc_state = exynos_crtc->base.state;
+	const struct exynos_drm_crtc_state *exynos_crtc_state =
+					to_exynos_crtc_state(crtc_state);
 	struct dpp_device *dpp = plane_to_dpp(exynos_plane);
 	struct decon_device *decon = exynos_crtc->ctx;
 	struct decon_window_regs win_info;
@@ -543,6 +545,7 @@ static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
 			DRM_BLEND_ALPHA_OPAQUE);
 	win_info.plane_alpha = hw_alpha;
 	win_info.blend = plane_state->pixel_blend_mode;
+	win_info.in_bpc = exynos_crtc_state->in_bpc;
 
 	if (zpos == 0 && hw_alpha == EXYNOS_PLANE_ALPHA_MAX)
 		win_info.blend = DRM_MODE_BLEND_PIXEL_NONE;
@@ -716,9 +719,6 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 
 	decon_reg_all_win_shadow_update_req(decon->id);
 
-	if (atomic_add_unless(&decon->bts.delayed_update, -1, 0))
-		decon_mode_update_bts(decon, &new_crtc_state->mode);
-
 	if (new_exynos_crtc_state->seamless_mode_changed)
 		decon_seamless_mode_set(exynos_crtc, old_crtc_state);
 
@@ -817,25 +817,33 @@ static void decon_mode_set(struct exynos_drm_crtc *crtc,
 static void decon_seamless_mode_bts_update(struct decon_device *decon,
 					   const struct drm_display_mode *mode)
 {
+	DPU_ATRACE_BEGIN(__func__);
 	/*
 	 * when going from high->low refresh rate need to run with the higher fps while the
 	 * switch takes effect in display, this could happen within 2 vsyncs in the worst case
 	 */
 	if (decon->bts.fps > drm_mode_vrefresh(mode)) {
 		atomic_set(&decon->bts.delayed_update, 2);
-		return;
+	} else {
+		decon_mode_update_bts(decon, mode);
+		atomic_set(&decon->bts.delayed_update, 0);
 	}
+	DPU_ATRACE_END(__func__);
+}
 
-	decon_mode_update_bts(decon, mode);
-	atomic_set(&decon->bts.delayed_update, 0);
+void decon_mode_bts_pre_update(struct decon_device *decon,
+				const struct drm_crtc_state *crtc_state)
+{
+	const struct exynos_drm_crtc_state *exynos_crtc_state = to_exynos_crtc_state(crtc_state);
+
+	if (exynos_crtc_state->seamless_mode_changed)
+		decon_seamless_mode_bts_update(decon, &crtc_state->adjusted_mode);
+	else if (!atomic_add_unless(&decon->bts.delayed_update, -1, 0))
+		decon_mode_update_bts(decon, &crtc_state->mode);
 
 	decon->bts.ops->calc_bw(decon);
 	decon->bts.ops->update_bw(decon, false);
 }
-#else
-static inline void
-decon_seamless_mode_bts_update(struct decon_device *decon,
-			       const struct drm_display_mode *mode) { }
 #endif
 
 static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
@@ -855,8 +863,6 @@ static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 
 	decon_debug(decon, "seamless mode set to %s\n", mode->name);
 
-	decon_seamless_mode_bts_update(decon, adjusted_mode);
-
 	for_each_new_connector_in_state(old_state, conn, conn_state, i) {
 		const struct drm_encoder_helper_funcs *funcs;
 		struct drm_encoder *encoder;
@@ -871,13 +877,13 @@ static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 		encoder = conn_state->best_encoder;
 		funcs = encoder->helper_private;
 
+		bridge = drm_bridge_chain_get_first_bridge(encoder);
+		drm_bridge_chain_mode_set(bridge, mode, adjusted_mode);
+
 		if (funcs && funcs->atomic_mode_set)
 			funcs->atomic_mode_set(encoder, crtc_state, conn_state);
 		else if (funcs && funcs->mode_set)
 			funcs->mode_set(encoder, mode, adjusted_mode);
-
-		bridge = drm_bridge_chain_get_first_bridge(encoder);
-		drm_bridge_chain_mode_set(bridge, mode, adjusted_mode);
 	}
 }
 
@@ -1484,18 +1490,23 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 
 static int decon_remap_regs(struct decon_device *decon)
 {
+	struct resource res;
 	struct device *dev = decon->dev;
 	struct device_node *np = dev->of_node;
 	int i, ret = 0;
 
 	i = of_property_match_string(np, "reg-names", "main");
-	decon->regs.regs = of_iomap(np, i);
+	if (of_address_to_resource(np, i, &res)) {
+		decon_err(decon, "failed to get main resource\n");
+		goto err;
+	}
+	decon->regs.regs = ioremap(res.start, resource_size(&res));
 	if (IS_ERR(decon->regs.regs)) {
 		decon_err(decon, "failed decon ioremap\n");
 		ret = PTR_ERR(decon->regs.regs);
 		goto err;
 	}
-	decon_regs_desc_init(decon->regs.regs, "decon", REGS_DECON,
+	decon_regs_desc_init(decon->regs.regs, res.start, "decon", REGS_DECON,
 			decon->id);
 
 	np = of_find_compatible_node(NULL, NULL, "samsung,exynos9-disp_ss");
@@ -1505,13 +1516,17 @@ static int decon_remap_regs(struct decon_device *decon)
 		goto err_main;
 	}
 	i = of_property_match_string(np, "reg-names", "sys");
-	decon->regs.ss_regs = of_iomap(np, i);
+	if (of_address_to_resource(np, i, &res)) {
+		decon_err(decon, "failed to get sys resource\n");
+		goto err_main;
+	}
+	decon->regs.ss_regs = ioremap(res.start, resource_size(&res));
 	if (!decon->regs.ss_regs) {
 		decon_err(decon, "failed to map sysreg-disp address.");
 		ret = -ENOMEM;
 		goto err_main;
 	}
-	decon_regs_desc_init(decon->regs.ss_regs, "decon-ss", REGS_DECON_SYS,
+	decon_regs_desc_init(decon->regs.ss_regs, res.start, "decon-ss", REGS_DECON_SYS,
 			decon->id);
 
 	return ret;
