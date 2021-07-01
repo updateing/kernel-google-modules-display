@@ -100,7 +100,8 @@ void decon_dump(struct decon_device *decon)
 	for (i = 0; i < decon->dpp_cnt; ++i)
 		dpp_dump(decon->dpp[i]);
 
-	rcd_dump(decon->rcd);
+	if (decon->rcd)
+		rcd_dump(decon->rcd);
 
 	if (acquired)
 		console_unlock();
