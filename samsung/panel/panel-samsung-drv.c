@@ -24,6 +24,7 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_vblank.h>
 #include <video/mipi_display.h>
 
 #include <trace/dpu_trace.h>
@@ -172,10 +173,12 @@ EXPORT_SYMBOL(exynos_panel_get_current_mode_te2);
 
 static void exynos_panel_update_te2(struct exynos_panel *ctx)
 {
-	if (!ctx->initialized || !ctx->desc->exynos_panel_func->update_te2)
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+	if (!ctx->initialized || !funcs || !funcs->update_te2)
 		return;
 
-	ctx->desc->exynos_panel_func->update_te2(ctx);
+	funcs->update_te2(ctx);
 }
 
 static int exynos_panel_parse_gpios(struct exynos_panel *ctx)
@@ -320,7 +323,10 @@ static void exynos_panel_get_panel_rev(struct exynos_panel *ctx)
 		ctx->panel_rev = PANEL_REV_EVT1_1;
 		break;
 	case 0xC:
-		ctx->panel_rev = PANEL_REV_DVT;
+		ctx->panel_rev = PANEL_REV_DVT1;
+		break;
+	case 0xD:
+		ctx->panel_rev = PANEL_REV_DVT1_1;
 		break;
 	case 0x10:
 		ctx->panel_rev = PANEL_REV_PVT;
@@ -1097,6 +1103,9 @@ static int exynos_panel_connector_get_property(
 	} else if (property == p->dimming_on) {
 		*val = exynos_state->dimming_on;
 		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__, *val ? "true" : "false");
+	} else if (property == p->sync_rr_switch) {
+		*val = exynos_state->sync_rr_switch;
+		dev_dbg(ctx->dev, "%s: sync_rr_switch(%s)\n", __func__, *val ? "true" : "false");
 	} else
 		return -EINVAL;
 
@@ -1131,6 +1140,10 @@ static int exynos_panel_connector_set_property(
 		exynos_state->dimming_on = val;
 		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__,
 			 exynos_state->dimming_on ? "true" : "false");
+	} else if (property == p->sync_rr_switch) {
+		exynos_state->sync_rr_switch = val;
+		dev_dbg(ctx->dev, "%s: sync_rr_switch(%s)\n", __func__,
+			 exynos_state->sync_rr_switch ? "true" : "false");
 	} else
 		return -EINVAL;
 
@@ -1810,6 +1823,8 @@ static ssize_t hbm_mode_store(struct device *dev,
 	}
 
 	funcs->set_hbm_mode(ctx, hbm_en);
+
+	backlight_state_changed(bd);
 unlock:
 	mutex_unlock(&ctx->mode_lock);
 
@@ -1894,6 +1909,7 @@ static ssize_t local_hbm_mode_store(struct device *dev,
 		dev_err(ctx->dev, "panel is not enabled\n");
 		return -EPERM;
 	}
+
 	if (!funcs || !funcs->set_local_hbm_mode) {
 		dev_err(ctx->dev, "Local HBM is not supported\n");
 		return -ENOTSUPP;
@@ -1905,6 +1921,7 @@ static ssize_t local_hbm_mode_store(struct device *dev,
 		return ret;
 	}
 
+	dev_info(ctx->dev, "%s: set LHBM to %d\n", __func__, local_hbm_en);
 	funcs->set_local_hbm_mode(ctx, local_hbm_en);
 	sysfs_notify(&bd->dev.kobj, NULL, "local_hbm_mode");
 	if (local_hbm_en) {
@@ -2232,6 +2249,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->global_hbm_on, 0);
 	drm_object_attach_property(obj, p->local_hbm_on, 0);
 	drm_object_attach_property(obj, p->dimming_on, 0);
+	drm_object_attach_property(obj, p->sync_rr_switch, 0);
 	drm_object_attach_property(obj, p->is_partial, desc->is_partial);
 
 	if (desc->brt_capability) {
@@ -2340,11 +2358,9 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_atomic_state *state = old_bridge_state->base.state;
 	const struct drm_crtc_state *old_crtc_state = exynos_panel_get_old_crtc_state(ctx, state);
-	const struct exynos_panel_mode *pmode = ctx->current_mode;
 	bool need_update_backlight = false;
 
 	mutex_lock(&ctx->mode_lock);
-	pmode = ctx->current_mode;
 	/* avoid turning on panel again if already enabled (ex. while booting or self refresh) */
 	if (!ctx->enabled || exynos_panel_init(ctx)) {
 		drm_panel_enable(&ctx->panel);
@@ -2359,8 +2375,10 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		if (ctx->panel_idle_active && funcs && funcs->set_self_refresh)
 			funcs->set_self_refresh(ctx, false);
 	} else {
-		exynos_panel_set_backlight_state(ctx, pmode->exynos_mode.is_lp_mode ?
-						PANEL_STATE_LP : PANEL_STATE_ON);
+		const bool is_lp_mode = ctx->current_mode &&
+					ctx->current_mode->exynos_mode.is_lp_mode;
+
+		exynos_panel_set_backlight_state(ctx, is_lp_mode ? PANEL_STATE_LP : PANEL_STATE_ON);
 
 		exynos_panel_update_te2(ctx);
 	}
@@ -2423,12 +2441,85 @@ static void exynos_panel_bridge_post_disable(struct drm_bridge *bridge,
 	exynos_panel_set_backlight_state(ctx, PANEL_STATE_OFF);
 }
 
+/* Get the VSYNC start time within a TE period */
+static u64 exynos_panel_vsync_start_time_us(u32 te_period_us)
+{
+	/* Approximate the VSYNC start time with TE falling edge. Approximate
+	 * the TE falling edge with 55% TE width
+	 */
+	/* TODO: Change to ctx->current_mode->exynos_mode.vblank_usec when it's accurate */
+	return te_period_us * 55 / 100;
+}
+
+static void exynos_panel_check_modeset_timing(struct drm_crtc *crtc,
+					 const struct drm_display_mode *old_mode)
+{
+	u32 te_period_us;
+	int retry;
+	u64 left, right;
+
+	DPU_ATRACE_BEGIN(__func__);
+	pr_debug("%s: check mode_set timing enter.\n", __func__);
+	te_period_us = USEC_PER_SEC / drm_mode_vrefresh(old_mode);
+
+	/*
+	 * Safe time window to send RR (refresh rate) command illustrated below. RR switch
+	 * and scanout need to happen in the same VSYNC period because the frame content might
+	 * be adjusted specific to this RR.
+	 *
+	 * An estimation is [55% * TE_duration, TE_duration - 1ms] before driver has the
+	 * accurate TE pulse width (VSYNC rising is a bit ahead of TE falling edge).
+	 *
+	 *         -->|     |<-- safe time window to send RR
+	 *
+	 *        +----+     +----+     +-+
+	 *        |    |     |    |     | |
+	 * TE   --+    +-----+    +-----+ +---
+	 *               RR  SCANOUT
+	 *
+	 *            |          |       |
+	 *            |          |       |
+	 * VSYNC------+----------+-------+----
+	 *            RR1        RR2
+	 */
+	left = exynos_panel_vsync_start_time_us(te_period_us);
+	right = te_period_us - USEC_PER_MSEC;
+	/* check for next TE every 1ms */
+	retry = te_period_us / USEC_PER_MSEC + 1;
+
+	do {
+		ktime_t last_te = 0, now;
+		s64 since_last_te_us;
+
+		drm_crtc_vblank_count_and_time(crtc, &last_te);
+		now = ktime_get();
+		since_last_te_us = ktime_us_delta(now, last_te);
+		if (since_last_te_us <= right) {
+			if (since_last_te_us < left) {
+				u32 delay_us = left - since_last_te_us;
+
+				usleep_range(delay_us, delay_us + 100);
+			}
+			break;
+		}
+		/* retry in 1ms */
+		usleep_range(USEC_PER_MSEC, USEC_PER_MSEC + 100);
+	} while (--retry > 0);
+
+	pr_debug("%s: check mode_set timing exit.\n", __func__);
+	DPU_ATRACE_END(__func__);
+}
+
 static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				  const struct drm_display_mode *mode,
 				  const struct drm_display_mode *adjusted_mode)
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+	struct drm_connector_state *connector_state = ctx->exynos_connector.base.state;
+	struct drm_crtc *crtc = connector_state->crtc;
+	struct exynos_drm_connector_state *exynos_connector_state =
+				      to_exynos_connector_state(connector_state);
 	const struct exynos_panel_mode *pmode = exynos_panel_get_mode(ctx, mode);
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	const struct exynos_panel_mode *current_mode;
@@ -2481,6 +2572,8 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 			state_changed = true;
 			need_update_backlight = true;
 		} else if (funcs->mode_set) {
+			if (exynos_connector_state->sync_rr_switch && ctx->enabled)
+				exynos_panel_check_modeset_timing(crtc, &current_mode->mode);
 			funcs->mode_set(ctx, pmode);
 			state_changed = true;
 		}
@@ -2516,6 +2609,7 @@ static void local_hbm_timeout_work(struct work_struct *work)
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
+	dev_info(ctx->dev, "%s: turn off LHBM\n", __func__);
 	ctx->desc->exynos_panel_func->set_local_hbm_mode(ctx, false);
 	sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 }
@@ -2527,17 +2621,22 @@ static void hbm_work(struct work_struct *work)
 	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
 	struct drm_crtc_commit *commit = ctx->hbm.commit;
 	bool handle_lhbm_timeout_work = false;
-	u32 fps, delay_us, timeout_ms;
+	u32 delay_us, timeout_ms, te_period_us;
+	int fps;
 
 	dev_dbg(ctx->dev, "%s (update_flags: 0x%02x)\n", __func__, ctx->hbm.update_flags);
 
 	mutex_lock(&ctx->mode_lock);
-	/* TODO: Change to ctx->current_mode->exynos_mode.vblank_usec when it's ready */
 	fps = drm_mode_vrefresh(&ctx->current_mode->mode);
 	mutex_unlock(&ctx->mode_lock);
+	WARN_ON(fps < 0);
+	if (fps <= 0)
+		fps = 1;
+	te_period_us = USEC_PER_SEC / fps;
 
-	delay_us = USEC_PER_SEC / fps / 2;
-	timeout_ms = (MSEC_PER_SEC / fps) + 20;
+	/* delay begins at TE rising, ends at VSYNC rising */
+	delay_us = exynos_panel_vsync_start_time_us(te_period_us);
+	timeout_ms = te_period_us / USEC_PER_MSEC + 20;
 
 	/* considering the variation */
 	delay_us = delay_us * 105 / 100;
@@ -2552,7 +2651,8 @@ static void hbm_work(struct work_struct *work)
 
 		DPU_ATRACE_BEGIN("wait_for_flip");
 		ctx->hbm.commit = NULL;
-		ret = wait_for_completion_timeout(&commit->flip_done, timeout_ms);
+		ret = wait_for_completion_timeout(&commit->flip_done,
+						  msecs_to_jiffies(timeout_ms));
 		WARN_ON(ret < 0);
 		drm_crtc_commit_put(commit);
 		DPU_ATRACE_END("wait_for_flip");
@@ -2561,6 +2661,8 @@ static void hbm_work(struct work_struct *work)
 	usleep_range(delay_us, delay_us + 100);
 	if (ctx->hbm.update_flags & HBM_FLAG_LHBM_UPDATE) {
 		DPU_ATRACE_BEGIN("set_lhbm");
+		dev_info(ctx->dev, "%s: set LHBM to %d (%dHz)\n",
+			__func__, ctx->hbm.local_hbm.request_hbm_mode, fps);
 		exynos_panel_func->set_local_hbm_mode(ctx, ctx->hbm.local_hbm.request_hbm_mode);
 		sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 		handle_lhbm_timeout_work = true;
@@ -2571,12 +2673,16 @@ static void hbm_work(struct work_struct *work)
 		DPU_ATRACE_BEGIN("set_hbm");
 		mutex_lock(&ctx->mode_lock);
 		exynos_panel_func->set_hbm_mode(ctx, ctx->hbm.request_global_hbm_mode);
+		backlight_state_changed(ctx->bl);
 		mutex_unlock(&ctx->mode_lock);
 		DPU_ATRACE_END("set_hbm");
 	}
 
-	if (ctx->hbm.update_flags & HBM_FLAG_BL_UPDATE)
+	if (ctx->hbm.update_flags & HBM_FLAG_BL_UPDATE) {
+		DPU_ATRACE_BEGIN("set_bl");
 		backlight_update_status(ctx->bl);
+		DPU_ATRACE_END("set_bl");
+	}
 
 	ctx->hbm.update_flags = 0;
 	mutex_unlock(&ctx->hbm.hbm_work_lock);

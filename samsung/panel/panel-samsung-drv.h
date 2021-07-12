@@ -47,8 +47,9 @@
 #define PANEL_REV_PROTO1_1	BIT(1)
 #define PANEL_REV_EVT1		BIT(2)
 #define PANEL_REV_EVT1_1	BIT(3)
-#define PANEL_REV_DVT		BIT(4)
-#define PANEL_REV_PVT		BIT(5)
+#define PANEL_REV_DVT1		BIT(4)
+#define PANEL_REV_DVT1_1	BIT(5)
+#define PANEL_REV_PVT		BIT(6)
 #define PANEL_REV_ALL		(~0)
 #define PANEL_REV_GE(rev)	(~((rev) - 1))
 #define PANEL_REV_LT(rev)	((rev) - 1)
@@ -413,8 +414,6 @@ struct exynos_panel {
 		struct local_hbm {
 			bool gamma_para_ready;
 			u8 gamma_cmd[LOCAL_HBM_GAMMA_CMD_SIZE_MAX];
-			/* used for LHBM OFF to restore initial fps before LHBM ON */
-			int vrefresh;
 			/* request local hbm mode from atomic_commit */
 			bool request_hbm_mode;
 			/* indicate if local hbm enabled or not */
