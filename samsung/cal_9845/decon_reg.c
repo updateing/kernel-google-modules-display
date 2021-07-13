@@ -1857,9 +1857,13 @@ void decon_reg_update_req_window(u32 id, u32 win_idx)
 	decon_write_mask(id, SHD_REG_UP_REQ, ~0, mask);
 }
 
-void decon_reg_update_req_dqe(u32 id)
+void decon_reg_update_req_cgc(u32 id)
 {
 	decon_reg_update_req_cgc_internal(id);
+}
+
+void decon_reg_update_req_dqe(u32 id)
+{
 	decon_write_mask(id, SHD_REG_UP_REQ, ~0, SHD_REG_UP_REQ_DQE);
 }
 

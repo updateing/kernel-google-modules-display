@@ -108,6 +108,8 @@ enum dpp_regs_id {
 	REGS_DPP8_ID,
 	REGS_DPP9_ID,
 	REGS_DPP12_ID,
+	REGS_CGC0_ID,
+	REGS_CGC1_ID,
 	REGS_DPP_ID_MAX
 };
 
@@ -235,6 +237,8 @@ void __dpp_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
 void __rcd_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
 		unsigned long attr);
 
+void __cgc_dump(u32 id, void __iomem *dma_regs);
+
 /* DPP hw limitation check */
 int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr);
 
@@ -242,6 +246,9 @@ int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr);
 u32 dpp_reg_get_irq_and_clear(u32 id);
 u32 idma_reg_get_irq_and_clear(u32 id);
 u32 odma_reg_get_irq_and_clear(u32 id);
+u32 cgc_reg_get_irq_and_clear(u32 id);
+void cgc_reg_set_config(u32 id, bool en, dma_addr_t addr);
+void cgc_reg_set_cgc_start(u32 id);
 
 void dma_reg_get_shd_addr(u32 id, u32 shd_addr[], const unsigned long attr);
 

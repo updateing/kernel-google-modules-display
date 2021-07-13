@@ -147,11 +147,25 @@
  */
 
 #define CGC_ENABLE				(0x0000)
+#define CGC_START_SET_0				(1 << 0)
+#define CGC_START_SET_0_MASK			(1 << 0)
 #define CGC_IRQ					(0x0004)
+#define CGC_CONFIG_ERR_IRQ			(1 << 21)
+#define CGC_READ_SLAVE_ERROR			(1 << 19)
+#define CGC_STATUS_DEADLOCK_IRQ			(1 << 17)
+#define CGC_STATUS_FRAMEDONE_IRQ		(1 << 16)
+#define CGC_ALL_IRQ_MASK			(0x2B << 1)
+#define CGC_IRQ_ENABLE_MASK			(1 << 0)
+
 #define CGC_IN_CTRL				(0x0008)
 #define CGC_BASE_ADDR_SET_0			(0x0040)
 #define CGC_BASE_ADDR_SET_1			(0x0044)
+
 #define CGC_DEADLOCK_CTRL			(0x0100)
+#define CGC_DEADLOCK_NUM(_v)			((_v) << 1)
+#define CGC_DEADLOCK_NUM_MASK			(0x7FFFFFFF << 1)
+#define CGC_DEADLOCK_NUM_EN			(1 << 0)
+
 #define CGC_BUS_CTRL				(0x0110)
 #define CGC_LLC_CTRL				(0x0114)
 #define CGC_PERF_CTRL				(0x0120)

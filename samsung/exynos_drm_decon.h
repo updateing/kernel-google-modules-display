@@ -250,6 +250,8 @@ enum dpu_event_type {
 	DPU_EVT_DIMMING_START,
 	DPU_EVT_DIMMING_END,
 
+	DPU_EVT_CGC_FRAMEDONE,
+
 	DPU_EVT_MAX, /* End of EVENT */
 };
 
@@ -431,6 +433,7 @@ struct decon_device {
 	struct kthread_work		early_wakeup_work;
 	struct kthread_work		buf_dump_work;
 	struct exynos_recovery		recovery;
+	struct exynos_dma		*cgc_dma;
 
 	u32				irq_fs;	/* frame start irq number*/
 	u32				irq_fd;	/* frame done irq number*/

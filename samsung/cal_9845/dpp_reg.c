@@ -960,6 +960,16 @@ void dpp_reg_configure_params(u32 id, struct dpp_params_info *p,
 #endif
 }
 
+void cgc_reg_set_config(u32 id, bool en, dma_addr_t addr)
+{
+	cgc_reg_set_config_internal(id, en, addr);
+}
+
+void cgc_reg_set_cgc_start(u32 id)
+{
+	cgc_reg_set_cgc_start_internal(id);
+}
+
 u32 dpp_reg_get_irq_and_clear(u32 id)
 {
 	u32 val;
@@ -993,6 +1003,15 @@ u32 odma_reg_get_irq_and_clear(u32 id)
 	val = dma_read(id, WDMA_IRQ);
 	odma_reg_print_irqs_msg(id, val);
 	odma_reg_clear_irq(id, val);
+
+	return val;
+}
+
+u32 cgc_reg_get_irq_and_clear(u32 id)
+{
+	u32 val;
+
+	val = cgc_reg_get_irq_and_clear_internal(id);
 
 	return val;
 }
@@ -1094,6 +1113,16 @@ static void rcd_dma_dump_regs(u32 id, void __iomem *dma_regs)
 	dpu_print_hex_dump(dma_regs, dma_regs + 0x0300 + DMA_SHD_OFFSET, 0x24);
 }
 
+static void cgc_dma_dump_regs(u32 id, void __iomem *dma_regs)
+{
+	cal_log_info(id, "\n=== DPU_DMA(CGC%d) SFR DUMP ===\n", id);
+	dpu_print_hex_dump(dma_regs, dma_regs + 0x0000, 0x144);
+	dpu_print_hex_dump(dma_regs, dma_regs + 0x0300, 0x24);
+
+	cal_log_info(id, "=== DPU_DMA%d SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(dma_regs, dma_regs + 0x0000 + DMA_SHD_OFFSET, 0x144);
+	dpu_print_hex_dump(dma_regs, dma_regs + 0x0300 + DMA_SHD_OFFSET, 0x24);
+}
 
 static void dpp_dump_regs(u32 id, void __iomem *regs, unsigned long attr)
 {
@@ -1136,6 +1165,11 @@ void __rcd_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
 	dma_reg_dump_com_debug_regs(id);
 
 	rcd_dma_dump_regs(id, dma_regs);
+}
+
+void __cgc_dump(u32 id, void __iomem *dma_regs)
+{
+	cgc_dma_dump_regs(id, dma_regs);
 }
 
 int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr)

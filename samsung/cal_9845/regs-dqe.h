@@ -481,7 +481,8 @@
 
 #define DQE_CGC_CON			(0x1800)
 #define CGC_LUT_READ_SHADOW		(1 << 2)
-#define CGC_EN				(1 << 0)
+#define CGC_EN(_v)			((_v) << 0)
+#define CGC_EN_MASK			(1 << 0)
 
 /*
  * DEGAMMALUT (0~2) : 0x1804 ~ 0x180C

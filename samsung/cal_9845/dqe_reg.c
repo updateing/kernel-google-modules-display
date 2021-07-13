@@ -118,7 +118,7 @@ void dqe_reg_set_cgc_lut(u32 dqe_id, const struct cgc_lut *lut)
 	cal_log_debug(0, "%s +\n", __func__);
 
 	if (!lut) {
-		cgc_write_mask(dqe_id, DQE_CGC_CON, 0, CGC_EN);
+		cgc_write_mask(dqe_id, DQE_CGC_CON, 0, CGC_EN_MASK);
 		return;
 	}
 	for (i = 0; i < DRM_SAMSUNG_CGC_LUT_REG_CNT; ++i) {
@@ -127,7 +127,7 @@ void dqe_reg_set_cgc_lut(u32 dqe_id, const struct cgc_lut *lut)
 		dqe_write_relaxed(dqe_id, DQE_CGC_LUT_B(i), lut->b_values[i]);
 	}
 
-	cgc_write_mask(dqe_id, DQE_CGC_CON, ~0, CGC_EN);
+	cgc_write_mask(dqe_id, DQE_CGC_CON, ~0, CGC_EN_MASK);
 
 	cal_log_debug(0, "%s -\n", __func__);
 }
@@ -332,7 +332,7 @@ void dqe_reg_print_cgc_lut(u32 dqe_id, u32 count, struct drm_printer *p)
 {
 	u32 val;
 
-	val = cgc_read_mask(dqe_id, DQE_CGC_CON, CGC_EN);
+	val = cgc_read_mask(dqe_id, DQE_CGC_CON, CGC_EN_MASK);
 	cal_drm_printf(p, 0, "DQE: cgc %s\n", val ? "on" : "off");
 
 	if (!val)
@@ -634,4 +634,19 @@ void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected)
 {
 	cal_set_write_protected(&regs_dqe[dqe_id].desc, protected);
+}
+
+void dqe_reg_set_cgc_en(u32 dqe_id, bool en)
+{
+	cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_EN(en), CGC_EN_MASK);
+}
+
+void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id)
+{
+	dqe_reg_set_cgc_coef_dma_req_internal(dqe_id);
+}
+
+void dqe_reg_wait_cgc_dma_done(u32 dqe_id, u32 timeout_us)
+{
+	dqe_reg_wait_cgc_dma_done_internal(dqe_id, timeout_us);
 }

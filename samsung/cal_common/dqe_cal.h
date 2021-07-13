@@ -202,4 +202,7 @@ void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height);
 void dqe_dump(u32 dqe_id);
 void dqe_reg_set_rcd_en(u32 dqe_id, bool en);
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected);
+void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id);
+void dqe_reg_set_cgc_en(u32 dqe_id, bool en);
+void dqe_reg_wait_cgc_dma_done(u32 dqe_id, u32 timeout_us);
 #endif /* __SAMSUNG_DQE_CAL_H__ */

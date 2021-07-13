@@ -104,6 +104,9 @@ void decon_dump(const struct decon_device *decon)
 	if (decon->rcd)
 		rcd_dump(decon->rcd);
 
+	if (decon->cgc_dma)
+		cgc_dump(decon->cgc_dma);
+
 	if (acquired)
 		console_unlock();
 }
@@ -1761,6 +1764,8 @@ static int decon_probe(struct platform_device *pdev)
 	exynos_recovery_register(decon);
 
 	decon->dqe = exynos_dqe_register(decon);
+
+	decon->cgc_dma = exynos_cgc_dma_register(decon);
 
 	ret = component_add(dev, &decon_component_ops);
 	if (ret)

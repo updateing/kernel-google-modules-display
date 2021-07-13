@@ -112,6 +112,7 @@
 
 // new field in DQE_CGC_CON register for 9855
 #define CGC_COEF_DMA_REQ		(1 << 4)
+#define CGC_COEF_DMA_REQ_MASK		(1 << 4)
 
 /*
  * DEGAMMALUT (0~2) : 0x1804 ~ 0x180C

@@ -400,6 +400,42 @@ static void exynos_rcd_update(struct exynos_dqe *dqe, struct exynos_dqe_state *s
 	}
 }
 
+#define CGC_DMA_REQ_TIMEOUT_US 300
+static void exynos_cgc_dma_update(struct exynos_dqe *dqe,
+					struct exynos_dqe_state *state)
+{
+	struct decon_device *decon = dqe->decon;
+	u32 id = decon->id;
+	u32 cgc_dma_id;
+	struct cgc_debug_override *cgc = &dqe->cgc;
+	struct exynos_debug_info *info = &cgc->info;
+	struct drm_printer p = drm_info_printer(decon->dev);
+	struct exynos_drm_gem *exynos_cgc_gem;
+
+	if (!decon->cgc_dma)
+		return;
+
+	cgc_dma_id = decon->cgc_dma->id;
+	if (dqe->state.cgc_gem != state->cgc_gem) {
+		if (!state->cgc_gem) {
+			dqe_reg_set_cgc_en(id, 0);
+			cgc_reg_set_config(cgc_dma_id, 0, 0);
+		} else {
+			dqe_reg_set_cgc_en(id, 1);
+			exynos_cgc_gem = to_exynos_gem(state->cgc_gem);
+			cgc_reg_set_config(cgc_dma_id, 1, exynos_cgc_gem->dma_addr);
+			dqe_reg_set_cgc_coef_dma_req(id);
+			cgc_reg_set_cgc_start(cgc_dma_id);
+			dqe_reg_wait_cgc_dma_done(id, CGC_DMA_REQ_TIMEOUT_US);
+		}
+		decon_reg_update_req_cgc(id);
+		dqe->state.cgc_gem = state->cgc_gem;
+	}
+
+	if (info->verbose)
+		dqe_reg_print_cgc_lut(id, cgc->verbose_cnt, &p);
+}
+
 static void __exynos_dqe_update(struct exynos_dqe *dqe,
 		struct exynos_dqe_state *state, u32 width, u32 height)
 {
@@ -429,6 +465,7 @@ static void __exynos_dqe_update(struct exynos_dqe *dqe,
 	exynos_dither_update(dqe, state);
 	exynos_histogram_update(dqe, state);
 	exynos_rcd_update(dqe, state);
+	exynos_cgc_dma_update(dqe, state);
 
 	decon_reg_update_req_dqe(id);
 
@@ -461,6 +498,7 @@ void exynos_dqe_reset(struct exynos_dqe *dqe)
 	dqe->state.roi = NULL;
 	dqe->state.weights = NULL;
 	dqe->state.rcd_enabled = false;
+	dqe->state.cgc_gem = NULL;
 }
 
 void exynos_dqe_save_lpd_data(struct exynos_dqe *dqe)

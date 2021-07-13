@@ -199,6 +199,22 @@ struct drm_gem_object *exynos_drm_gem_prime_import(struct drm_device *dev,
 	return drm_gem_prime_import_dev(dev, dma_buf, priv->iommu_client);
 }
 
+struct drm_gem_object *exynos_drm_gem_fd_to_obj(struct drm_device *dev, int val)
+{
+	struct dma_buf *dma_buf;
+	struct drm_gem_object *obj;
+
+	dma_buf = dma_buf_get(val);
+	if (IS_ERR(dma_buf)) {
+		pr_err("failed to get dma buf\n");
+		return NULL;
+	}
+	obj = exynos_drm_gem_prime_import(dev, dma_buf);
+	dma_buf_put(dma_buf);
+
+	return obj;
+}
+
 static int exynos_drm_gem_mmap_object(struct exynos_drm_gem *exynos_gem_obj,
 			       struct vm_area_struct *vma)
 {

@@ -233,6 +233,11 @@ void rcd_dump(struct dpp_device *dpp)
 			dpp->attr);
 }
 
+void cgc_dump(struct exynos_dma *dma)
+{
+	__cgc_dump(dma->id, dma->regs);
+}
+
 static dma_addr_t dpp_alloc_map_buf_test(void)
 {
 	struct dma_heap *dma_heap;
@@ -1136,6 +1141,23 @@ irq_end:
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t cgc_irq_handler(int irq, void *priv)
+{
+	struct decon_device *decon = priv;
+	struct exynos_dma *dma = decon->cgc_dma;
+	u32 irqs;
+
+	spin_lock(&dma->dma_slock);
+
+	irqs = cgc_reg_get_irq_and_clear(dma->id);
+
+	if (irqs & IDMA_STATUS_FRAMEDONE_IRQ)
+		DPU_EVENT_LOG(DPU_EVT_CGC_FRAMEDONE, decon->id, NULL);
+
+	spin_unlock(&dma->dma_slock);
+	return IRQ_HANDLED;
+}
+
 static int dpp_init_resources(struct dpp_device *dpp)
 {
 	struct resource res;
@@ -1211,6 +1233,60 @@ static int dpp_init_resources(struct dpp_device *dpp)
 	ret = __dpp_init_resources(dpp);
 
 	return ret;
+}
+
+struct exynos_dma *exynos_cgc_dma_register(struct decon_device *decon)
+{
+	struct device *dev = decon->dev;
+	struct device_node *np = dev->of_node;
+	struct exynos_dma *dma;
+	struct platform_device *pdev;
+	int i, ret = 0;
+	struct resource res;
+
+	pdev = container_of(dev, struct platform_device, dev);
+
+	i = of_property_match_string(np, "reg-names", "cgc-dma");
+	if (i < 0) {
+		pr_debug("cgc-dma is not supported\n");
+		return NULL;
+	}
+
+	if (of_address_to_resource(np, i, &res)) {
+		pr_err("failed to get cgc dma resource\n");
+		return NULL;
+	}
+
+	dma = devm_kzalloc(dev, sizeof(struct exynos_dma), GFP_KERNEL);
+	if (!dma)
+		return NULL;
+
+	dma->regs = of_iomap(np, i);
+	if (IS_ERR(dma->regs)) {
+		pr_err("failed to remap cgc-dma registers\n");
+		return NULL;
+	}
+
+	ret = of_property_read_u32(np, "cgc-dma,id", &dma->id);
+	if (ret < 0) {
+		pr_err("failed to get cgc-dma id\n");
+		return NULL;
+	}
+
+	dpp_regs_desc_init(dma->regs, res.start, "cgc-dma", REGS_DMA, dma->id);
+
+	spin_lock_init(&dma->dma_slock);
+	dma->dma_irq = of_irq_get_byname(np, "cgc-dma");
+	ret = devm_request_irq(dev, dma->dma_irq, cgc_irq_handler, 0,
+			pdev->name, decon);
+	if (ret) {
+		pr_err("failed to install CGC DMA irq\n");
+		return NULL;
+	}
+
+	pr_debug("cgc-dma is supported\n");
+
+	return dma;
 }
 
 static int dpp_probe(struct platform_device *pdev)

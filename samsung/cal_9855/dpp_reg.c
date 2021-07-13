@@ -130,6 +130,51 @@ static void rcd_reg_set_deadlock(u32 id, bool en, u32 dl_num)
 				RCD_DEADLOCK_NUM_MASK);
 }
 
+static void cgc_reg_print_irqs_msg(u32 id, u32 irqs)
+{
+	if (irqs & CGC_READ_SLAVE_ERROR)
+		cal_log_err(id, "CGC DMA read error irq occur\n");
+
+	if (irqs & CGC_STATUS_DEADLOCK_IRQ)
+		cal_log_err(id, "CGC DMA deadlock irq occur\n");
+
+	if (irqs & CGC_CONFIG_ERR_IRQ)
+		cal_log_err(id, "CGC DMA cfg err irq occur\n");
+}
+
+static void cgc_reg_clear_irq(u32 id, u32 irq)
+{
+	dma_write_mask(id, CGC_IRQ, ~0, irq);
+}
+
+static void cgc_reg_set_irq_en(u32 id, bool en)
+{
+	u32 val = en ? ~0 : 0;
+
+	dma_write_mask(id, CGC_IRQ, val, CGC_IRQ_ENABLE_MASK);
+}
+
+static void cgc_reg_set_irq_mask_all(u32 id, bool en)
+{
+	u32 val = en ? ~0 : 0;
+
+	dma_write_mask(id, CGC_IRQ, val, CGC_ALL_IRQ_MASK);
+}
+
+static void cgc_reg_set_base_addr(u32 id, dma_addr_t addr)
+{
+	dma_write(id, CGC_BASE_ADDR_SET_0, addr);
+}
+
+static void cgc_reg_set_deadlock(u32 id, bool en, u32 dl_num)
+{
+	u32 val = en ? ~0 : 0;
+
+	dma_write_mask(id, CGC_DEADLOCK_CTRL, val, CGC_DEADLOCK_NUM_EN);
+	dma_write_mask(id, CGC_DEADLOCK_CTRL, CGC_DEADLOCK_NUM(dl_num),
+				CGC_DEADLOCK_NUM_MASK);
+}
+
 /******************** INTERNAL RCD CAL APIs ********************/
 void rcd_reg_init(u32 id)
 {
@@ -169,4 +214,33 @@ void rcd_reg_configure_params(u32 id, struct dpp_params_info *p,
 	rcd_reg_set_deadlock(id, 1, p->rcv_num * 51);
 
 	dma_write_mask(id, RCD_ENABLE, 1, RCD_SFR_UPDATE_FORCE);
+}
+
+u32 cgc_reg_get_irq_and_clear_internal(u32 id)
+{
+	u32 val;
+
+	val = dma_read(id, CGC_IRQ);
+	cgc_reg_print_irqs_msg(id, val);
+	cgc_reg_clear_irq(id, val);
+
+	return val;
+}
+
+void cgc_reg_set_cgc_start_internal(u32 id)
+{
+	dma_write_mask(id, CGC_ENABLE, CGC_START_SET_0, CGC_START_SET_0_MASK);
+}
+
+void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr)
+{
+	if (!en) {
+		cgc_reg_set_irq_en(id, 0);
+		cgc_reg_set_irq_mask_all(id, 1);
+		return;
+	}
+	cgc_reg_set_irq_en(id, 1);
+	cgc_reg_set_irq_mask_all(id, 0);
+	cgc_reg_set_base_addr(id, addr);
+	cgc_reg_set_deadlock(id, 1, 0x7FFFFFFF);
 }

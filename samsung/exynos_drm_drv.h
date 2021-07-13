@@ -238,6 +238,7 @@ struct exynos_drm_crtc_state {
 	struct drm_property_blob *gamma_matrix;
 	struct drm_property_blob *histogram_roi;
 	struct drm_property_blob *histogram_weights;
+	struct drm_gem_object *cgc_gem;
 	enum exynos_drm_writeback_type wb_type;
 	u8 seamless_mode_changed : 1;
 	/**
@@ -307,6 +308,7 @@ struct exynos_drm_crtc {
 		struct drm_property *histogram_weights;
 		struct drm_property *histogram_threshold;
 		struct drm_property *partial;
+		struct drm_property *cgc_lut_fd;
 	} props;
 	u8 active_state;
 	u32 rcd_plane_mask;

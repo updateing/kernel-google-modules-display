@@ -149,6 +149,8 @@ static void exynos_crtc_update_lut(struct drm_crtc *crtc,
 	} else {
 		dqe_state->regamma_lut = NULL;
 	}
+
+	dqe_state->cgc_gem = exynos_state->cgc_gem;
 }
 
 static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
@@ -371,6 +373,8 @@ static void exynos_drm_crtc_destroy_state(struct drm_crtc *crtc,
 	drm_property_blob_put(exynos_crtc_state->histogram_roi);
 	drm_property_blob_put(exynos_crtc_state->histogram_weights);
 	drm_property_blob_put(exynos_crtc_state->partial);
+	if (exynos_crtc_state->cgc_gem)
+		drm_gem_object_put(exynos_crtc_state->cgc_gem);
 	__drm_atomic_helper_crtc_destroy_state(state);
 	kfree(exynos_crtc_state);
 }
@@ -429,6 +433,9 @@ exynos_drm_crtc_duplicate_state(struct drm_crtc *crtc)
 
 	if (copy->partial)
 		drm_property_blob_get(copy->partial);
+
+	if (copy->cgc_gem)
+		drm_gem_object_get(copy->cgc_gem);
 
 	__drm_atomic_helper_crtc_duplicate_state(crtc, &copy->base);
 
@@ -541,12 +548,17 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 				&exynos_crtc_state->partial, val,
 				sizeof(struct drm_clip_rect), -1, &replaced);
 		return ret;
+	} else if (property == exynos_crtc->props.cgc_lut_fd) {
+		if (exynos_crtc_state->cgc_gem)
+			drm_gem_object_put(exynos_crtc_state->cgc_gem);
+		exynos_crtc_state->cgc_gem = (U642I64(val) >= 0) ?
+			exynos_drm_gem_fd_to_obj(crtc->dev, U642I64(val)) : NULL;
+		replaced = true;
 	} else {
 		return -EINVAL;
 	}
 
 	state->color_mgmt_changed |= replaced;
-
 	return ret;
 }
 
@@ -598,6 +610,9 @@ static int exynos_drm_crtc_get_property(struct drm_crtc *crtc,
 	else if (property == exynos_crtc->props.partial)
 		*val = (exynos_crtc_state->partial) ?
 			exynos_crtc_state->partial->base.id : 0;
+	else if (property == exynos_crtc->props.cgc_lut_fd)
+		*val =  (exynos_crtc_state->cgc_gem) ?
+			dma_buf_fd(exynos_crtc_state->cgc_gem->dma_buf, 0) : 0;
 	else
 		return -EINVAL;
 
@@ -754,6 +769,21 @@ static int exynos_drm_crtc_create_range(struct drm_crtc *crtc, const char *name,
 	return 0;
 }
 
+static int exynos_drm_crtc_create_signed_range(struct drm_crtc *crtc, const char *name,
+		struct drm_property **prop, uint64_t min, uint64_t max)
+{
+	struct drm_property *p;
+
+	p = drm_property_create_signed_range(crtc->dev, 0, name, min, max);
+	if (!p)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, p, 0);
+	*prop = p;
+
+	return 0;
+}
+
 static int exynos_drm_crtc_create_blob(struct drm_crtc *crtc, const char *name,
 		struct drm_property **prop)
 {
@@ -858,10 +888,6 @@ struct exynos_drm_crtc *exynos_drm_crtc_create(struct drm_device *drm_dev,
 		goto err_crtc;
 
 	if (decon->dqe) {
-		ret = exynos_drm_crtc_create_blob(crtc, "cgc_lut",
-				&exynos_crtc->props.cgc_lut);
-		if (ret)
-			goto err_crtc;
 		ret = exynos_drm_crtc_create_blob(crtc, "disp_dither",
 				&exynos_crtc->props.disp_dither);
 		if (ret)
@@ -891,6 +917,17 @@ struct exynos_drm_crtc *exynos_drm_crtc_create(struct drm_device *drm_dev,
 			goto err_crtc;
 
 		ret = exynos_drm_crtc_create_histogram_properties(exynos_crtc);
+		if (ret)
+			goto err_crtc;
+
+		if (decon->cgc_dma) {
+			if (exynos_drm_crtc_create_signed_range(crtc, "cgc_lut_fd",
+						&exynos_crtc->props.cgc_lut_fd, INT_MIN, INT_MAX))
+				goto err_crtc;
+		} else {
+			ret = exynos_drm_crtc_create_blob(crtc, "cgc_lut",
+					&exynos_crtc->props.cgc_lut);
+		}
 		if (ret)
 			goto err_crtc;
 	}

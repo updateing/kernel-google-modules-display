@@ -41,6 +41,7 @@ struct exynos_dqe_state {
 	struct exynos_drm_pending_histogram_event *event;
 	u32 histogram_threshold;
 	bool rcd_enabled;
+	struct drm_gem_object *cgc_gem;
 };
 
 struct dither_debug_override {

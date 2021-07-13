@@ -488,7 +488,7 @@ static const char *get_event_name(enum dpu_event_type type)
 		"PARTIAL_PESTORE",		"DSIM_CRC",
 		"DSIM_ECC",			"VBLANK_ENABLE",
 		"VBLANK_DISABLE",		"DIMMING_START",
-		"DIMMING_END",
+		"DIMMING_END",			"CGC_FRAMEDONE",
 	};
 
 	if (type >= DPU_EVT_MAX)
