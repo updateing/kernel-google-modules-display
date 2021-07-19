@@ -50,6 +50,7 @@
 #define PANEL_REV_DVT1		BIT(4)
 #define PANEL_REV_DVT1_1	BIT(5)
 #define PANEL_REV_PVT		BIT(6)
+#define PANEL_REV_LATEST	BIT(31)
 #define PANEL_REV_ALL		(~0)
 #define PANEL_REV_GE(rev)	(~((rev) - 1))
 #define PANEL_REV_LT(rev)	((rev) - 1)
@@ -154,6 +155,13 @@ struct exynos_panel_funcs {
 	 */
 	void (*set_local_hbm_mode)(struct exynos_panel *exynos_panel,
 				 bool local_hbm_en);
+	/**
+	 * @set_power:
+	 *
+	 * This callback is used to implement panel specific power on/off sequence.
+	 */
+	int (*set_power)(struct exynos_panel *exynos_panel, bool enable);
+
 	/**
 	 * @is_mode_seamless:
 	 *
@@ -389,6 +397,8 @@ struct exynos_panel {
 	bool panel_idle_enabled;
 	/* indicates if panel is currently in idle mode */
 	bool panel_idle_active;
+	/* indicates self refresh is active */
+	bool self_refresh_active;
 
 	bool hbm_mode;
 	bool dimming_on;

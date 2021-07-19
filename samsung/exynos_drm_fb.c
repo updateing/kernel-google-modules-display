@@ -35,6 +35,7 @@
 #include "exynos_drm_format.h"
 #include "exynos_drm_gem.h"
 #include "exynos_drm_hibernation.h"
+#include "exynos_drm_recovery.h"
 
 extern const struct dpp_restriction dpp_drv_data;
 
@@ -463,7 +464,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 	struct drm_connector_state *old_conn_state;
 	struct drm_connector_state *new_conn_state;
 	unsigned int hibernation_crtc_mask = 0;
-	unsigned int disabling_crtc_mask = 0;
 
 	DPU_ATRACE_BEGIN("exynos_atomic_commit_tail");
 
@@ -496,12 +496,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 			hibernation_block(decon->hibernation);
 
 			hibernation_crtc_mask |= drm_crtc_mask(crtc);
-		}
-
-		if (drm_atomic_crtc_effectively_active(old_crtc_state) && !new_crtc_state->active) {
-			/* keep runtime vote while disabling is taking place */
-			pm_runtime_get_sync(decon->dev);
-			disabling_crtc_mask |= drm_crtc_mask(crtc);
 		}
 
 		if (old_crtc_state->active && drm_atomic_crtc_needs_modeset(new_crtc_state)) {
@@ -567,7 +561,7 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 	for_each_oldnew_crtc_in_state(old_state, crtc, old_crtc_state, new_crtc_state, i) {
 		struct decon_mode *mode;
 		struct drm_crtc_commit *commit = new_crtc_state->commit;
-		int fps;
+		int fps, recovering;
 
 		decon = crtc_to_decon(crtc);
 
@@ -584,11 +578,16 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 		DPU_ATRACE_BEGIN("wait_for_crtc_flip");
 		if (!wait_for_completion_timeout(&commit->flip_done, fps_timeout(fps))) {
 			DPU_EVENT_LOG(DPU_EVT_FRAMESTART_TIMEOUT, decon->id, NULL);
-			pr_warn("decon%u framestart timeout (%d fps)\n",
-					decon->id, fps);
-			decon_dump_all(decon);
+			recovering = atomic_read(&decon->recovery.recovering);
+			pr_warn("decon%u framestart timeout (%d fps). recovering(%d)\n",
+					decon->id, fps, recovering);
+			if (!recovering)
+				decon_dump_all(decon);
 
 			decon_force_vblank_event(decon);
+
+			if (!recovering)
+				decon_trigger_recovery(decon);
 		}
 		DPU_ATRACE_END("wait_for_crtc_flip");
 
@@ -611,8 +610,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 		decon = crtc_to_decon(crtc);
 		if (hibernation_crtc_mask & drm_crtc_mask(crtc))
 			hibernation_unblock_enter(decon->hibernation);
-		if (disabling_crtc_mask & drm_crtc_mask(crtc))
-			pm_runtime_put_sync(decon->dev);
 	}
 
 	drm_atomic_helper_commit_hw_done(old_state);
