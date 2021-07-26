@@ -40,6 +40,12 @@
 #include "exynos_drm_format.h"
 #include "exynos_drm_writeback.h"
 
+static const struct drm_display_mode exynos_drm_writeback_modes[] = {
+	{ DRM_MODE("2400x1080", DRM_MODE_TYPE_DRIVER, 165984, 2400, 2432,
+		   2444, 2470, 0, 1080, 1092, 1096, 1120, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+};
+
 static inline int wb_check_type(const struct writeback_device *wb, bool *is_cwb)
 {
 	const struct decon_device *decon = wb_get_decon(wb);
@@ -68,6 +74,7 @@ void wb_dump(struct drm_printer *p, struct writeback_device *wb)
 static const uint32_t writeback_formats[] = {
 	/* TODO : add DRM_FORMAT_RGBA1010102 */
 	DRM_FORMAT_RGBA8888,
+	DRM_FORMAT_NV12,
 };
 
 static const struct of_device_id wb_of_match[] = {
@@ -79,12 +86,37 @@ static const struct of_device_id wb_of_match[] = {
 	{ /* sentinel */ },
 };
 
+static int exynos_drm_add_writeback_modes(struct drm_connector *connector)
+{
+	int i, count, num_modes = 0;
+	struct drm_display_mode *mode;
+	struct drm_device *dev = connector->dev;
+
+	count = ARRAY_SIZE(exynos_drm_writeback_modes);
+
+	for (i = 0; i < count; i++) {
+		const struct drm_display_mode *ptr = &exynos_drm_writeback_modes[i];
+
+		mode = drm_mode_duplicate(dev, ptr);
+		if (mode) {
+			drm_mode_probed_add(connector, mode);
+			num_modes++;
+		}
+	}
+
+	return num_modes;
+}
+
 static int writeback_get_modes(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
+	int num_modes = 0;
 
-	return drm_add_modes_noedid(connector, dev->mode_config.max_width,
+	num_modes = drm_add_modes_noedid(connector, dev->mode_config.max_width,
 				    dev->mode_config.max_height);
+	num_modes += exynos_drm_add_writeback_modes(connector);
+
+	return num_modes;
 }
 
 static void wb_convert_connector_state_to_config(struct dpp_params_info *config,
@@ -102,7 +134,13 @@ static void wb_convert_connector_state_to_config(struct dpp_params_info *config,
 	config->src.f_w = fb->width;
 	config->src.f_h = fb->height;
 
-	config->comp_type = COMP_TYPE_NONE;
+
+	if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), fb->modifier)) {
+		config->comp_type = COMP_TYPE_SBWC;
+		config->blk_size = SBWC_BLOCK_SIZE_GET(fb->modifier);
+	} else {
+		config->comp_type = COMP_TYPE_NONE;
+	}
 
 	config->format = fb->format->format;
 	config->standard = state->standard;
@@ -113,9 +151,32 @@ static void wb_convert_connector_state_to_config(struct dpp_params_info *config,
 	config->c_pl_stride = 0;
 
 	config->addr[0] = exynos_drm_fb_dma_addr(fb, 0);
-	config->addr[1] = exynos_drm_fb_dma_addr(fb, 1);
-	config->addr[2] = exynos_drm_fb_dma_addr(fb, 2);
-	config->addr[3] = exynos_drm_fb_dma_addr(fb, 3);
+
+	if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), fb->modifier)) {
+		const struct dpu_fmt *fmt_info = dpu_find_fmt_info(config->format);
+		bool is_10bpc = IS_10BPC(fmt_info);
+
+		config->addr[0] += Y_PL_SIZE_SBWC(config->src.f_w,
+				config->src.f_h, is_10bpc);
+		config->y_hd_y2_stride = HD_STRIDE_SIZE_SBWC(config->src.f_w);
+
+		config->addr[1] = exynos_drm_fb_dma_addr(fb, 0);
+		config->y_pl_c2_stride = PL_STRIDE_SIZE_SBWC(config->src.f_w,
+				is_10bpc);
+
+		config->addr[2] = exynos_drm_fb_dma_addr(fb, 1) +
+			UV_PL_SIZE_SBWC(config->src.f_w, config->src.f_h,
+					is_10bpc);
+		config->c_hd_stride = HD_STRIDE_SIZE_SBWC(config->src.f_w);
+
+		config->addr[3] = exynos_drm_fb_dma_addr(fb, 1);
+		config->c_pl_stride = PL_STRIDE_SIZE_SBWC(config->src.f_w,
+				is_10bpc);
+	} else {
+		config->addr[1] = exynos_drm_fb_dma_addr(fb, 1);
+		config->addr[2] = exynos_drm_fb_dma_addr(fb, 2);
+		config->addr[3] = exynos_drm_fb_dma_addr(fb, 3);
+	}
 
 	/* TODO: blocking mode will be implemented later */
 	config->is_block = false;
