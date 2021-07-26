@@ -1694,7 +1694,7 @@ int decon_reg_init(u32 id, struct decon_config *config)
 		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, /* decon2 : none */
 	};
 
-	decon_reg_set_clkgate_mode(id, 0);
+	decon_reg_set_clkgate_mode(0, 0);
 
 	if (config->out_type & DECON_OUT_DP)
 		decon_reg_set_qactive_pll_mode(id, 1);
