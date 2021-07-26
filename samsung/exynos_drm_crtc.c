@@ -181,7 +181,7 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	if (exynos_crtc->ops->atomic_check)
 		exynos_crtc->ops->atomic_check(exynos_crtc, crtc_state);
 
-	if ((dqe->force_disabled || !new_exynos_state->dqe.enabled) &&
+	if (dqe && (dqe->force_disabled || !new_exynos_state->dqe.enabled) &&
 			(decon->config.out_bpc == 8)) {
 		new_exynos_state->in_bpc = 8;
 	} else if (new_exynos_state->force_bpc == EXYNOS_BPC_MODE_UNSPECIFIED) {
@@ -225,14 +225,16 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	    !new_exynos_state->planes_updated)
 		new_exynos_state->skip_update = true;
 
-	new_exynos_state->dqe.rcd_enabled = false;
-	rcd_mask = crtc_state->plane_mask & exynos_crtc->rcd_plane_mask;
+	if (decon->rcd) {
+		new_exynos_state->dqe.rcd_enabled = false;
+		rcd_mask = crtc_state->plane_mask & exynos_crtc->rcd_plane_mask;
 
-	if (rcd_mask) {
-		drm_atomic_crtc_state_for_each_plane_state(plane, plane_state, crtc_state) {
-			if (rcd_mask & drm_plane_mask(plane)) {
-				new_exynos_state->dqe.rcd_enabled = plane_state->visible;
-				break;
+		if (rcd_mask) {
+			drm_atomic_crtc_state_for_each_plane_state(plane, plane_state, crtc_state) {
+				if (rcd_mask & drm_plane_mask(plane)) {
+					new_exynos_state->dqe.rcd_enabled = plane_state->visible;
+					break;
+				}
 			}
 		}
 	}
