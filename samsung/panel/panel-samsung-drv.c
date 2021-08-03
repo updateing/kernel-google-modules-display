@@ -355,7 +355,10 @@ int exynos_panel_init(struct exynos_panel *ctx)
 	if (ctx->initialized)
 		return 0;
 
-	ret = exynos_panel_read_id(ctx);
+	if (funcs && funcs->read_id)
+		ret = funcs->read_id(ctx);
+	else
+		ret = exynos_panel_read_id(ctx);
 	if (ret)
 		return ret;
 

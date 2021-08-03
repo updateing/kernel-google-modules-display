@@ -252,6 +252,13 @@ struct exynos_panel_funcs {
 	u32 (*get_panel_rev)(u32 id);
 
 	/**
+	 * @read_id:
+	 *
+	 * This callback is used to read panel id.
+	 */
+	int (*read_id)(struct exynos_panel *exynos_panel);
+
+	/**
 	 * @get_te2_edges:
 	 *
 	 * This callback is used to get the rising and falling edges of TE2 signal.
