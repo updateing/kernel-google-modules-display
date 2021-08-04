@@ -830,7 +830,6 @@ static int exynos_bl_find_range(struct exynos_panel *ctx,
 static int exynos_update_status(struct backlight_device *bl)
 {
 	struct exynos_panel *ctx = bl_get_data(bl);
-	const struct exynos_panel_funcs *exynos_panel_func;
 	int brightness = bl->props.brightness;
 	int min_brightness = ctx->desc->min_brightness ? : 1;
 	u32 bl_range = 0;
@@ -851,11 +850,18 @@ static int exynos_update_status(struct backlight_device *bl)
 		brightness);
 
 	mutex_lock(&ctx->mode_lock);
-	exynos_panel_func = ctx->desc->exynos_panel_func;
-	if (exynos_panel_func && exynos_panel_func->set_brightness)
-		exynos_panel_func->set_brightness(ctx, brightness);
-	else
+	if (ctx->panel.backlight) {
+		backlight_device_set_brightness(ctx->panel.backlight,
+			brightness);
+	} else if (ctx->desc->exynos_panel_func) {
+		const struct exynos_panel_funcs *funcs =
+			ctx->desc->exynos_panel_func;
+
+		if (funcs->set_brightness)
+			funcs->set_brightness(ctx, brightness);
+	} else {
 		exynos_dcs_set_brightness(ctx, brightness);
+	}
 
 	if (!ctx->hbm_mode &&
 	    exynos_bl_find_range(ctx, brightness, &bl_range) >= 0 &&
@@ -2999,6 +3005,53 @@ static const struct drm_bridge_funcs exynos_panel_bridge_funcs = {
 	.mode_set = exynos_panel_bridge_mode_set,
 };
 
+#ifdef CONFIG_OF
+static void devm_backlight_release(void *data)
+{
+	struct backlight_device *bd = data;
+
+	if (bd)
+		put_device(&bd->dev);
+}
+
+static int exynos_panel_of_backlight(struct exynos_panel *ctx)
+{
+	struct device *dev;
+	struct device_node *np;
+	struct backlight_device *bd;
+	int ret;
+
+	dev = ctx->panel.dev;
+	if (!dev)
+		return -EINVAL;
+
+	if (!dev->of_node)
+		return 0;
+
+	np = of_parse_phandle(dev->of_node, "backlight", 0);
+	if (!np)
+		return 0;
+
+	bd = of_find_backlight_by_node(np);
+	of_node_put(np);
+	if (IS_ERR_OR_NULL(bd))
+		return -EPROBE_DEFER;
+	ctx->panel.backlight = bd;
+	ret = devm_add_action(dev, devm_backlight_release, bd);
+	if (ret) {
+		put_device(&bd->dev);
+		return ret;
+	}
+	dev_info(ctx->dev, "succeed to register devtree backlight phandle\n");
+	return 0;
+}
+#else
+static int exynos_panel_of_backlight(struct exynos_panel *ctx)
+{
+	return 0;
+}
+#endif
+
 int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 				struct exynos_panel *ctx)
 {
@@ -3060,6 +3113,12 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	mutex_init(&ctx->lp_state_lock);
 
 	drm_panel_init(&ctx->panel, dev, ctx->desc->panel_func, DRM_MODE_CONNECTOR_DSI);
+
+	ret = exynos_panel_of_backlight(ctx);
+	if (ret) {
+		dev_err(ctx->dev, "failed to register devtree backlight (%d)\n", ret);
+		return ret;
+	}
 
 	drm_panel_add(&ctx->panel);
 
