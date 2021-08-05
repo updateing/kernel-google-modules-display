@@ -213,7 +213,9 @@ static int decon_get_crtc_out_type(const struct drm_crtc_state *crtc_state)
 			}
 
 			dsim = encoder_to_dsim(encoder);
-			if (dsim->id == 0) {
+			if (dsim->dual_dsi != DSIM_DUAL_DSI_NONE) {
+				out_type |= DECON_OUT_DSI;
+			} else if (dsim->id == 0) {
 				out_type |= DECON_OUT_DSI0;
 			} else if (dsim->id == 1) {
 				out_type |= DECON_OUT_DSI1;

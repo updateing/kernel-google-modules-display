@@ -1401,6 +1401,12 @@ static void dsim_reg_set_vstatus_int(u32 id, u32 vstatus)
 			DSIM_VIDEO_TIMER_VSTATUS_INTR_SEL_MASK);
 }
 
+static void dsim_reg_set_vt_sync_mode(u32 id, bool sync_mode)
+{
+	dsim_write_mask(id, DSIM_VIDEO_TIMER, sync_mode,
+			DSIM_VIDEO_TIMER_SYNC_MODE);
+}
+
 static void dsim_reg_set_bist_te_interval(u32 id, u32 interval)
 {
 	u32 val = DSIM_BIST_CTRL0_BIST_TE_INTERVAL(interval);
@@ -1636,6 +1642,7 @@ static void dsim_reg_set_config(u32 id, struct dsim_reg_config *config,
 	} else if (config->mode == DSIM_VIDEO_MODE) {
 		dsim_reg_set_vt_compensate(id, config->vt_compensation);
 		dsim_reg_set_vstatus_int(id, DSIM_VSYNC);
+		dsim_reg_set_vt_sync_mode(id, config->dual_dsi);
 	}
 }
 

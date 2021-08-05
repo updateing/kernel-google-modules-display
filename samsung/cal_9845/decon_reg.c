@@ -577,7 +577,8 @@ static void decon_reg_set_data_path_size(u32 id, u32 width, u32 height,
  * - dsc compression : width_per_enc
  */
 static void decon_reg_config_data_path_size(u32 id, u32 width, u32 height,
-		u32 overlap_w, struct decon_dsc *p, struct exynos_dsc *dsc)
+		u32 overlap_w, struct decon_dsc *p, struct exynos_dsc *dsc,
+		enum decon_dsi_mode mode)
 {
 	u32 width_f;
 	u32 comp_slice_width; /* compressed slice width */
@@ -598,7 +599,12 @@ static void decon_reg_config_data_path_size(u32 id, u32 width, u32 height,
 					comp_slice_width, p->slice_height);
 		}
 	} else {
-		decon_reg_set_outfifo_size_ctl0(id, width, height);
+		if (mode == DSI_MODE_DUAL_DSI) {
+			decon_reg_set_outfifo_size_ctl0(id, width/2, height);
+			decon_reg_set_outfifo_size_ctl1(id, width/2);
+		} else {
+			decon_reg_set_outfifo_size_ctl0(id, width, height);
+		}
 	}
 }
 
@@ -1297,7 +1303,7 @@ static int dsc_reg_init(u32 id, struct decon_config *config, u32 overlap_w,
 	dsc_reg_set_encoder(id, config, &dsc_enc, 0);
 	decon_reg_config_data_path_size(id, dsc_enc.width_per_enc,
 			config->image_height, overlap_w, &dsc_enc,
-			&config->dsc);
+			&config->dsc, config->mode.dsi_mode);
 
 	return 0;
 }
@@ -1338,7 +1344,7 @@ static void decon_reg_configure_lcd(u32 id, struct decon_config *config)
 	} else {
 		decon_reg_config_data_path_size(id, config->image_width,
 				config->image_height, overlap_w, NULL,
-				&config->dsc);
+				&config->dsc, config->mode.dsi_mode);
 	}
 
 	decon_reg_per_frame_off(id);
@@ -1350,11 +1356,24 @@ static void decon_reg_set_blender_bg_size(u32 id, enum decon_dsi_mode dsi_mode,
 	u32 width, val;
 
 	width = bg_w;
-	if (dsi_mode == DSI_MODE_DUAL_DSI)
-		width = width * 2;
 
 	val = BLENDER_BG_HEIGHT_F(bg_h) | BLENDER_BG_WIDTH_F(width);
 	decon_write(id, BLD_BG_IMG_SIZE_PRI, val);
+}
+
+static void decon_reg_set_splitter(u32 id, struct decon_config *config)
+{
+	u32 val;
+
+	if (config->mode.dsi_mode != DSI_MODE_DUAL_DSI)
+		return;
+
+	val = SPLITTER_IN_HEIGHT_F(config->image_height)
+		| SPLITTER_IN_WIDTH_F(config->image_width);
+	decon_write(id, OF_SPLIT_SIZE, val);
+
+	val = SPLITTER_SPLIT_IDX_F(config->image_width/2);
+	decon_write_mask(id, OF_SPLIT_IDX, val, SPLITTER_SPLIT_IDX_MASK);
 }
 
 static int decon_reg_stop_perframe_dsi(u32 id, struct decon_config *config,
@@ -1742,6 +1761,7 @@ int decon_reg_init(u32 id, struct decon_config *config)
 
 	decon_reg_init_trigger(id, config);
 	decon_reg_configure_lcd(id, config);
+	decon_reg_set_splitter(id, config);
 
 	if (config->mode.op_mode == DECON_COMMAND_MODE) {
 #if defined(CONFIG_EXYNOS_EWR)
@@ -2041,7 +2061,7 @@ void decon_reg_set_mres(u32 id, struct decon_config *config)
 	else
 		decon_reg_config_data_path_size(id, config->image_width,
 				config->image_height, overlap_w, NULL,
-				&config->dsc);
+				&config->dsc, config->mode.dsi_mode);
 }
 
 void decon_reg_release_resource(u32 id, struct decon_mode *mode)
@@ -2056,7 +2076,8 @@ void decon_reg_config_wb_size(u32 id, struct decon_config *config)
 	decon_reg_set_blender_bg_size(id, config->mode.dsi_mode,
 			config->image_width, config->image_height);
 	decon_reg_config_data_path_size(id, config->image_width,
-			config->image_height, 0, NULL, &config->dsc);
+			config->image_height, 0, NULL, &config->dsc,
+			config->mode.dsi_mode);
 }
 
 void decon_reg_set_interrupts(u32 id, u32 en)
