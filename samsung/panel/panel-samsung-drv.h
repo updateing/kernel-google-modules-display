@@ -252,7 +252,7 @@ struct exynos_panel_funcs {
 	 *
 	 * This callback is used to get panel HW revision from panel_extinfo.
 	 */
-	u32 (*get_panel_rev)(u32 id);
+	void (*get_panel_rev)(struct exynos_panel *exynos_panel, u32 id);
 
 	/**
 	 * @read_id:
@@ -654,6 +654,7 @@ int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connec
 int exynos_panel_disable(struct drm_panel *panel);
 int exynos_panel_unprepare(struct drm_panel *panel);
 int exynos_panel_prepare(struct drm_panel *panel);
+void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev);
 int exynos_panel_init(struct exynos_panel *ctx);
 void exynos_panel_reset(struct exynos_panel *ctx);
 int exynos_panel_set_power(struct exynos_panel *ctx, bool on);

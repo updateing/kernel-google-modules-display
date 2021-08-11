@@ -293,27 +293,8 @@ static int exynos_panel_read_extinfo(struct exynos_panel *ctx)
 	return 0;
 }
 
-static void exynos_panel_get_panel_rev(struct exynos_panel *ctx)
+void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev)
 {
-	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
-	u32 id, rev;
-
-	if (kstrtou32(ctx->panel_extinfo, 16, &id)) {
-		dev_warn(ctx->dev,
-			 "failed to get panel extinfo, default to latest\n");
-		ctx->panel_rev = PANEL_REV_LATEST;
-		return;
-	}
-
-	if (funcs && funcs->get_panel_rev) {
-		rev = funcs->get_panel_rev(id);
-	} else {
-		dev_warn(ctx->dev,
-			 "unable to get panel rev, default to latest\n");
-		ctx->panel_rev = PANEL_REV_LATEST;
-		return;
-	}
-
 	switch (rev) {
 	case 0:
 		ctx->panel_rev = PANEL_REV_PROTO1;
@@ -346,6 +327,7 @@ static void exynos_panel_get_panel_rev(struct exynos_panel *ctx)
 
 	dev_info(ctx->dev, "panel_rev: 0x%x\n", ctx->panel_rev);
 }
+EXPORT_SYMBOL(exynos_panel_get_panel_rev);
 
 int exynos_panel_init(struct exynos_panel *ctx)
 {
@@ -366,7 +348,21 @@ int exynos_panel_init(struct exynos_panel *ctx)
 	if (!ret)
 		ctx->initialized = true;
 
-	exynos_panel_get_panel_rev(ctx);
+	if (funcs && funcs->get_panel_rev) {
+		u32 id;
+
+		if (kstrtou32(ctx->panel_extinfo, 16, &id)) {
+			dev_warn(ctx->dev,
+				 "failed to get panel extinfo, default to latest\n");
+			ctx->panel_rev = PANEL_REV_LATEST;
+		} else {
+			funcs->get_panel_rev(ctx, id);
+		}
+	} else {
+		dev_warn(ctx->dev,
+			 "unable to get panel rev, default to latest\n");
+		ctx->panel_rev = PANEL_REV_LATEST;
+	}
 
 	if (funcs && funcs->panel_init)
 		funcs->panel_init(ctx);
