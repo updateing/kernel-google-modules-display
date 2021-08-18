@@ -29,6 +29,9 @@
 #include <linux/soc/samsung/exynos-smc.h>
 #include <linux/dma-heap.h>
 
+#include <dt-bindings/soc/google/gs101-devfreq.h>
+#include <soc/google/exynos-devfreq.h>
+
 #include <hdr_cal.h>
 #include <regs-dpp.h>
 
@@ -156,6 +159,60 @@ static const struct of_device_id dpp_of_match[] = {
 	},
 };
 
+static inline const char *get_comp_type_str(enum dpp_comp_type type)
+{
+	if (type == COMP_TYPE_AFBC)
+		return "AFBC";
+	else if (type == COMP_TYPE_SBWC)
+		return "SBWC";
+	else
+		return "";
+}
+
+void dpp_dump_buffer(struct dpp_device *dpp)
+{
+	const struct drm_plane_state *plane_state;
+	struct drm_framebuffer *fb;
+	void *vaddr;
+
+	if (dpp->state != DPP_STATE_ON) {
+		dpp_info(dpp, "dpp state is off\n");
+		return;
+	}
+
+	if (dpp->win_config.comp_type == COMP_TYPE_NONE) {
+		dpp_info(dpp, "buffer doesn't have compressed data\n");
+		return;
+	}
+
+	if (dpp->protection) {
+		dpp_info(dpp, "dpp is protected\n");
+		return;
+	}
+
+	plane_state = dpp->plane.base.state;
+	if (!plane_state || !plane_state->fb) {
+		dpp_info(dpp, "framebuffer not found\n");
+		return;
+	}
+
+	fb = plane_state->fb;
+	drm_framebuffer_get(fb);
+
+	vaddr = exynos_drm_fb_to_vaddr(fb);
+	if (vaddr) {
+		pr_info("=== buffer dump[%s:%s]: dpp%d dma addr 0x%llx, vaddr 0x%pK ===\n",
+				get_comp_type_str(dpp->win_config.comp_type),
+				get_comp_src_name(dpp->comp_src),
+				dpp->id, dpp->win_config.addr[0], vaddr);
+		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_ADDRESS, 32, 4, vaddr, 256, false);
+	} else {
+		dpp_info(dpp, "unable to find vaddr\n");
+	}
+
+	drm_framebuffer_put(fb);
+}
+
 void dpp_dump(struct dpp_device *dpp)
 {
 	if (dpp->state != DPP_STATE_ON) {
@@ -269,15 +326,11 @@ static void dpp_test_fixed_config_params(struct dpp_params_info *config, u32 w,
 	config->y_hd_y2_stride = 0;
 	config->y_pl_c2_stride = 0;
 
-	config->h_ratio = (config->src.w << 20) / config->dst.w;
-	config->v_ratio = (config->src.h << 20) / config->dst.h;
+	config->h_ratio = mult_frac(1 << 20, config->src.w, config->dst.w);
+	config->v_ratio = mult_frac(1 << 20, config->src.h, config->dst.h);
 
-	/* TODO: scaling will be implemented later */
-	config->is_scale = false;
-	/* TODO: blocking mode will be implemented later */
 	config->is_block = false;
-	/* TODO: very big count.. recovery will be not working... */
-	config->rcv_num = 0x7FFFFFFF;
+	config->rcv_num = exynos_devfreq_get_domain_freq(DEVFREQ_DISP) ? : 0x7FFFFFFF;
 }
 
 static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
@@ -369,19 +422,15 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 	}
 
 	if (config->rot & DPP_ROT) {
-		config->h_ratio = (config->src.h << 20) / config->dst.w;
-		config->v_ratio = (config->src.w << 20) / config->dst.h;
+		config->h_ratio = mult_frac(1 << 20, config->src.h, config->dst.w);
+		config->v_ratio = mult_frac(1 << 20, config->src.w, config->dst.h);
 	} else {
-		config->h_ratio = (config->src.w << 20) / config->dst.w;
-		config->v_ratio = (config->src.h << 20) / config->dst.h;
+		config->h_ratio = mult_frac(1 << 20, config->src.w, config->dst.w);
+		config->v_ratio = mult_frac(1 << 20, config->src.h, config->dst.h);
 	}
 
-	/* TODO: scaling will be implemented later */
-	config->is_scale = false;
-	/* TODO: blocking mode will be implemented later */
 	config->is_block = false;
-	/* TODO: very big count.. recovery will be not working... */
-	config->rcv_num = 0x7FFFFFFF;
+	config->rcv_num = exynos_devfreq_get_domain_freq(DEVFREQ_DISP) ? : 0x7FFFFFFF;
 }
 
 static void __dpp_enable(struct dpp_device *dpp)
@@ -1074,9 +1123,9 @@ static irqreturn_t dma_irq_handler(int irq, void *priv)
 	}
 
 	if (dump && time_after(jiffies, last_dumptime + msecs_to_jiffies(5000))) {
-		const struct decon_device *decon = get_decon_drvdata(dpp->decon_id);
+		struct decon_device *decon = get_decon_drvdata(dpp->decon_id);
 		if (decon) {
-			decon_dump_event_condition(decon, DPU_EVT_CONDITION_IDMA_ERROR);
+			decon_dump_all(decon, DPU_EVT_CONDITION_IDMA_ERROR, true);
 			last_dumptime = jiffies;
 		}
 	}

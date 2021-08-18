@@ -18,6 +18,7 @@
 #include <drm/drm_vblank.h>
 #include <drm/exynos_drm.h>
 
+#include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/kernel.h>
@@ -78,7 +79,7 @@ static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 static int decon_request_te_irq(struct exynos_drm_crtc *exynos_crtc,
 				const struct exynos_drm_connector_state *exynos_conn_state);
 
-void decon_dump(struct decon_device *decon)
+void decon_dump(const struct decon_device *decon)
 {
 	int i;
 	int acquired = console_trylock();
@@ -799,6 +800,9 @@ static void decon_mode_update_bts(struct decon_device *decon, const struct drm_d
 
 	decon->config.image_width = mode->hdisplay;
 	decon->config.image_height = mode->vdisplay;
+
+	decon_debug(decon, "update decon bts config for mode: %dx%dx%d\n",
+		    mode->hdisplay, mode->vdisplay, decon->bts.fps);
 }
 
 static void decon_mode_set(struct exynos_drm_crtc *crtc,
@@ -819,6 +823,10 @@ static void decon_seamless_mode_bts_update(struct decon_device *decon,
 					   const struct drm_display_mode *mode)
 {
 	DPU_ATRACE_BEGIN(__func__);
+
+	decon_debug(decon, "seamless mode change from %dhz to %dhz\n",
+		    decon->bts.fps, drm_mode_vrefresh(mode));
+
 	/*
 	 * when going from high->low refresh rate need to run with the higher fps while the
 	 * switch takes effect in display, this could happen within 2 vsyncs in the worst case
@@ -839,7 +847,7 @@ void decon_mode_bts_pre_update(struct decon_device *decon,
 
 	if (exynos_crtc_state->seamless_mode_changed)
 		decon_seamless_mode_bts_update(decon, &crtc_state->adjusted_mode);
-	else if (!atomic_add_unless(&decon->bts.delayed_update, -1, 0))
+	else if (!atomic_dec_if_positive(&decon->bts.delayed_update))
 		decon_mode_update_bts(decon, &crtc_state->mode);
 
 	decon->bts.ops->calc_bw(decon);
@@ -1112,7 +1120,7 @@ static int dpu_sysmmu_fault_handler(struct iommu_fault *fault, void *data)
 
 	decon_warn(decon, "%s +\n", __func__);
 
-	decon_dump_all(decon);
+	decon_dump_all(decon, DPU_EVT_CONDITION_ALL, false);
 
 	return 0;
 }

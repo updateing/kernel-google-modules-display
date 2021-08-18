@@ -56,9 +56,22 @@
 #define PANEL_REV_LT(rev)	((rev) - 1)
 #define PANEL_REV_ALL_BUT(rev)	(PANEL_REV_ALL & ~(rev))
 
-#define HBM_FLAG_GHBM_UPDATE BIT(0)
-#define HBM_FLAG_BL_UPDATE   BIT(1)
-#define HBM_FLAG_LHBM_UPDATE BIT(2)
+/* indicates that all commands in this cmd set should be batched together */
+#define PANEL_CMD_SET_BATCH  BIT(0)
+/*
+ * indicates that all commands in this cmd set should be queued, a follow up
+ * command should take care of triggering transfer of batch
+ */
+#define PANEL_CMD_SET_QUEUE  BIT(1)
+
+/* packetgo feature to batch msgs can wait for vblank, use this flag to ignore explicitly */
+#define PANEL_CMD_SET_IGNORE_VBLANK BIT(2)
+
+
+#define HBM_FLAG_GHBM_UPDATE    BIT(0)
+#define HBM_FLAG_BL_UPDATE      BIT(1)
+#define HBM_FLAG_LHBM_UPDATE    BIT(2)
+#define HBM_FLAG_DIMMING_UPDATE BIT(3)
 
 enum exynos_panel_state {
 	PANEL_STATE_ON = 0,
@@ -267,6 +280,16 @@ struct exynos_panel_funcs {
 	void (*update_te2)(struct exynos_panel *exynos_panel);
 
 	/**
+	 * @atomic_check
+	 *
+	 * This optional callback happens in atomic check phase, it gives a chance to panel driver
+	 * to check and/or adjust atomic state ahead of atomic commit.
+	 *
+	 * Should return 0 on success (no problems with atomic commit) otherwise negative errno
+	 */
+	int (*atomic_check)(struct exynos_panel *exynos_panel, struct drm_atomic_state *state);
+
+	/**
 	 * @commit_done
 	 *
 	 * Called after atomic commit flush has completed but transfer may not have started yet
@@ -278,8 +301,11 @@ struct exynos_panel_funcs {
 	 *
 	 * Called when display self refresh state has changed. While in self refresh state, the
 	 * panel can optimize for power assuming that there are no pending updates.
+	 *
+	 * Returns true if underlying mode was updated to reflect new self refresh state,
+	 * otherwise returns false if no action was taken.
 	 */
-	void (*set_self_refresh)(struct exynos_panel *exynos_panel, bool enable);
+	bool (*set_self_refresh)(struct exynos_panel *exynos_panel, bool enable);
 };
 
 /**
@@ -350,7 +376,7 @@ struct exynos_panel_desc {
 
 #define PANEL_ID_MAX		32
 #define PANEL_EXTINFO_MAX	16
-#define LOCAL_HBM_MAX_TIMEOUT_MS 1500 /* 1500 ms */
+#define LOCAL_HBM_MAX_TIMEOUT_MS 3000 /* 3000 ms */
 #define LOCAL_HBM_GAMMA_CMD_SIZE_MAX 16
 
 struct exynos_bl_notifier {
@@ -395,13 +421,19 @@ struct exynos_panel {
 
 	/* indicates whether panel idle feature is enabled */
 	bool panel_idle_enabled;
-	/* indicates if panel is currently in idle mode */
-	bool panel_idle_active;
 	/* indicates self refresh is active */
 	bool self_refresh_active;
+	/**
+	 * refresh rate in panel idle mode
+	 * 0 means not in idle mode or not specified
+	 * greater than 0 means panel idle is active
+	 */
+	unsigned int panel_idle_vrefresh;
 
 	bool hbm_mode;
 	bool dimming_on;
+	/* request_dimming_on from drm commit */
+	bool request_dimming_on;
 	struct backlight_device *bl;
 	struct mutex mode_lock;
 	struct mutex bl_state_lock;
@@ -468,6 +500,14 @@ static inline int exynos_dcs_set_brightness(struct exynos_panel *ctx, u16 br)
 	return mipi_dsi_dcs_set_display_brightness(dsi, br);
 }
 
+static inline int exynos_get_actual_vrefresh(struct exynos_panel *ctx)
+{
+	if (ctx->panel_idle_vrefresh)
+		return ctx->panel_idle_vrefresh;
+
+	return drm_mode_vrefresh(&ctx->current_mode->mode);
+}
+
 static inline void exynos_bin2hex(const void *buf, size_t len,
 				 char *linebuf, size_t linebuflen)
 {
@@ -477,6 +517,11 @@ static inline void exynos_bin2hex(const void *buf, size_t len,
 
 	end = bin2hex(linebuf, buf, count);
 	*end = '\0';
+}
+
+static inline void backlight_state_changed(struct backlight_device *bl)
+{
+	sysfs_notify(&bl->dev.kobj, NULL, "state");
 }
 
 #define EXYNOS_DSI_CMD_REV(cmd, delay, rev) { sizeof(cmd), cmd, delay, (u32)rev }
@@ -530,6 +575,15 @@ static inline void exynos_bin2hex(const void *buf, size_t len,
 		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, d, ARRAY_SIZE(d), ret);	\
 } while (0)
 
+#define EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, flags, seq...) do {				\
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
+	u8 d[] = { seq };						\
+	int ret;							\
+	ret = exynos_dsi_dcs_write_buffer(dsi, d, ARRAY_SIZE(d), flags);		\
+	if (ret < 0)							\
+		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, d, ARRAY_SIZE(d), ret);	\
+} while (0)
+
 #define EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, delay, seq...) do {		\
 	EXYNOS_DCS_WRITE_SEQ(ctx, seq);					\
 	usleep_range(delay * 1000, delay * 1000 + 10);			\
@@ -538,6 +592,14 @@ static inline void exynos_bin2hex(const void *buf, size_t len,
 #define EXYNOS_DCS_WRITE_TABLE(ctx, table) do {					\
 	int ret;								\
 	ret = exynos_dcs_write(ctx, table, ARRAY_SIZE(table));			\
+	if (ret < 0)								\
+		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, table, ARRAY_SIZE(table), ret);	\
+} while (0)
+
+#define EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, table, flags) do {					\
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
+	int ret;								\
+	ret = exynos_dsi_dcs_write_buffer(dsi, table, ARRAY_SIZE(table), flags);		\
 	if (ret < 0)								\
 		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, table, ARRAY_SIZE(table), ret);	\
 } while (0)
@@ -590,12 +652,19 @@ void exynos_panel_debugfs_create_cmdset(struct exynos_panel *ctx,
 					struct dentry *parent,
 					const struct exynos_dsi_cmd_set *cmdset,
 					const char *name);
-void exynos_panel_send_cmd_set(struct exynos_panel *ctx,
-			       const struct exynos_dsi_cmd_set *cmd_set);
+void exynos_panel_send_cmd_set_flags(struct exynos_panel *ctx, const struct exynos_dsi_cmd_set *cmd_set,
+			       u32 flags);
+static inline void exynos_panel_send_cmd_set(struct exynos_panel *ctx,
+					     const struct exynos_dsi_cmd_set *cmd_set)
+{
+	exynos_panel_send_cmd_set_flags(ctx, cmd_set, 0);
+}
 void exynos_panel_set_lp_mode(struct exynos_panel *ctx, const struct exynos_panel_mode *pmode);
 void exynos_panel_set_binned_lp(struct exynos_panel *ctx, const u16 brightness);
 int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 				struct exynos_panel *ctx);
+ssize_t exynos_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
+				const void *data, size_t len, u16 flags);
 
 int exynos_panel_probe(struct mipi_dsi_device *dsi);
 int exynos_panel_remove(struct mipi_dsi_device *dsi);
