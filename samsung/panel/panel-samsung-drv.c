@@ -308,6 +308,9 @@ void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev)
 	case 9:
 		ctx->panel_rev = PANEL_REV_EVT1_1;
 		break;
+	case 0xA:
+		ctx->panel_rev = PANEL_REV_EVT1_2;
+		break;
 	case 0xC:
 		ctx->panel_rev = PANEL_REV_DVT1;
 		break;
