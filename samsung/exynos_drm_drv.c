@@ -709,11 +709,6 @@ int exynos_atomic_exit_tui(void)
 	return ret;
 }
 
-static const struct vm_operations_struct exynos_drm_gem_vm_ops = {
-	.open = drm_gem_vm_open,
-	.close = drm_gem_vm_close,
-};
-
 static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv;
@@ -755,8 +750,6 @@ static struct drm_driver exynos_drm_driver = {
 				     DRIVER_RENDER | DRIVER_GEM,
 	.open			   = exynos_drm_open,
 	.postclose		   = exynos_drm_postclose,
-	.gem_free_object_unlocked  = exynos_drm_gem_free_object,
-	.gem_vm_ops		   = &exynos_drm_gem_vm_ops,
 	.dumb_create		   = exynos_drm_gem_dumb_create,
 	.dumb_map_offset	   = exynos_drm_gem_dumb_map_offset,
 	.prime_handle_to_fd	   = drm_gem_prime_handle_to_fd,

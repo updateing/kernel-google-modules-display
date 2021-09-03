@@ -18,7 +18,6 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/dma-buf.h>
-#include <linux/ion.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/sizes.h>

@@ -512,7 +512,7 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 			if (new_crtc_state->enable && funcs->prepare)
 				funcs->prepare(crtc);
 			else if (funcs->atomic_disable)
-				funcs->atomic_disable(crtc, old_crtc_state);
+				funcs->atomic_disable(crtc, old_state);
 			else if (funcs->disable)
 				funcs->disable(crtc);
 			else if (funcs->dpms)

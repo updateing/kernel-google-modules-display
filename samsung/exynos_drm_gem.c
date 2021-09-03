@@ -100,20 +100,35 @@ void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 void *exynos_drm_gem_get_vaddr(struct exynos_drm_gem *exynos_gem_obj)
 {
 	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
+	struct dma_buf_map map;
+	int ret;
 
 	if (WARN_ON(!attach))
 		return NULL;
 
 	if (!exynos_gem_obj->vaddr) {
-		exynos_gem_obj->vaddr = dma_buf_vmap(attach->dmabuf);
-		if (!exynos_gem_obj->vaddr)
+		ret = dma_buf_vmap(attach->dmabuf, &map);
+		if (ret) {
 			pr_err("Failed to map virtual address\n");
-		else
-			pr_debug("mapped vaddr: %pK\n", exynos_gem_obj->vaddr);
+			return NULL;
+		}
+
+		exynos_gem_obj->vaddr = map.vaddr;
+		pr_debug("mapped vaddr: %pK\n", exynos_gem_obj->vaddr);
 	}
 
-	return  exynos_gem_obj->vaddr;
+	return exynos_gem_obj->vaddr;
 }
+
+static const struct vm_operations_struct exynos_drm_gem_vm_ops = {
+	.open = drm_gem_vm_open,
+	.close = drm_gem_vm_close,
+};
+
+static const struct drm_gem_object_funcs exynos_drm_gem_object_funcs = {
+	.free = exynos_drm_gem_free_object,
+	.vm_ops = &exynos_drm_gem_vm_ops,
+};
 
 static int exynos_drm_gem_create(struct drm_device *dev, struct drm_file *filep,
 				 size_t size, unsigned int flags,
@@ -149,6 +164,7 @@ static int exynos_drm_gem_create(struct drm_device *dev, struct drm_file *filep,
 	} else {
 		struct exynos_drm_gem *exynos_gem_obj = to_exynos_gem(obj);
 
+		exynos_gem_obj->base.funcs = &exynos_drm_gem_object_funcs;
 		exynos_gem_obj->flags |= flags;
 
 		ret = drm_gem_handle_create(filep, obj, gem_handle);

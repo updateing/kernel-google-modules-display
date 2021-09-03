@@ -226,11 +226,12 @@ static dma_addr_t dpp_alloc_map_buf_test(void)
 	struct dma_buf_attachment *attachment;
 	struct sg_table *sg_table;
 	size_t size;
-	void *vaddr;
+	struct dma_buf_map map;
 	dma_addr_t dma_addr;
 	struct decon_device *decon = get_decon_drvdata(0);
 	struct drm_device *drm_dev = decon->drm_dev;
 	struct exynos_drm_private *priv = drm_to_exynos_dev(drm_dev);
+	int ret;
 
 	size = PAGE_ALIGN(1440 * 3040 * 4);
 	dma_heap = dma_heap_find("system");
@@ -246,15 +247,15 @@ static dma_addr_t dpp_alloc_map_buf_test(void)
 		return PTR_ERR(buf);
 	}
 
-	vaddr = dma_buf_vmap(buf);
-	if (!vaddr) {
+	ret = dma_buf_vmap(buf, &map);
+	if (ret) {
 		pr_err("failed to vmap buffer\n");
 		dma_buf_put(buf);
 		return -EINVAL;
 	}
 
-	memset(vaddr, 0x80, size);
-	dma_buf_vunmap(buf, vaddr);
+	memset(map.vaddr, 0x80, size);
+	dma_buf_vunmap(buf, map.vaddr);
 
 	/* mapping buffer for translating to DVA */
 	attachment = dma_buf_attach(buf, priv->iommu_client);
