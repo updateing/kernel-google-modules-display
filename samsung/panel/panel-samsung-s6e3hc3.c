@@ -968,6 +968,48 @@ static void s6e3hc3_set_local_hbm_mode(struct exynos_panel *ctx,
 	}
 }
 
+static const struct exynos_dsi_cmd s6e3hc3_c10_lhbm_extra_cmds[] = {
+	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0xE1, 0x1F),
+	/* area set */
+	EXYNOS_DSI_CMD_SEQ(0x1F, 0x20, 0x88, 0x71, 0x39, 0x8A, 0x01),
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0xE7, 0x1F),
+	/* center position set, x: 0x2D0, y: 0x939 */
+	EXYNOS_DSI_CMD_SEQ(0x1F, 0x2D, 0x09, 0x39),
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0xEA, 0x1F),
+	/* circle size set, radius: 6 mm */
+	EXYNOS_DSI_CMD_SEQ(0x1F, 0x78),
+
+	EXYNOS_DSI_CMD0(lock_cmd_f0)
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_lhbm_extra);
+
+static void s6e3hc3_c10_set_local_hbm_mode(struct exynos_panel *ctx,
+				 bool local_hbm_en)
+{
+	const struct exynos_panel_mode *pmode;
+	const u32 flags = PANEL_CMD_SET_IGNORE_VBLANK | PANEL_CMD_SET_BATCH;
+
+	if (ctx->hbm.local_hbm.enabled == local_hbm_en)
+		return;
+
+	pmode = ctx->current_mode;
+	if (unlikely(pmode == NULL)) {
+		dev_err(ctx->dev, "%s: unknown current mode\n", __func__);
+		return;
+	}
+
+	ctx->hbm.local_hbm.enabled = local_hbm_en;
+	if (local_hbm_en)
+		exynos_panel_send_cmd_set_flags(ctx,
+			&s6e3hc3_c10_lhbm_extra_cmd_set, flags);
+	s6e3hc3_write_display_mode(ctx, &pmode->mode);
+}
+
 static void s6e3hc3_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
@@ -1196,6 +1238,26 @@ static const struct exynos_panel_funcs s6e3hc3_exynos_funcs = {
 	.set_self_refresh = s6e3hc3_set_self_refresh,
 };
 
+static const struct exynos_panel_funcs s6e3hc3_c10_exynos_funcs = {
+	.set_brightness = exynos_panel_set_brightness,
+	.set_lp_mode = exynos_panel_set_lp_mode,
+	.set_nolp_mode = s6e3hc3_set_nolp_mode,
+	.set_binned_lp = exynos_panel_set_binned_lp,
+	.set_hbm_mode = s6e3hc3_set_hbm_mode,
+	.set_dimming_on = s6e3hc3_set_dimming_on,
+	.set_local_hbm_mode = s6e3hc3_c10_set_local_hbm_mode,
+	.is_mode_seamless = s6e3hc3_is_mode_seamless,
+	.mode_set = s6e3hc3_mode_set,
+	.panel_init = s6e3hc3_panel_init,
+	.get_panel_rev = s6e3hc3_get_panel_rev,
+	.get_te2_edges = exynos_panel_get_te2_edges,
+	.configure_te2_edges = exynos_panel_configure_te2_edges,
+	.update_te2 = s6e3hc3_update_te2,
+	.commit_done = s6e3hc3_commit_done,
+	.atomic_check = s6e3hc3_atomic_check,
+	.set_self_refresh = s6e3hc3_set_self_refresh,
+};
+
 const struct brightness_capability s6e3hc3_brightness_capability = {
 	.normal = {
 		.nits = {
@@ -1252,8 +1314,34 @@ const struct exynos_panel_desc samsung_s6e3hc3 = {
 	.exynos_panel_func = &s6e3hc3_exynos_funcs,
 };
 
+const struct exynos_panel_desc samsung_s6e3hc3_c10 = {
+	.dsc_pps = PPS_SETTING,
+	.dsc_pps_len = ARRAY_SIZE(PPS_SETTING),
+	.data_lane_cnt = 4,
+	.max_brightness = 3152,
+	.dft_brightness = 1023,
+	.brt_capability = &s6e3hc3_brightness_capability,
+	/* supported HDR format bitmask : 1(DOLBY_VISION), 2(HDR10), 3(HLG) */
+	.hdr_formats = BIT(2),
+	.max_luminance = 5400000,
+	.max_avg_luminance = 1200000,
+	.min_luminance = 5,
+	.bl_range = s6e3hc3_bl_range,
+	.bl_num_ranges = ARRAY_SIZE(s6e3hc3_bl_range),
+	.modes = s6e3hc3_modes,
+	.num_modes = ARRAY_SIZE(s6e3hc3_modes),
+	.off_cmd_set = &s6e3hc3_off_cmd_set,
+	.lp_mode = &s6e3hc3_lp_mode,
+	.lp_cmd_set = &s6e3hc3_lp_cmd_set,
+	.binned_lp = s6e3hc3_binned_lp,
+	.num_binned_lp = ARRAY_SIZE(s6e3hc3_binned_lp),
+	.panel_func = &s6e3hc3_drm_funcs,
+	.exynos_panel_func = &s6e3hc3_c10_exynos_funcs,
+};
+
 static const struct of_device_id exynos_panel_of_match[] = {
 	{ .compatible = "samsung,s6e3hc3", .data = &samsung_s6e3hc3 },
+	{ .compatible = "samsung,s6e3hc3-c10", .data = &samsung_s6e3hc3_c10 },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, exynos_panel_of_match);
