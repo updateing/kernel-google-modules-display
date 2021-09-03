@@ -285,6 +285,18 @@ static void decon_update_dsi_config(struct decon_config *config,
 	}
 }
 
+static int decon_get_main_dsim_id()
+{
+	const struct dsim_device *dsim = exynos_get_dual_dsi(DSIM_DUAL_DSI_MAIN);
+
+	if (!dsim) {
+		pr_err("%s: fail to get dsim, suppose dsim0\n", __func__);
+		return 0;
+	}
+
+	return dsim->id;
+}
+
 static void decon_update_config(struct decon_config *config,
 				const struct drm_crtc_state *crtc_state,
 				const struct exynos_drm_connector_state *exynos_conn_state)
@@ -295,12 +307,14 @@ static void decon_update_config(struct decon_config *config,
 	config->image_height = mode->vdisplay;
 
 	config->out_type = decon_get_crtc_out_type(crtc_state);
-	if (config->out_type == DECON_OUT_DSI)
+	if (config->out_type == DECON_OUT_DSI) {
 		config->mode.dsi_mode = DSI_MODE_DUAL_DSI;
-	else if (config->out_type & (DECON_OUT_DSI0 | DECON_OUT_DSI1))
+		config->main_dsim_id = decon_get_main_dsim_id();
+	} else if (config->out_type & (DECON_OUT_DSI0 | DECON_OUT_DSI1)) {
 		config->mode.dsi_mode = DSI_MODE_SINGLE;
-	else
+	} else {
 		config->mode.dsi_mode = DSI_MODE_NONE;
+	}
 
 	/* defaults if not dsi, if video mode or if hw trigger is not configured properly */
 	config->mode.trig_mode = DECON_SW_TRIG;

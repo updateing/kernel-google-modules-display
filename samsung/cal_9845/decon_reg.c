@@ -403,6 +403,11 @@ static void decon_reg_clear_dsimif(u32 id, u32 dsimif)
 	}
 }
 
+static inline bool is_dsim0_main_for_dual_dsi(struct decon_config *cfg)
+{
+	return !cfg->main_dsim_id;
+}
+
 static void decon_reg_set_data_path(u32 id, struct decon_config *cfg)
 {
 	enum decon_out_type out_type = cfg->out_type;
@@ -429,8 +434,18 @@ static void decon_reg_set_data_path(u32 id, struct decon_config *cfg)
 		break;
 	case DECON_OUT_DSI:
 		val = OUTIF_DSI0 | OUTIF_DSI1;
-		dsimif_write(id, DSIMIF_SEL(0), SEL_DSIM(0));
-		dsimif_write(id, DSIMIF_SEL(1), SEL_DSIM(1));
+		/*
+		 * Refer to decon block diagram in decon spec Figure.1-1,
+		 * for Dual DSI, DSIMIFx HW supports OF0_0 and OF0_1 as
+		 * dual dsi paths.
+		 */
+		if (is_dsim0_main_for_dual_dsi(cfg)) {
+			dsimif_write(id, DSIMIF_SEL(0), SEL_DSIM(0));
+			dsimif_write(id, DSIMIF_SEL(1), SEL_DSIM(1));
+		} else {
+			dsimif_write(id, DSIMIF_SEL(0), SEL_DSIM(1));
+			dsimif_write(id, DSIMIF_SEL(1), SEL_DSIM(0));
+		}
 		break;
 	case DECON_OUT_DP0:
 		val = OUTIF_DPIF;
