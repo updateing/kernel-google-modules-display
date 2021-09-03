@@ -304,6 +304,7 @@ struct decon_config {
 	unsigned int		out_bpc;
 	unsigned int		in_bpc;
 	unsigned int		vblank_usec;
+	int			main_dsim_id;
 };
 
 struct decon_regs {
