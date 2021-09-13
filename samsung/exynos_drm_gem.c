@@ -22,50 +22,6 @@
 #include "exynos_drm_dsim.h"
 #include "exynos_drm_gem.h"
 
-struct exynos_drm_gem *exynos_drm_gem_alloc(struct drm_device *dev,
-					    size_t size, unsigned int flags)
-{
-	struct exynos_drm_gem *exynos_gem_obj;
-
-	exynos_gem_obj = kzalloc(sizeof(*exynos_gem_obj), GFP_KERNEL);
-	if (!exynos_gem_obj)
-		return ERR_PTR(-ENOMEM);
-
-	exynos_gem_obj->flags = flags;
-
-	/* no need to release initialized private gem object */
-	drm_gem_private_object_init(dev, &exynos_gem_obj->base, size);
-
-	pr_debug("allocated %zu bytes with flags %#x\n", size, flags);
-
-	return exynos_gem_obj;
-}
-
-struct drm_gem_object *
-exynos_drm_gem_prime_import_sg_table(struct drm_device *dev,
-				     struct dma_buf_attachment *attach,
-				     struct sg_table *sgt)
-{
-	const unsigned long size = attach->dmabuf->size;
-	struct exynos_drm_gem *exynos_gem_obj =
-		exynos_drm_gem_alloc(dev, size, 0);
-
-	if (IS_ERR(exynos_gem_obj))
-		return ERR_CAST(exynos_gem_obj);
-
-	exynos_gem_obj->sgt = sgt;
-	exynos_gem_obj->dma_addr = sg_dma_address(sgt->sgl);
-	if (IS_ERR_VALUE(exynos_gem_obj->dma_addr)) {
-		pr_err("Failed to allocate IOVM\n");
-		kfree(exynos_gem_obj);
-		return ERR_PTR(exynos_gem_obj->dma_addr);
-	}
-
-	pr_debug("mapped dma_addr: 0x%llx\n", exynos_gem_obj->dma_addr);
-
-	return &exynos_gem_obj->base;
-}
-
 static void exynos_drm_gem_unmap(struct exynos_drm_gem *exynos_gem_obj)
 {
 	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
@@ -130,6 +86,51 @@ static const struct drm_gem_object_funcs exynos_drm_gem_object_funcs = {
 	.vm_ops = &exynos_drm_gem_vm_ops,
 };
 
+struct exynos_drm_gem *exynos_drm_gem_alloc(struct drm_device *dev,
+					    size_t size, unsigned int flags)
+{
+	struct exynos_drm_gem *exynos_gem_obj;
+
+	exynos_gem_obj = kzalloc(sizeof(*exynos_gem_obj), GFP_KERNEL);
+	if (!exynos_gem_obj)
+		return ERR_PTR(-ENOMEM);
+
+	exynos_gem_obj->flags = flags;
+	exynos_gem_obj->base.funcs = &exynos_drm_gem_object_funcs;
+
+	/* no need to release initialized private gem object */
+	drm_gem_private_object_init(dev, &exynos_gem_obj->base, size);
+
+	pr_debug("allocated %zu bytes with flags %#x\n", size, flags);
+
+	return exynos_gem_obj;
+}
+
+struct drm_gem_object *
+exynos_drm_gem_prime_import_sg_table(struct drm_device *dev,
+				     struct dma_buf_attachment *attach,
+				     struct sg_table *sgt)
+{
+	const unsigned long size = attach->dmabuf->size;
+	struct exynos_drm_gem *exynos_gem_obj =
+		exynos_drm_gem_alloc(dev, size, 0);
+
+	if (IS_ERR(exynos_gem_obj))
+		return ERR_CAST(exynos_gem_obj);
+
+	exynos_gem_obj->sgt = sgt;
+	exynos_gem_obj->dma_addr = sg_dma_address(sgt->sgl);
+	if (IS_ERR_VALUE(exynos_gem_obj->dma_addr)) {
+		pr_err("Failed to allocate IOVM\n");
+		kfree(exynos_gem_obj);
+		return ERR_PTR(exynos_gem_obj->dma_addr);
+	}
+
+	pr_debug("mapped dma_addr: 0x%llx\n", exynos_gem_obj->dma_addr);
+
+	return &exynos_gem_obj->base;
+}
+
 static int exynos_drm_gem_create(struct drm_device *dev, struct drm_file *filep,
 				 size_t size, unsigned int flags,
 				 unsigned int *gem_handle)
@@ -164,7 +165,6 @@ static int exynos_drm_gem_create(struct drm_device *dev, struct drm_file *filep,
 	} else {
 		struct exynos_drm_gem *exynos_gem_obj = to_exynos_gem(obj);
 
-		exynos_gem_obj->base.funcs = &exynos_drm_gem_object_funcs;
 		exynos_gem_obj->flags |= flags;
 
 		ret = drm_gem_handle_create(filep, obj, gem_handle);
