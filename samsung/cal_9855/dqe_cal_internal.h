@@ -18,9 +18,9 @@ void dqe_reg_set_rcd_en_internal(u32 id, bool en);
 void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id);
 int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us);
 #else
-static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
-void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id) {}
-int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us) {}
+static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {return;}
+static inline void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id) {return;}
+static inline int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us) {return 0;}
 #endif
 
 #endif /* __SAMSUNG_DPP_CAL_INTERNAL_H__ */

@@ -22,13 +22,13 @@ u32 cgc_reg_get_irq_and_clear_internal(u32 id);
 void cgc_reg_set_cgc_start_internal(u32 id);
 void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr);
 #else
-static inline void rcd_reg_init(u32 id) {}
-static inline void rcd_reg_deinit(u32 id, bool reset, const unsigned long attr) {}
+static inline void rcd_reg_init(u32 id) {return;}
+static inline int rcd_reg_deinit(u32 id, bool reset, const unsigned long attr) {return 0;}
 static inline void rcd_reg_configure_params(u32 id, struct dpp_params_info *p,
-		const unsigned long attr) {}
-u32 cgc_reg_get_irq_and_clear_internal(u32 id) {}
-void cgc_reg_set_cgc_start_internal(u32 id) {}
-void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr) {}
+		const unsigned long attr) {return;}
+static inline u32 cgc_reg_get_irq_and_clear_internal(u32 id) {return 0;}
+static inline void cgc_reg_set_cgc_start_internal(u32 id) {return;}
+static inline void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr) {return;}
 #endif
 
 #endif /* __SAMSUNG_DPP_CAL_INTERNAL_H__ */
