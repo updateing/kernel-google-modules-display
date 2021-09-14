@@ -30,6 +30,9 @@ struct s6e3hc3_panel {
 
 	/** @early_exit_enabled: indicates whether panel is currently in early exit mode */
 	int early_exit_enabled;
+
+	/** @is_hbm_update: indicates if there is a hbm state update request */
+	bool is_hbm_update;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct s6e3hc3_panel, base)
@@ -316,7 +319,7 @@ static DEFINE_EXYNOS_CMD_SET(s6e3hc3_mode_60_wakeup);
 static const struct s6e3hc3_mode_data s6e3hc3_mode_60 = {
 	.common_mode_cmd_set = &s6e3hc3_mode_60_common_cmd_set,
 	.wakeup_mode_cmd_set = &s6e3hc3_mode_60_wakeup_cmd_set,
-	.idle_vrefresh = 10,
+	.idle_vrefresh = 0, /* disable idle mode */
 };
 
 static u8 s6e3hc3_get_te2_option(struct exynos_panel *ctx)
@@ -389,8 +392,8 @@ static void s6e3hc3_update_te2(struct exynos_panel *ctx)
 
 static inline bool is_auto_mode_preferred(struct exynos_panel *ctx)
 {
-	/* don't want to enable auto mode/early exit during hbm */
-	if (ctx->hbm_mode)
+	/* don't want to enable auto mode/early exit during hbm or dimming on */
+	if (IS_HBM_ON(ctx->hbm_mode) || ctx->dimming_on)
 		return false;
 
 	return ctx->panel_idle_enabled;
@@ -414,6 +417,7 @@ static void s6e3hc3_update_early_exit(struct exynos_panel *ctx, bool enable)
 static void s6e3hc3_update_refresh_mode(struct exynos_panel *ctx,
 				     const struct s6e3hc3_mode_data *mdata)
 {
+	struct s6e3hc3_panel *spanel = to_spanel(ctx);
 	const bool auto_mode_preferred = is_auto_mode_preferred(ctx);
 	const u32 flags = PANEL_CMD_SET_IGNORE_VBLANK | PANEL_CMD_SET_BATCH;
 
@@ -425,8 +429,8 @@ static void s6e3hc3_update_refresh_mode(struct exynos_panel *ctx,
 
 		s6e3hc3_update_early_exit(ctx, false);
 
-		cmdset = ctx->hbm_mode ? mdata->manual_mode_ghbm_cmd_set :
-					       mdata->manual_mode_cmd_set;
+		cmdset = (!spanel->is_hbm_update && ctx->hbm_mode) ?
+				mdata->manual_mode_ghbm_cmd_set : mdata->manual_mode_cmd_set;
 
 		if (cmdset)
 			exynos_panel_send_cmd_set_flags(ctx, cmdset, flags);
@@ -483,7 +487,8 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		 * idle is being disabled and we have early exit enabled. Make a frequency update
 		 * in order to disable early exit
 		 */
-		if (spanel->early_exit_enabled != is_auto_mode_preferred(ctx)) {
+		if (mdata->auto_mode_cmd_set &&
+			(spanel->early_exit_enabled != is_auto_mode_preferred(ctx))) {
 			dev_dbg(ctx->dev, "early exit mode change detected for mode: %s\n",
 				pmode->mode.name);
 			s6e3hc3_change_frequency(ctx, pmode);
@@ -540,23 +545,25 @@ static int s6e3hc3_atomic_check(struct exynos_panel *ctx, struct drm_atomic_stat
 	if (!old_crtc_state || !new_crtc_state || !new_crtc_state->active)
 		return 0;
 
-	if (ctx->panel_idle_enabled && old_crtc_state->self_refresh_active) {
+	if ((ctx->panel_idle_enabled && old_crtc_state->self_refresh_active) ||
+	    !drm_atomic_crtc_effectively_active(old_crtc_state)) {
 		struct drm_display_mode *mode = &new_crtc_state->adjusted_mode;
 
-		/* set clock to max refresh rate on self refresh exit due to early exit */
+		/* set clock to max refresh rate on self refresh exit or resume due to early exit */
 		mode->clock = mode->htotal * mode->vtotal * 120 / 1000;
 
 		if (mode->clock != new_crtc_state->mode.clock) {
 			new_crtc_state->mode_changed = true;
-			dev_dbg(ctx->dev, "raise mode (%s) clock to 120hz on self refresh exit\n",
-				mode->name);
+			dev_dbg(ctx->dev, "raise mode (%s) clock to 120hz on %s\n",
+				mode->name,
+				old_crtc_state->self_refresh_active ? "self refresh exit" : "resume");
 		}
 	} else if (old_crtc_state->active_changed &&
 		   (old_crtc_state->adjusted_mode.clock != old_crtc_state->mode.clock)) {
-		/* clock hacked in last commit due to self refresh exit, undo that */
+		/* clock hacked in last commit due to self refresh exit or resume, undo that */
 		new_crtc_state->mode_changed = true;
 		new_crtc_state->adjusted_mode.clock = new_crtc_state->mode.clock;
-		dev_dbg(ctx->dev, "restore mode (%s) clock after self refresh exit\n",
+		dev_dbg(ctx->dev, "restore mode (%s) clock after self refresh exit or resume\n",
 			new_crtc_state->mode.name);
 	}
 
@@ -568,7 +575,7 @@ static void s6e3hc3_write_display_mode(struct exynos_panel *ctx,
 {
 	u8 val = S6E3HC3_WRCTRLD_BCTRL_BIT;
 
-	if (ctx->hbm_mode)
+	if (IS_HBM_ON(ctx->hbm_mode))
 		val |= S6E3HC3_WRCTRLD_HBM_BIT;
 
 	if (ctx->hbm.local_hbm.enabled)
@@ -579,23 +586,11 @@ static void s6e3hc3_write_display_mode(struct exynos_panel *ctx,
 
 	dev_dbg(ctx->dev,
 		"%s(wrctrld:0x%x, hbm: %s, dimming: %s local_hbm: %s)\n",
-		__func__, val, ctx->hbm_mode ? "on" : "off",
+		__func__, val, IS_HBM_ON(ctx->hbm_mode) ? "on" : "off",
 		ctx->dimming_on ? "on" : "off",
 		ctx->hbm.local_hbm.enabled ? "on" : "off");
 
 	EXYNOS_DCS_WRITE_SEQ(ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
-}
-
-static void s6e3hc3_set_lp_mode(struct exynos_panel *ctx,
-		const struct exynos_panel_mode *pmode)
-{
-	if (ctx->hbm.local_hbm.enabled == true) {
-		/* TODO: turn off LHBM to avoid underrun */
-		dev_err(ctx->dev, "LHBM is on while switching to LP mode `%s`\n",
-			pmode->mode.name);
-	}
-
-	exynos_panel_set_lp_mode(ctx, pmode);
 }
 
 static void s6e3hc3_set_nolp_mode(struct exynos_panel *ctx,
@@ -796,7 +791,7 @@ static int s6e3hc3_enable(struct drm_panel *panel)
 	ctx->enabled = true;
 
 	if (pmode->exynos_mode.is_lp_mode)
-		s6e3hc3_set_lp_mode(ctx, pmode);
+		exynos_panel_set_lp_mode(ctx, pmode);
 	else
 		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
 
@@ -852,11 +847,14 @@ static void s6e3hc3_commit_done(struct exynos_panel *ctx)
 		s6e3hc3_trigger_early_exit(ctx);
 }
 
-static void s6e3hc3_set_hbm_extra_setting(struct exynos_panel *ctx,
-				 bool hbm_mode)
+static void s6e3hc3_set_hbm_setting(struct exynos_panel *ctx,
+				const struct drm_display_mode *mode, bool is_hbm_on)
 {
+	const int vrefresh = drm_mode_vrefresh(mode);
+
+	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
 	if (ctx->panel_rev == PANEL_REV_PROTO1) {
-		if (hbm_mode) {
+		if (is_hbm_on) {
 			EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x01, 0x49);
 			EXYNOS_DCS_WRITE_SEQ(ctx, 0x49, 0x00);
 			usleep_range(17000, 17010);
@@ -866,46 +864,55 @@ static void s6e3hc3_set_hbm_extra_setting(struct exynos_panel *ctx,
 			EXYNOS_DCS_WRITE_SEQ(ctx, 0x49, 0x01);
 		}
 	} else if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
-		const struct exynos_panel_mode *pmode = ctx->current_mode;
-		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
-
-		if (vrefresh == 60) {
+		if (vrefresh == 60)
 			EXYNOS_DCS_WRITE_TABLE(ctx, mode_set_60hz);
-		} else if (vrefresh == 120) {
-			if (hbm_mode)
-				EXYNOS_DCS_WRITE_TABLE(ctx, mode_set_120hz_GHBM);
-			else
-				EXYNOS_DCS_WRITE_TABLE(ctx, mode_set_120hz);
-		}
+		else if (vrefresh == 120)
+			EXYNOS_DCS_WRITE_TABLE(ctx, mode_set_120hz);
+		EXYNOS_DCS_WRITE_TABLE(ctx, freq_update);
 	}
+	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
+
+	s6e3hc3_write_display_mode(ctx, mode);
 }
 
 static void s6e3hc3_set_hbm_mode(struct exynos_panel *ctx,
-				 bool hbm_mode)
+				 enum exynos_hbm_mode mode)
 {
+	struct s6e3hc3_panel *spanel = to_spanel(ctx);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
+	const bool hbm_update =
+		(IS_HBM_ON(ctx->hbm_mode) != IS_HBM_ON(mode));
+	const bool irc_update =
+		(IS_HBM_ON_IRC_OFF(ctx->hbm_mode) != IS_HBM_ON_IRC_OFF(mode));
 
-	if (hbm_mode == ctx->hbm_mode)
+	if (mode == ctx->hbm_mode)
 		return;
 
 	if (unlikely(!pmode || !pmode->priv_data))
 		return;
 
-	ctx->hbm_mode = hbm_mode;
+	ctx->hbm_mode = mode;
 
-	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
+	if (hbm_update) {
+		const bool is_hbm_on = IS_HBM_ON(mode);
 
-	if (hbm_mode) {
-		s6e3hc3_set_self_refresh(ctx, false);
-		s6e3hc3_set_hbm_extra_setting(ctx, hbm_mode);
-		s6e3hc3_write_display_mode(ctx, &pmode->mode);
-	} else {
-		s6e3hc3_set_hbm_extra_setting(ctx, hbm_mode);
-		s6e3hc3_write_display_mode(ctx, &pmode->mode);
-		s6e3hc3_set_self_refresh(ctx, ctx->self_refresh_active);
+		spanel->is_hbm_update = hbm_update;
+		if (is_hbm_on)
+			s6e3hc3_set_self_refresh(ctx, false);
+		s6e3hc3_set_hbm_setting(ctx, &pmode->mode, is_hbm_on);
+		if (!is_hbm_on)
+			s6e3hc3_set_self_refresh(ctx, ctx->self_refresh_active);
+		spanel->is_hbm_update = false;
+	}
+	if (irc_update) {
+		EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x02, 0xB6, 0x1D);
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0x1D, IS_HBM_ON_IRC_OFF(mode) ? 0x05 : 0x25);
+		EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
 	}
 
-	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
+	dev_info(ctx->dev, "hbm_on=%d hbm_ircoff=%d\n", IS_HBM_ON(ctx->hbm_mode),
+		 IS_HBM_ON_IRC_OFF(ctx->hbm_mode));
 }
 
 static void s6e3hc3_set_dimming_on(struct exynos_panel *ctx,
@@ -925,11 +932,9 @@ static void s6e3hc3_set_local_hbm_mode(struct exynos_panel *ctx,
 	if (ctx->hbm.local_hbm.enabled == local_hbm_en)
 		return;
 
-	mutex_lock(&ctx->mode_lock);
 	pmode = ctx->current_mode;
 	if (unlikely(pmode == NULL)) {
 		dev_err(ctx->dev, "%s: unknown current mode\n", __func__);
-		mutex_unlock(&ctx->mode_lock);
 		return;
 	}
 
@@ -942,7 +947,6 @@ static void s6e3hc3_set_local_hbm_mode(struct exynos_panel *ctx,
 		if (vrefresh != 120) {
 			dev_err(ctx->dev, "unexpected mode `%s` while enabling LHBM, give up\n",
 				pmode->mode.name);
-			mutex_unlock(&ctx->mode_lock);
 			return;
 		}
 	}
@@ -950,22 +954,6 @@ static void s6e3hc3_set_local_hbm_mode(struct exynos_panel *ctx,
 	ctx->hbm.local_hbm.enabled = local_hbm_en;
 	s6e3hc3_extra_lhbm_settings(ctx, local_hbm_en);
 	s6e3hc3_write_display_mode(ctx, &pmode->mode);
-	mutex_unlock(&ctx->mode_lock);
-
-	if (!(ctx->hbm.update_flags & HBM_FLAG_LHBM_UPDATE)) {
-		struct drm_mode_config *config;
-		struct drm_crtc *crtc = NULL;
-
-		config = &ctx->exynos_connector.base.dev->mode_config;
-		drm_modeset_lock(&config->connection_mutex, NULL);
-		if (ctx->exynos_connector.base.state)
-			crtc = ctx->exynos_connector.base.state->crtc;
-		drm_modeset_unlock(&config->connection_mutex);
-		if (crtc) {
-			drm_crtc_wait_one_vblank(crtc);
-			drm_crtc_wait_one_vblank(crtc);
-		}
-	}
 }
 
 static const struct exynos_dsi_cmd s6e3hc3_c10_lhbm_extra_cmds[] = {
@@ -1035,14 +1023,13 @@ static bool s6e3hc3_is_mode_seamless(const struct exynos_panel *ctx,
 	       (c->flags == n->flags);
 }
 
-static u32 s6e3hc3_get_panel_rev(u32 id)
+static void s6e3hc3_get_panel_rev(struct exynos_panel *ctx, u32 id)
 {
-	u8 build_code;
-
 	/* extract command 0xDB */
-	build_code = (id & 0xFF00) >> 8;
+	u8 build_code = (id & 0xFF00) >> 8;
+	u8 rev = ((build_code & 0xE0) >> 3) | (build_code & 0x03);
 
-	return (((build_code & 0xE0) >> 3) | (build_code & 0x03));
+	exynos_panel_get_panel_rev(ctx, rev);
 }
 
 static const struct exynos_display_underrun_param underrun_param = {
@@ -1220,7 +1207,7 @@ static const struct drm_panel_funcs s6e3hc3_drm_funcs = {
 
 static const struct exynos_panel_funcs s6e3hc3_exynos_funcs = {
 	.set_brightness = exynos_panel_set_brightness,
-	.set_lp_mode = s6e3hc3_set_lp_mode,
+	.set_lp_mode = exynos_panel_set_lp_mode,
 	.set_nolp_mode = s6e3hc3_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
 	.set_hbm_mode = s6e3hc3_set_hbm_mode,
