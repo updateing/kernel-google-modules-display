@@ -698,7 +698,7 @@ int exynos_plane_init(struct drm_device *dev,
 		exynos_drm_plane_create_range_property(exynos_plane);
 		exynos_drm_plane_create_colormap_property(exynos_plane);
 	} else {
-		drm_plane_create_zpos_property(plane, MAX_PLANE - 1, 0, MAX_PLANE - 1);
+		drm_plane_create_zpos_immutable_property(plane, MAX_PLANE);
 	}
 
 	if (test_bit(DPP_ATTR_ROT, &dpp->attr))
