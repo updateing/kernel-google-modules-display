@@ -184,8 +184,6 @@ err:
 static const struct drm_format_info *
 exynos_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
 {
-	struct drm_format_name_buf n;
-	const char *format_name;
 	const struct drm_format_info *info = NULL;
 
 	if (cmd->modifier[0] == DRM_FORMAT_MOD_SAMSUNG_COLORMAP) {
@@ -193,8 +191,8 @@ exynos_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
 		if (info->format == DRM_FORMAT_BGRA8888)
 			return info;
 
-		format_name = drm_get_format_name(info->format, &n);
-		DRM_WARN("%s is not proper format for colormap\n", format_name);
+		DRM_WARN("%p4cc is not proper format for colormap\n",
+				&info->format);
 	}
 
 	return NULL;
