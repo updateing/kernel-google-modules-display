@@ -262,7 +262,7 @@ static void s6e3fc3_update_wrctrld(struct exynos_panel *ctx)
 {
 	u8 val = S6E3FC3_WRCTRLD_BCTRL_BIT;
 
-	if (ctx->hbm_mode)
+	if (IS_HBM_ON(ctx->hbm_mode))
 		val |= S6E3FC3_WRCTRLD_HBM_BIT;
 
 	if (ctx->hbm.local_hbm.enabled)
@@ -273,7 +273,7 @@ static void s6e3fc3_update_wrctrld(struct exynos_panel *ctx)
 
 	dev_dbg(ctx->dev,
 		"%s(wrctrld:0x%x, hbm: %s, dimming: %s, local_hbm: %s)\n",
-		__func__, val, ctx->hbm_mode ? "on" : "off",
+		__func__, val, IS_HBM_ON(ctx->hbm_mode) ? "on" : "off",
 		ctx->dimming_on ? "on" : "off",
 		ctx->hbm.local_hbm.enabled ? "on" : "off");
 
@@ -384,18 +384,32 @@ static int s6e3fc3_enable(struct drm_panel *panel)
 }
 
 static void s6e3fc3_set_hbm_mode(struct exynos_panel *exynos_panel,
-				 bool hbm_mode)
+				enum exynos_hbm_mode mode)
 {
-	exynos_panel->hbm_mode = hbm_mode;
+	const bool hbm_update =
+		(IS_HBM_ON(exynos_panel->hbm_mode) != IS_HBM_ON(mode));
+	const bool irc_update =
+		(IS_HBM_ON_IRC_OFF(exynos_panel->hbm_mode) != IS_HBM_ON_IRC_OFF(mode));
 
-	if (exynos_panel->panel_rev == PANEL_REV_PROTO1_1) {
-		if (hbm_mode)
-			exynos_panel_send_cmd_set(exynos_panel, &s6e3fc3_1_pwm_cmd_set);
-		else
-			exynos_panel_send_cmd_set(exynos_panel, &s6e3fc3_4_pwm_cmd_set);
+	exynos_panel->hbm_mode = mode;
+
+	if (hbm_update) {
+		if (exynos_panel->panel_rev == PANEL_REV_PROTO1_1) {
+			if (IS_HBM_ON(mode))
+				exynos_panel_send_cmd_set(exynos_panel, &s6e3fc3_1_pwm_cmd_set);
+			else
+				exynos_panel_send_cmd_set(exynos_panel, &s6e3fc3_4_pwm_cmd_set);
+		}
+		s6e3fc3_update_wrctrld(exynos_panel);
 	}
-
-	s6e3fc3_update_wrctrld(exynos_panel);
+	if (irc_update) {
+		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0xF0, 0x5A, 0x5A);
+		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0xB0, 0x03, 0x8F);
+		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0x8F, IS_HBM_ON_IRC_OFF(mode) ? 0x05 : 0x25);
+		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0xF0, 0xA5, 0xA5);
+	}
+	dev_info(exynos_panel->dev, "hbm_on=%d hbm_ircoff=%d\n", IS_HBM_ON(exynos_panel->hbm_mode),
+		 IS_HBM_ON_IRC_OFF(exynos_panel->hbm_mode));
 }
 
 static void s6e3fc3_set_dimming_on(struct exynos_panel *exynos_panel,
@@ -412,25 +426,8 @@ static void s6e3fc3_set_local_hbm_mode(struct exynos_panel *exynos_panel,
 	if (exynos_panel->hbm.local_hbm.enabled == local_hbm_en)
 		return;
 
-	mutex_lock(&exynos_panel->mode_lock);
 	exynos_panel->hbm.local_hbm.enabled = local_hbm_en;
 	s6e3fc3_update_wrctrld(exynos_panel);
-	mutex_unlock(&exynos_panel->mode_lock);
-
-	if (!(exynos_panel->hbm.update_flags & HBM_FLAG_LHBM_UPDATE)) {
-		struct drm_mode_config *config;
-		struct drm_crtc *crtc = NULL;
-
-		config = &exynos_panel->exynos_connector.base.dev->mode_config;
-		drm_modeset_lock(&config->connection_mutex, NULL);
-		if (exynos_panel->exynos_connector.base.state)
-			crtc = exynos_panel->exynos_connector.base.state->crtc;
-		drm_modeset_unlock(&config->connection_mutex);
-		if (crtc) {
-			drm_crtc_wait_one_vblank(crtc);
-			drm_crtc_wait_one_vblank(crtc);
-		}
-	}
 }
 
 static void s6e3fc3_mode_set(struct exynos_panel *ctx,
