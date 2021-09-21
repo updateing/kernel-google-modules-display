@@ -255,7 +255,7 @@ static dma_addr_t dpp_alloc_map_buf_test(void)
 	}
 
 	memset(map.vaddr, 0x80, size);
-	dma_buf_vunmap(buf, map.vaddr);
+	dma_buf_vunmap(buf, &map);
 
 	/* mapping buffer for translating to DVA */
 	attachment = dma_buf_attach(buf, priv->iommu_client);

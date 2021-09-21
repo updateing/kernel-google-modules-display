@@ -43,8 +43,10 @@ void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 
 	if (obj->import_attach) {
 		dma_buf = obj->import_attach->dmabuf;
-		if (dma_buf && exynos_gem_obj->vaddr)
-			dma_buf_vunmap(dma_buf, exynos_gem_obj->vaddr);
+		if (dma_buf && exynos_gem_obj->vaddr) {
+			struct dma_buf_map map = DMA_BUF_MAP_INIT_VADDR(exynos_gem_obj->vaddr);
+			dma_buf_vunmap(dma_buf, &map);
+		}
 
 		drm_prime_gem_destroy(obj, exynos_gem_obj->sgt);
 	}
