@@ -1190,7 +1190,8 @@ static const struct drm_encoder_funcs dsim_encoder_funcs = {
         .early_unregister = dsim_encoder_early_unregister,
 };
 
-static int dsim_add_mipi_dsi_device(struct dsim_device *dsim, const char *pname)
+static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
+	const char *pname, int priority_idx)
 {
 	struct mipi_dsi_device_info info = {
 		.node = NULL,
@@ -1198,6 +1199,7 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim, const char *pname)
 	struct device_node *node;
 	const char *name;
 	const char *dual_dsi;
+	bool found = false;
 
 	dsim_debug(dsim, "preferred panel is %s\n", pname);
 
@@ -1228,8 +1230,17 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim, const char *pname)
 			continue;
 
 		/* if panel name is not specified pick the first device found */
-		if (pname[0] == '\0' || !strncmp(name, pname, PANEL_DRV_LEN)) {
-			strlcpy(info.type, name, sizeof(info.type));
+		found = !strncmp(name, pname, PANEL_DRV_LEN);
+		if (pname[0] == '\0' || found) {
+			/*
+			 * The default is primary panel. If not, add priority
+			 * index in the panel name, i.e. "priority-index:panel-name"
+			 */
+			if (found && priority_idx > 0)
+				scnprintf(info.type, sizeof(info.type),
+					"%d:%s", priority_idx, name);
+			else
+				strlcpy(info.type, name, sizeof(info.type));
 			info.node = of_node_get(node);
 		}
 	}
@@ -1284,11 +1295,11 @@ static int dsim_parse_panel_name(struct dsim_device *dsim)
 
 	name = dsim_get_panel_name(dsim, panel_name, PANEL_DRV_LEN);
 	if (name)
-		return dsim_add_mipi_dsi_device(dsim, name);
+		return dsim_add_mipi_dsi_device(dsim, name, 0);
 
 	name = dsim_get_panel_name(dsim, sec_panel_name, PANEL_DRV_LEN);
 	if (name)
-		return dsim_add_mipi_dsi_device(dsim, name);
+		return dsim_add_mipi_dsi_device(dsim, name, 1);
 
 	return -ENODEV;
 }

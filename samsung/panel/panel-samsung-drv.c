@@ -544,7 +544,6 @@ static int exynos_panel_parse_dt(struct exynos_panel *ctx)
 		goto err;
 
 	ctx->touch_dev = of_parse_phandle(ctx->dev->of_node, "touch", 0);
-	ctx->is_secondary = of_property_read_bool(ctx->dev->of_node, "is_secondary");
 
 err:
 	return ret;
@@ -908,8 +907,16 @@ static ssize_t panel_name_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
 	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	const char *p;
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", dsi->name);
+	/* filter priority info in the dsi device name */
+	p = strstr(dsi->name, ":");
+	if (!p)
+		p = dsi->name;
+	else
+		p++;
+
+	return snprintf(buf, PAGE_SIZE, "%s\n", p);
 }
 
 static ssize_t gamma_store(struct device *dev, struct device_attribute *attr,
@@ -2483,12 +2490,27 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	return ret;
 }
 
+static const char *exynos_panel_get_sysfs_name(struct exynos_panel *ctx)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+	const char *p = !IS_ERR(dsi) ? dsi->name : NULL;
+
+	if (p == NULL || p[1] != ':' || p[0] == '0')
+		return "primary-panel";
+	if (p[0] == '1')
+		return "secondary-panel";
+
+	dev_err(ctx->dev, "unsupported dsi device name %s\n", dsi->name);
+	return "primary-panel";
+}
+
 static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 				      enum drm_bridge_attach_flags flags)
 {
 	struct drm_device *dev = bridge->dev;
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_connector *connector = &ctx->exynos_connector.base;
+	const char *sysfs_name = exynos_panel_get_sysfs_name(ctx);
 	int ret;
 
 	ret = exynos_drm_connector_init(dev, &ctx->exynos_connector,
@@ -2528,14 +2550,13 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 
 	drm_kms_helper_hotplug_event(connector->dev);
 
-	if (!ctx->is_secondary)
-		ret = sysfs_create_link(&bridge->dev->dev->kobj, &ctx->dev->kobj, "primary-panel");
-	else
-		ret = sysfs_create_link(&bridge->dev->dev->kobj, &ctx->dev->kobj, "secondary-panel");
 
+	ret = sysfs_create_link(&bridge->dev->dev->kobj, &ctx->dev->kobj, sysfs_name);
 	if (ret)
-		dev_warn(ctx->dev, "unable to link %s sysfs (%d)\n",
-			(!ctx->is_secondary) ? "primary-panel" : "secondary-panel", ret);
+		dev_warn(ctx->dev, "unable to link %s sysfs (%d)\n", sysfs_name, ret);
+	else
+		dev_dbg(ctx->dev, "succeed to link %s sysfs\n", sysfs_name);
+
 	return 0;
 }
 
@@ -2543,11 +2564,9 @@ static void exynos_panel_bridge_detach(struct drm_bridge *bridge)
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_connector *connector = &ctx->exynos_connector.base;
+	const char *sysfs_name = exynos_panel_get_sysfs_name(ctx);
 
-	if (!ctx->is_secondary)
-		sysfs_remove_link(&bridge->dev->dev->kobj, "primary-panel");
-	else
-		sysfs_remove_link(&bridge->dev->dev->kobj, "secondary-panel");
+	sysfs_remove_link(&bridge->dev->dev->kobj, sysfs_name);
 
 	exynos_debugfs_panel_remove(ctx);
 	sysfs_remove_link(&connector->kdev->kobj, "panel");
