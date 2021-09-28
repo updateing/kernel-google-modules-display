@@ -840,8 +840,8 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 	u32 slice_width_byte_unit, comp_slice_width_byte_unit;
 	u32 comp_slice_width_pixel_unit;
 	u32 overlap_w = 0;
-	u32 dsc_enc0_w = 0, dsc_enc0_h;
-	u32 dsc_enc1_w = 0, dsc_enc1_h;
+	u32 dsc_enc0_w = 0;
+	u32 dsc_enc1_w = 0;
 	u32 i, j;
 
 	width = config->image_width;
@@ -908,17 +908,13 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 
 	if (i == 0 && j == 0) {
 		dsc_enc0_w = comp_slice_width_pixel_unit;
-		dsc_enc0_h = pic_height;
 		if (dscc_en) {
 			dsc_enc1_w = comp_slice_width_pixel_unit;
-			dsc_enc1_h = pic_height;
 		}
 	} else if (i == 0 && j != 0) {
 		dsc_enc0_w = comp_slice_width_pixel_unit + 1;
-		dsc_enc0_h = pic_height;
 		if (dscc_en) {
 			dsc_enc1_w = comp_slice_width_pixel_unit + 1;
-			dsc_enc1_h = pic_height;
 		}
 	} else if (i != 0) {
 		while (1) {
@@ -928,10 +924,8 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 				break;
 		}
 		dsc_enc0_w = comp_slice_width_pixel_unit;
-		dsc_enc0_h = pic_height;
 		if (dscc_en) {
 			dsc_enc1_w = comp_slice_width_pixel_unit;
-			dsc_enc1_h = pic_height;
 		}
 	}
 
