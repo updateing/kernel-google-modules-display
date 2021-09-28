@@ -18,21 +18,51 @@
 
 #include "panel-samsung-drv.h"
 
+#define CMD_BUF_ADD(ctx, seq...) \
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, EXYNOS_DSI_MSG_IGNORE_VBLANK, seq)
+#define CMD_BUF_ADD_SET(ctx, set) \
+	exynos_dsi_dcs_write_buffer(to_mipi_dsi_device(ctx->dev), set, ARRAY_SIZE(set), \
+	EXYNOS_DSI_MSG_IGNORE_VBLANK)
+#define CMD_BUF_ADD_AND_FLUSH(ctx, seq...) \
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, \
+	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND, seq)
+#define CMD_BUF_ADD_SET_AND_FLUSH(ctx, set) \
+	exynos_dsi_dcs_write_buffer(to_mipi_dsi_device(ctx->dev), set, ARRAY_SIZE(set), \
+	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND)
+
+/**
+ * The following features are correlated, if one or more of them change, the others need
+ * to be updated unconditionally.
+ */
+enum s6e3hc3_c10_panel_feature {
+	C10_FEAT_HBM = 0,
+	C10_FEAT_EARLY_EXIT,
+	C10_FEAT_OP_NS,
+	C10_FEAT_FRAME_AUTO,
+	C10_FEAT_MAX,
+};
+
 /**
  * struct s6e3hc3_c10_panel - panel specific runtime info
  *
  * This struct maintains s6e3hc3_c10 panel specific runtime info, any fixed details about panel should
- * most likely go into struct exynos_panel_desc
+ * most likely go into struct exynos_panel_desc. The variables with the prefix hw_ keep track of the
+ * features that were actually committed to hardware, and should be modified after sending cmds to panel,
+ * i.e. updating hw state.
  */
 struct s6e3hc3_c10_panel {
 	/** @base: base panel struct */
 	struct exynos_panel base;
-
-	/** @early_exit_enabled: indicates whether panel is currently in early exit mode */
-	int early_exit_enabled;
-
-	/** @is_hbm_update: indicates if there is a hbm state update request */
-	bool is_hbm_update;
+	/** @feat: software or working correlated features, not guaranteed to be effective in panel */
+	DECLARE_BITMAP(feat, C10_FEAT_MAX);
+	/** @hw_feat: correlated states effective in panel */
+	DECLARE_BITMAP(hw_feat, C10_FEAT_MAX);
+	/** @hw_vrefresh: vrefresh rate effective in panel */
+	u32 hw_vrefresh;
+	/** @hw_idle_vrefresh: idle vrefresh rate effective in panel */
+	u32 hw_idle_vrefresh;
+	/** @hw_irc: HBM IRC state effective in panel */
+	bool hw_irc;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct s6e3hc3_c10_panel, base)
@@ -44,70 +74,6 @@ struct s6e3hc3_c10_panel {
  * different panel modes/refresh rates.
  */
 struct s6e3hc3_c10_mode_data {
-	/**
-	 * @auto_mode_cmd_set:
-	 *
-	 * This cmd set is sent to panel during mode switch to enable auto mode. This mode is
-	 * typically enabled when driver is allowed to change modes while idle. In this mode, the
-	 * panel will automatically drop down to lowest refresh rate when it becomes idle (no user
-	 * updates) without any sw/user involvement.
-	 *
-	 * If auto mode is being enabled, then we also assume early exit is also enabled in order to
-	 * get out of low refresh rate with minimal latency.
-	 *
-	 * If auto mode is not supported for a particular mode, then idle/wakeup cmd sets should be
-	 * defined to go into a lower refresh rate when sw detects idleness.
-	 */
-	const struct exynos_dsi_cmd_set *auto_mode_cmd_set;
-
-	/**
-	 * @manual_mode_cmd_set:
-	 *
-	 * This cmd set is sent to panel during mode switch to enable manual mode. This mode is
-	 * typically enabled when driver is not allowed to change modes while idle. In this mode,
-	 * the panel should remain in this mode (regardless of idleness) until we indicate
-	 * otherwise.
-	 *
-	 * If auto mode cmd set is defined, then manual mode cmd set should also be defined.
-	 */
-	const struct exynos_dsi_cmd_set *manual_mode_cmd_set;
-
-	/**
-	 * @manual_mode_ghbm_cmd_set:
-	 *
-	 * This cmd set is sent to panel during mode switch to enable manual mode in GHBM on
-	 * because the manual mode command is different in normal and global high brightness
-	 * modes on EVT1_1 and after. This mode is typically enabled when driver is not
-	 * allowed to change modes while idle. In this mode, the panel should remain in this
-	 * mode (regardless of idleness) until we indicate otherwise.
-	 *
-	 * If auto mode cmd set is defined, then manual mode cmd set should also be defined.
-	 */
-	const struct exynos_dsi_cmd_set *manual_mode_ghbm_cmd_set;
-
-	/**
-	 * @common_mode_cmd_set:
-	 *
-	 * This cmd set is sent to panel for every mode switch after either manual or auto mode are
-	 * sent to panel.
-	 *
-	 * If manual or auto mode cmd sets are not supported, then this cmd set MUST be defined.
-	 * Otherwise if manual/auto mode cmd sets are defined this is optional.
-	 */
-	const struct exynos_dsi_cmd_set *common_mode_cmd_set;
-
-	/**
-	 * @wakeup_mode_cmd_set:
-	 *
-	 * When driver is allowed to change modes while idle, this function will be called when
-	 * display is coming out of self refresh (i.e. waking up after idle) to go back to expected
-	 * operating mode/refresh rate.
-	 *
-	 * This function is expected be defined if idle_vrefresh is defined in order to revert
-	 * optimizations done while entering idle.
-	 */
-	const struct exynos_dsi_cmd_set *wakeup_mode_cmd_set;
-
 	/**
 	 * @idle_vrefresh:
 	 *
@@ -199,126 +165,8 @@ static const struct exynos_binned_lp s6e3hc3_c10_binned_lp[] = {
 	BINNED_LP_MODE_TIMING("high", 2047, s6e3hc3_c10_lp_high_cmds, 16, 48)
 };
 
-static const u8 early_exit_global_para[] = { 0xB0, 0x00, 0x10, 0xBD };
-static const u8 early_exit_step_global_para[] = { 0xB0, 0x00, 0x21, 0xBD };
-
-static const struct exynos_dsi_cmd s6e3hc3_c10_early_exit_disable_cmds[] = {
-	/* changeable TE: sync on */
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x00),
-
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x21, 0x81),
-	EXYNOS_DSI_CMD0(early_exit_global_para),
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x00),
-	EXYNOS_DSI_CMD0(early_exit_step_global_para),
-	/* step setting, 120 Hz base */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x02, 0x00, 0x04, 0x00, 0x16, 0x00, 0x16, 0x00,
-		0x16, 0x00, 0x16, 0x00, 0x16),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x51, 0xBD),
-	/* step setting, 60 Hz base */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x04, 0x00, 0x08, 0x00, 0x14),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x5E, 0xBD),
-	 /* HLPM */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x00, 0x00, 0x00, 0x08),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x12, 0xBD),
-	/* step setting, 60 Hz */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x01, 0x00, 0x02, 0x00, 0x04, 0x01),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_early_exit_disable);
-
-static const struct exynos_dsi_cmd s6e3hc3_c10_early_exit_enable_cmds[] = {
-	/* fixed TE: sync on*/
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x41),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x06, 0xB9),
-	/* width set */
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x07, 0xBA, 0x07, 0xBA, 0x07, 0xBC),
-
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x21, 0x01),
-	EXYNOS_DSI_CMD0(early_exit_global_para),
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x10),
-	EXYNOS_DSI_CMD0(early_exit_step_global_para),
-	/* step setting, 120 Hz base */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x01, 0x00, 0x03, 0x00, 0x0B, 0x00, 0x0B, 0x00,
-		0x0B, 0x00, 0x0B, 0x00, 0x0B),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x51, 0xBD),
-	/* step setting, 60 Hz base */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x01, 0x00, 0x02, 0x00, 0x05),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x5E, 0xBD),
-	/* HLPM */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x00, 0x00, 0x00, 0x02),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x12, 0xBD),
-	/* step setting, 60 Hz */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x01, 0x00, 0x01, 0x00, 0x02, 0x01),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_early_exit_enable);
-
-static const u8 auto_step_global_para[] = { 0xB0, 0x00, 0x12, 0xBD };
-static const u8 auto_mode[] = { 0xBD, 0x23 };
-static const u8 manual_mode[] = { 0xBD, 0x21 };
-static const u8 mode_set_120hz_120base[] = { 0x60, 0x00 };
-static const u8 mode_set_120hz_GHBM[] = { 0x60, 0x10 };
-static const u8 mode_set_60hz_120base[] = { 0x60, 0x01 };
-
-static const struct exynos_dsi_cmd s6e3hc3_c10_mode_idle_10hz_cmds[] = {
-	EXYNOS_DSI_CMD0(mode_set_120hz_120base),
-	EXYNOS_DSI_CMD0(auto_step_global_para),
-	/* 10hz step setting, 120 Hz base, with early exit on */
-	EXYNOS_DSI_CMD_SEQ(0xBD,
-		0x01, 0x00, 0x0B, 0x00, 0x03, 0x01),
-
-	EXYNOS_DSI_CMD0(auto_mode),
-	EXYNOS_DSI_CMD0(freq_update),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_mode_idle_10hz);
-
-static const struct exynos_dsi_cmd s6e3hc3_c10_mode_120_manual_cmds[] = {
-	EXYNOS_DSI_CMD0(manual_mode),
-	EXYNOS_DSI_CMD0(mode_set_120hz_120base),
-	EXYNOS_DSI_CMD0(freq_update),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_mode_120_manual);
-
-static const struct exynos_dsi_cmd s6e3hc3_c10_mode_120_ghbm_manual_cmds[] = {
-	EXYNOS_DSI_CMD0(manual_mode),
-	EXYNOS_DSI_CMD0(mode_set_120hz_GHBM),
-	EXYNOS_DSI_CMD0(freq_update),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_mode_120_ghbm_manual);
-
 static const struct s6e3hc3_c10_mode_data s6e3hc3_c10_mode_120 = {
-	.auto_mode_cmd_set = &s6e3hc3_c10_mode_idle_10hz_cmd_set,
-	.manual_mode_cmd_set = &s6e3hc3_c10_mode_120_manual_cmd_set,
-	.manual_mode_ghbm_cmd_set = &s6e3hc3_c10_mode_120_ghbm_manual_cmd_set,
-};
-
-static const struct exynos_dsi_cmd s6e3hc3_c10_mode_60_common_cmds[] = {
-	EXYNOS_DSI_CMD0(manual_mode),
-	EXYNOS_DSI_CMD0(mode_set_60hz_120base),
-	EXYNOS_DSI_CMD0(freq_update),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_mode_60_common);
-
-static const struct exynos_dsi_cmd s6e3hc3_c10_mode_60_wakeup_cmds[] = {
-	EXYNOS_DSI_CMD0(auto_step_global_para),
-	/* 60hz step setting with early exit off */
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x01, 0x00, 0x03, 0x00, 0x06, 0x01),
-
-	EXYNOS_DSI_CMD0(manual_mode),
-	EXYNOS_DSI_CMD0(mode_set_60hz_120base),
-	EXYNOS_DSI_CMD0(freq_update),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_mode_60_wakeup);
-
-static const struct s6e3hc3_c10_mode_data s6e3hc3_c10_mode_60 = {
-	.common_mode_cmd_set = &s6e3hc3_c10_mode_60_common_cmd_set,
-	.wakeup_mode_cmd_set = &s6e3hc3_c10_mode_60_wakeup_cmd_set,
-	.idle_vrefresh = 0, /* disable idle mode */
+	.idle_vrefresh = 10,
 };
 
 static u8 s6e3hc3_c10_get_te2_option(struct exynos_panel *ctx)
@@ -329,7 +177,7 @@ static u8 s6e3hc3_c10_get_te2_option(struct exynos_panel *ctx)
 		return S6E3HC3_TE2_CHANGEABLE;
 
 	if (ctx->current_mode->exynos_mode.is_lp_mode ||
-	    spanel->early_exit_enabled)
+	    (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat)))
 		return S6E3HC3_TE2_FIXED;
 
 	return S6E3HC3_TE2_CHANGEABLE;
@@ -375,17 +223,17 @@ static void s6e3hc3_c10_update_te2(struct exynos_panel *ctx)
 		ctx->panel_idle_vrefresh ? "active" : "inactive",
 		width[1], width[2], width[3], width[4], width[5], width[6]);
 
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF0, 0x5A, 0x5A);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x4F, 0xF2);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0x0D);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x01, 0xB9);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB9, option);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x14, 0xB9);
-	EXYNOS_DCS_WRITE_TABLE(ctx, width);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF0, 0xA5, 0xA5);
+	CMD_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x4F, 0xF2);
+	CMD_BUF_ADD(ctx, 0xF2, 0x0D);
+	CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x01, 0xB9);
+	CMD_BUF_ADD(ctx, 0xB9, option);
+	CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x14, 0xB9);
+	CMD_BUF_ADD_SET(ctx, width);
+	CMD_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 }
 
-static inline bool is_auto_mode_preferred(struct exynos_panel *ctx)
+static inline bool is_auto_mode_allowed(struct exynos_panel *ctx)
 {
 	/* don't want to enable auto mode/early exit during hbm or dimming on */
 	if (IS_HBM_ON(ctx->hbm_mode) || ctx->dimming_on)
@@ -394,67 +242,240 @@ static inline bool is_auto_mode_preferred(struct exynos_panel *ctx)
 	return ctx->panel_idle_enabled;
 }
 
-static void s6e3hc3_c10_update_early_exit(struct exynos_panel *ctx, bool enable)
+static void s6e3hc3_c10_update_panel_feat(struct exynos_panel *ctx,
+	const struct exynos_panel_mode *pmode, bool enforce)
 {
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
-	const u32 flags = PANEL_CMD_SET_QUEUE;
+	u32 vrefresh, idle_vrefresh = ctx->panel_idle_vrefresh;
+	u8 val;
+	DECLARE_BITMAP(changed_feat, C10_FEAT_MAX);
 
-	dev_dbg(ctx->dev, "%s: en=%d\n", __func__, enable);
-
-	if (enable)
-		exynos_panel_send_cmd_set_flags(ctx, &s6e3hc3_c10_early_exit_enable_cmd_set, flags);
+	if (pmode)
+		vrefresh = drm_mode_vrefresh(&pmode->mode);
 	else
-		exynos_panel_send_cmd_set_flags(ctx, &s6e3hc3_c10_early_exit_disable_cmd_set, flags);
+		vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
 
-	spanel->early_exit_enabled = enable;
-}
-
-static void s6e3hc3_c10_update_refresh_mode(struct exynos_panel *ctx,
-				     const struct s6e3hc3_c10_mode_data *mdata)
-{
-	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
-	const bool auto_mode_preferred = is_auto_mode_preferred(ctx);
-	const u32 flags = PANEL_CMD_SET_IGNORE_VBLANK | PANEL_CMD_SET_BATCH;
-
-	if (auto_mode_preferred && mdata->auto_mode_cmd_set) {
-		s6e3hc3_c10_update_early_exit(ctx, true);
-		exynos_panel_send_cmd_set_flags(ctx, mdata->auto_mode_cmd_set, flags);
+	if (enforce) {
+		bitmap_fill(changed_feat, C10_FEAT_MAX);
 	} else {
-		const struct exynos_dsi_cmd_set *cmdset;
-
-		s6e3hc3_c10_update_early_exit(ctx, false);
-
-		cmdset = (!spanel->is_hbm_update && ctx->hbm_mode) ?
-				mdata->manual_mode_ghbm_cmd_set : mdata->manual_mode_cmd_set;
-
-		if (cmdset)
-			exynos_panel_send_cmd_set_flags(ctx, cmdset, flags);
+		bitmap_xor(changed_feat, spanel->feat, spanel->hw_feat, C10_FEAT_MAX);
+		if (bitmap_empty(changed_feat, C10_FEAT_MAX) &&
+			vrefresh == spanel->hw_vrefresh &&
+			idle_vrefresh == spanel->hw_idle_vrefresh)
+			return;
 	}
 
-	if (mdata->common_mode_cmd_set)
-		exynos_panel_send_cmd_set_flags(ctx, mdata->common_mode_cmd_set, flags);
+	spanel->hw_vrefresh = vrefresh;
+	spanel->hw_idle_vrefresh = idle_vrefresh;
+	bitmap_copy(spanel->hw_feat, spanel->feat, C10_FEAT_MAX);
+	dev_dbg(ctx->dev,
+		"op=%s ee=%s hbm=%s fi=%s vrefresh=%u idle_vrefresh=%u\n",
+		test_bit(C10_FEAT_OP_NS, spanel->feat) ? "ns" : "hs",
+		test_bit(C10_FEAT_EARLY_EXIT, spanel->feat) ? "on" : "off",
+		test_bit(C10_FEAT_HBM, spanel->feat) ? "on" : "off",
+		test_bit(C10_FEAT_FRAME_AUTO, spanel->feat) ? "auto" : "manual",
+		vrefresh,
+		idle_vrefresh);
 
-	/* when mode is explicitly set panel idle effect would be disabled */
-	ctx->panel_idle_vrefresh = 0;
+	CMD_BUF_ADD_SET(ctx, unlock_cmd_f0);
+
+	if (test_bit(C10_FEAT_EARLY_EXIT, changed_feat)) {
+		/* TE setting */
+		if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat)) {
+			/* Fixed TE */
+			CMD_BUF_ADD(ctx, 0xB9, 0x41);
+			/* TE width setting for 145 us */
+			CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x06, 0xB9);
+			CMD_BUF_ADD(ctx, 0xB9, 0x0C, 0x44, 0x0C, 0x44, 0x00, 0x1B);
+		} else {
+			/* Changeable TE */
+			CMD_BUF_ADD(ctx, 0xB9, 0x00);
+		}
+	}
+
+	/*
+	 * Note: the following command sequence should be sent as a whole if one of panel
+	 * state defined by enum panel_state changes or at turning on panel, or unexpected
+	 * behaviors will be seen, e.g. black screen, flicker.
+	 */
+
+	/*
+	 * clock base and frequency
+	 */
+	CMD_BUF_ADD(ctx, 0xF2, 0x01);
+	if (test_bit(C10_FEAT_OP_NS, spanel->feat)) {
+		if (vrefresh == 10)
+			val = 0x1B;
+		else if (vrefresh == 30)
+			val = 0x19;
+		else
+			val = 0x18;
+	} else {
+		if (vrefresh == 10)
+			val = 0x03;
+		else if (vrefresh == 30)
+			val = 0x02;
+		else if (vrefresh == 60)
+			val = 0x01;
+		else
+			val = 0x00;
+	}
+	CMD_BUF_ADD(ctx, 0x60, val);
+	CMD_BUF_ADD_SET(ctx, freq_update);
+
+	/*
+	 * frame insertion, early-exit, PWM, AID cycle setting
+	 * Note: skip index reg 0xB0 setting as writing reg 0xBD starts
+	 * from 1st byte
+	 */
+	if (test_bit(C10_FEAT_HBM, spanel->feat)) {
+		if (test_bit(C10_FEAT_FRAME_AUTO, spanel->feat)) {
+			if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+				CMD_BUF_ADD(ctx, 0xBD, 0x23, 0x00, 0x03, 0x03, 0x01);
+			else
+				CMD_BUF_ADD(ctx, 0xBD, 0x23, 0x80, 0x03, 0x03, 0x01);
+		} else {
+			if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+				CMD_BUF_ADD(ctx, 0xBD, 0x21, 0x00, 0x03, 0x03, 0x01);
+			else
+				CMD_BUF_ADD(ctx, 0xBD, 0x21, 0x80, 0x03, 0x03, 0x01);
+		}
+	} else {
+		if (test_bit(C10_FEAT_FRAME_AUTO, spanel->feat)) {
+			if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+				CMD_BUF_ADD(ctx, 0xBD, 0x23, 0x01, 0x03, 0x03, 0x03);
+			else
+				CMD_BUF_ADD(ctx, 0xBD, 0x23, 0x81, 0x03, 0x03, 0x03);
+		} else {
+			if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+				CMD_BUF_ADD(ctx, 0xBD, 0x21, 0x01, 0x03, 0x03, 0x03);
+			else
+				CMD_BUF_ADD(ctx, 0xBD, 0x21, 0x81, 0x03, 0x03, 0x03);
+		}
+	}
+	CMD_BUF_ADD_SET(ctx, freq_update);
+
+	/* early-exit timing */
+	CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x10, 0xBD);
+	if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+		CMD_BUF_ADD(ctx, 0xBD, 0x10);
+	else
+		CMD_BUF_ADD(ctx, 0xBD, 0x00);
+
+	if (!(test_bit(C10_FEAT_FRAME_AUTO, spanel->feat))) {
+		if (test_bit(C10_FEAT_OP_NS, spanel->feat)) {
+			CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x51, 0xBD);
+			if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+				CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x02, 0x00, 0x05);
+			else
+				CMD_BUF_ADD(ctx, 0xBD, 0x04, 0x00, 0x08, 0x00, 0x14);
+		} else {
+			CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x21, 0xBD);
+			if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+				CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x03, 0x00, 0x0B,
+				0x00, 0x0B, 0x00, 0x0B, 0x00, 0x0B, 0x00, 0x0B);
+			else
+				CMD_BUF_ADD(ctx, 0xBD, 0x02, 0x00, 0x06, 0x00, 0x16,
+				0x00, 0x16,	0x00, 0x16, 0x00, 0x16, 0x00, 0x16);
+		}
+	}
+	CMD_BUF_ADD_SET(ctx, freq_update);
+
+	/* frequency setting */
+	if (test_bit(C10_FEAT_OP_NS, spanel->feat)) {
+		if (test_bit(C10_FEAT_FRAME_AUTO, spanel->feat)) {
+			if (idle_vrefresh != 10 && idle_vrefresh != 30) {
+				dev_err(ctx->dev, "unsupported idle_vrefresh: %d\n",
+					idle_vrefresh);
+			} else {
+				CMD_BUF_ADD(ctx, 0xBD, 0x23);
+				CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x12, 0xBD);
+				if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat)) {
+					if (idle_vrefresh == 10)
+						CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x05, 0x00,
+						0x00, 0x00);
+					/* idle_vrefresh == 30 */
+					else
+						CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x01, 0x00,
+						0x00, 0x00);
+				} else {
+					if (idle_vrefresh == 10)
+						CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x14, 0x00,
+						0x00, 0x00);
+					/* idle_vrefresh == 30 */
+					else
+						CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x04, 0x00,
+						0x00, 0x00);
+				}
+			}
+		} else {
+			if (vrefresh == 10)
+				val = 0x1B;
+			else if (vrefresh == 30)
+				val = 0x19;
+			else
+				val = 0x18;
+			CMD_BUF_ADD(ctx, 0x60, val);
+		}
+	} else {
+		if (test_bit(C10_FEAT_FRAME_AUTO, spanel->feat)) {
+			if (idle_vrefresh != 10) {
+				dev_err(ctx->dev, "unsupported idle_vrefresh: %d\n",
+					idle_vrefresh);
+			} else {
+				CMD_BUF_ADD(ctx, 0xBD, 0x23);
+				CMD_BUF_ADD(ctx, 0xB0, 0x00, 0x12, 0xBD);
+				if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
+					CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x0B, 0x00, 0x03,
+					0x01);
+				else
+					CMD_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x16, 0x00, 0x06,
+					0x01);
+			}
+		} else {
+			if (vrefresh == 10)
+				val = 0x03;
+			else if (vrefresh == 30)
+				val = 0x02;
+			else if (vrefresh == 60)
+				val = 0x01;
+			else
+				val = 0x00;
+			CMD_BUF_ADD(ctx, 0x60, val);
+		}
+	}
+	CMD_BUF_ADD_SET(ctx, freq_update);
+
+	CMD_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);;
 }
 
 static void s6e3hc3_c10_change_frequency(struct exynos_panel *ctx,
 				     const struct exynos_panel_mode *pmode)
 {
-	const struct s6e3hc3_c10_mode_data *mdata;
+	const bool idle_active =
+		is_auto_mode_allowed(ctx) && ctx->panel_idle_vrefresh;
+	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
+	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 
-	if (unlikely(!ctx))
+	if (vrefresh > ctx->op_hz) {
+		dev_err(ctx->dev,
+		"invalid freq setting: op_hz=%u, vrefresh=%u\n",
+		ctx->op_hz, vrefresh);
 		return;
+	}
 
-	mdata = pmode->priv_data;
-	if (unlikely(!mdata))
-		return;
+	if (idle_active) {
+		set_bit(C10_FEAT_EARLY_EXIT, spanel->feat);
+		set_bit(C10_FEAT_FRAME_AUTO, spanel->feat);
+	} else {
+		clear_bit(C10_FEAT_EARLY_EXIT, spanel->feat);
+		clear_bit(C10_FEAT_FRAME_AUTO, spanel->feat);
+	}
 
-	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
-	s6e3hc3_c10_update_refresh_mode(ctx, mdata);
-	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
+	s6e3hc3_c10_update_panel_feat(ctx, pmode, false);
 
-	dev_dbg(ctx->dev, "%s: change to %uhz\n", __func__, drm_mode_vrefresh(&pmode->mode));
+	dev_dbg(ctx->dev, "change to %u hz (idle: %s)\n",
+		vrefresh, idle_active ? "Active" : "Deactive");
 }
 
 static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
@@ -463,7 +484,6 @@ static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	const struct s6e3hc3_c10_mode_data *mdata;
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	bool idle_active;
-	u16 dsi_flags = PANEL_CMD_SET_IGNORE_VBLANK | PANEL_CMD_SET_BATCH;
 
 	if (unlikely(!pmode))
 		return false;
@@ -477,13 +497,15 @@ static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		return false;
 
 	if (!mdata->idle_vrefresh) {
+		bool ee = test_bit(C10_FEAT_EARLY_EXIT, spanel->feat);
+
+		ctx->panel_idle_vrefresh = 0;
 		/*
 		 * if idle mode is not supported for this mode, then we need to detect case where
 		 * idle is being disabled and we have early exit enabled. Make a frequency update
 		 * in order to disable early exit
 		 */
-		if (mdata->auto_mode_cmd_set &&
-			(spanel->early_exit_enabled != is_auto_mode_preferred(ctx))) {
+		if (ee != is_auto_mode_allowed(ctx)) {
 			dev_dbg(ctx->dev, "early exit mode change detected for mode: %s\n",
 				pmode->mode.name);
 			s6e3hc3_c10_change_frequency(ctx, pmode);
@@ -492,35 +514,27 @@ static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		return false;
 	}
 
-	idle_active = enable && is_auto_mode_preferred(ctx);
-
-	/* if there's no change in idle state then skip cmds */
-	if ((ctx->panel_idle_vrefresh > 0) == idle_active)
-		return false;
-
-	DPU_ATRACE_BEGIN(__func__);
+	idle_active = enable && is_auto_mode_allowed(ctx);
 	ctx->panel_idle_vrefresh = idle_active ? mdata->idle_vrefresh : 0;
 
-	dev_dbg(ctx->dev, "change panel idle active: %d for mode: %s\n", idle_active,
+	DPU_ATRACE_BEGIN(__func__);
+	dev_dbg(ctx->dev, "set idle %s for mode %s\n",
+		idle_active ? "Active" : "Deactive",
 		pmode->mode.name);
-
-	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
-	if (idle_active) {
+	if (ctx->panel_idle_vrefresh) {
 		/* enable early exit while going into idle */
-		s6e3hc3_c10_update_early_exit(ctx, true);
-
-		/* enable 10hz idle mode with 120hz early exit */
-		exynos_panel_send_cmd_set_flags(ctx, &s6e3hc3_c10_mode_idle_10hz_cmd_set, dsi_flags);
+		set_bit(C10_FEAT_EARLY_EXIT, spanel->feat);
+		/* enable auto mode and set step as 10 Hz */
+		set_bit(C10_FEAT_FRAME_AUTO, spanel->feat);
 	} else {
 		/* disable early exit after coming out of idle */
-		s6e3hc3_c10_update_early_exit(ctx, false);
-
-		exynos_panel_send_cmd_set_flags(ctx, mdata->wakeup_mode_cmd_set, dsi_flags);
+		clear_bit(C10_FEAT_EARLY_EXIT, spanel->feat);
+		/* disable auto mode */
+		clear_bit(C10_FEAT_FRAME_AUTO, spanel->feat);
 	}
-	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
+	s6e3hc3_c10_update_panel_feat(ctx, pmode, false);
 
 	backlight_state_changed(ctx->bl);
-
 	DPU_ATRACE_END(__func__);
 
 	return true;
@@ -566,9 +580,18 @@ static int s6e3hc3_c10_atomic_check(struct exynos_panel *ctx, struct drm_atomic_
 }
 
 static void s6e3hc3_c10_write_display_mode(struct exynos_panel *ctx,
-				       const struct drm_display_mode *mode)
+				       const struct drm_display_mode *mode, bool *irc)
 {
+	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	u8 val = S6E3HC3_WRCTRLD_BCTRL_BIT;
+
+	if (irc && (*irc != spanel->hw_irc)) {
+		spanel->hw_irc = *irc;
+		CMD_BUF_ADD_SET(ctx, unlock_cmd_f0);
+		CMD_BUF_ADD(ctx, 0xB0, 0x02, 0xB6, 0x1D);
+		CMD_BUF_ADD(ctx, 0x1D, *irc ? 0x25 : 0x05);
+		CMD_BUF_ADD_SET(ctx, lock_cmd_f0);
+	}
 
 	if (IS_HBM_ON(ctx->hbm_mode))
 		val |= S6E3HC3_WRCTRLD_HBM_BIT;
@@ -585,13 +608,13 @@ static void s6e3hc3_c10_write_display_mode(struct exynos_panel *ctx,
 		ctx->dimming_on ? "on" : "off",
 		ctx->hbm.local_hbm.enabled ? "on" : "off");
 
-	EXYNOS_DCS_WRITE_SEQ(ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
+	CMD_BUF_ADD_AND_FLUSH(ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
 }
 
 static void s6e3hc3_c10_set_nolp_mode(struct exynos_panel *ctx,
 				  const struct exynos_panel_mode *pmode)
 {
-	unsigned int vrefresh = drm_mode_vrefresh(&pmode->mode);
+	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 	u32 delay_us = mult_frac(1000, 1020, vrefresh);
 
 	if (!ctx->enabled)
@@ -599,8 +622,7 @@ static void s6e3hc3_c10_set_nolp_mode(struct exynos_panel *ctx,
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
 	usleep_range(delay_us, delay_us + 10);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF0, 0x5A, 0x5A);
-	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
+	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, NULL);
 	s6e3hc3_c10_change_frequency(ctx, pmode);
 	usleep_range(delay_us, delay_us + 10);
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
@@ -620,6 +642,7 @@ static const struct exynos_dsi_cmd s6e3hc3_c10_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0xB1, 0xA1),		/* SEQ_TSP_SYNC_ON */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),	/* SEQ_GLOBAL_TSP_SYNC */
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0x52),			/* SEQ_TSP_SYNC_ON */
+	EXYNOS_DSI_CMD0(lock_cmd_f0),
 
 	EXYNOS_DSI_CMD_SEQ(0x2A, 0x00, 0x00, 0x05, 0x9F), /* CASET */
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x0C, 0x2F), /* PASET */
@@ -645,7 +668,8 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 	/* DSC related configuration */
 	EXYNOS_PPS_LONG_WRITE(ctx); /* PPS_SETTING */
 	exynos_panel_send_cmd_set(ctx, &s6e3hc3_c10_init_cmd_set);
-	s6e3hc3_c10_write_display_mode(ctx, mode); /* dimming and HBM */
+	s6e3hc3_c10_update_panel_feat(ctx, pmode, true);
+	s6e3hc3_c10_write_display_mode(ctx, mode, NULL); /* dimming and HBM */
 	s6e3hc3_c10_change_frequency(ctx, pmode);
 	ctx->enabled = true;
 
@@ -655,6 +679,20 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
 
 	return 0;
+}
+
+static int s6e3hc3_c10_disable(struct drm_panel *panel)
+{
+	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
+	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
+
+	/* panel register state gets reset after disabling hardware */
+	bitmap_clear(spanel->hw_feat, 0, C10_FEAT_MAX);
+	spanel->hw_vrefresh = 60;
+	spanel->hw_idle_vrefresh = 0;
+	spanel->hw_irc = false;
+
+	return exynos_panel_disable(panel);
 }
 
 /*
@@ -684,16 +722,16 @@ static void s6e3hc3_c10_trigger_early_exit(struct exynos_panel *ctx)
 	dev_dbg(ctx->dev, "sending early exit out cmd\n");
 
 	DPU_ATRACE_BEGIN(__func__);
-	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
-	EXYNOS_DCS_WRITE_TABLE(ctx, freq_update);
-	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
+	CMD_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	CMD_BUF_ADD_SET(ctx, freq_update);
+	CMD_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 	DPU_ATRACE_END(__func__);
 }
 
 static void s6e3hc3_c10_commit_done(struct exynos_panel *ctx)
 {
 	const struct s6e3hc3_c10_mode_data *mdata;
-	const struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
+	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 
 	if (!ctx->enabled || !ctx->current_mode)
 		return;
@@ -702,24 +740,8 @@ static void s6e3hc3_c10_commit_done(struct exynos_panel *ctx)
 	if (!mdata)
 		return;
 
-	if (spanel->early_exit_enabled)
+	if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat))
 		s6e3hc3_c10_trigger_early_exit(ctx);
-}
-
-static void s6e3hc3_c10_set_hbm_setting(struct exynos_panel *ctx,
-				const struct drm_display_mode *mode, bool is_hbm_on)
-{
-	const int vrefresh = drm_mode_vrefresh(mode);
-
-	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
-	if (vrefresh == 60)
-		EXYNOS_DCS_WRITE_TABLE(ctx, mode_set_60hz_120base);
-	else if (vrefresh == 120)
-		EXYNOS_DCS_WRITE_TABLE(ctx, mode_set_120hz_120base);
-	EXYNOS_DCS_WRITE_TABLE(ctx, freq_update);
-	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
-
-	s6e3hc3_c10_write_display_mode(ctx, mode);
 }
 
 static void s6e3hc3_c10_set_hbm_mode(struct exynos_panel *ctx,
@@ -727,52 +749,27 @@ static void s6e3hc3_c10_set_hbm_mode(struct exynos_panel *ctx,
 {
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
-	const bool hbm_update =
-		(IS_HBM_ON(ctx->hbm_mode) != IS_HBM_ON(mode));
-	const bool irc_update =
-		(IS_HBM_ON_IRC_OFF(ctx->hbm_mode) != IS_HBM_ON_IRC_OFF(mode));
+	bool irc;
 
 	if (mode == ctx->hbm_mode)
 		return;
 
-	if (unlikely(!pmode || !pmode->priv_data))
+	if (unlikely(!pmode))
 		return;
 
 	ctx->hbm_mode = mode;
 
-	if (hbm_update) {
-		const bool is_hbm_on = IS_HBM_ON(mode);
-
-		EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
-		/* global para */
-		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x01, 0xBD);
-		/* AID cycle setting */
-		if (is_hbm_on)
-			EXYNOS_DCS_WRITE_SEQ(ctx, 0xBD, 0x00, 0x03, 0x03, 0x01);
-		else
-			EXYNOS_DCS_WRITE_SEQ(ctx, 0xBD, 0x01, 0x03, 0x03, 0x03);
-		EXYNOS_DCS_WRITE_TABLE(ctx, freq_update);
-		EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
-
-		spanel->is_hbm_update = hbm_update;
-		if (is_hbm_on)
-			s6e3hc3_c10_set_self_refresh(ctx, false);
-		s6e3hc3_c10_set_hbm_setting(ctx, &pmode->mode, is_hbm_on);
-		if (!is_hbm_on)
-			s6e3hc3_c10_set_self_refresh(ctx, ctx->self_refresh_active);
-		spanel->is_hbm_update = false;
+	if (mode != HBM_OFF) {
+		irc = mode == HBM_ON_IRC_ON;
+		set_bit(C10_FEAT_HBM, spanel->feat);
+		s6e3hc3_c10_update_panel_feat(ctx, NULL, false);
+		s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, &irc);
+	} else {
+		irc = false;
+		clear_bit(C10_FEAT_HBM, spanel->feat);
+		s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, &irc);
+		s6e3hc3_c10_update_panel_feat(ctx, NULL, false);
 	}
-
-	/* IR compensation control */
-	if (irc_update) {
-		EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
-		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x02, 0xB6, 0x1D);
-		EXYNOS_DCS_WRITE_SEQ(ctx, 0x1D, IS_HBM_ON_IRC_OFF(mode) ? 0x05 : 0x25);
-		EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
-	}
-
-	dev_info(ctx->dev, "hbm_on=%d hbm_ircoff=%d\n", IS_HBM_ON(ctx->hbm_mode),
-		 IS_HBM_ON_IRC_OFF(ctx->hbm_mode));
 }
 
 static void s6e3hc3_c10_set_dimming_on(struct exynos_panel *ctx,
@@ -781,7 +778,7 @@ static void s6e3hc3_c10_set_dimming_on(struct exynos_panel *ctx,
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 	ctx->dimming_on = dimming_on;
-	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
+	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, NULL);
 }
 
 static const struct exynos_dsi_cmd s6e3hc3_c10_lhbm_extra_cmds[] = {
@@ -823,12 +820,14 @@ static void s6e3hc3_c10_set_local_hbm_mode(struct exynos_panel *ctx,
 	if (local_hbm_en)
 		exynos_panel_send_cmd_set_flags(ctx,
 			&s6e3hc3_c10_lhbm_extra_cmd_set, flags);
-	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
+	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, NULL);
 }
 
 static void s6e3hc3_c10_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
+	const struct s6e3hc3_c10_mode_data *mdata = pmode->priv_data;
+
 	if (!ctx->enabled)
 		return;
 
@@ -836,6 +835,11 @@ static void s6e3hc3_c10_mode_set(struct exynos_panel *ctx,
 		dev_warn(ctx->dev, "do mode change (`%s`) unexpectedly when LHBM is ON\n",
 			pmode->mode.name);
 
+	if (mdata && mdata->idle_vrefresh &&
+		ctx->panel_idle_vrefresh && is_auto_mode_allowed(ctx))
+		ctx->panel_idle_vrefresh = mdata->idle_vrefresh;
+	else
+		ctx->panel_idle_vrefresh = 0;
 	s6e3hc3_c10_change_frequency(ctx, pmode);
 }
 
@@ -848,6 +852,27 @@ static bool s6e3hc3_c10_is_mode_seamless(const struct exynos_panel *ctx,
 	/* seamless mode set can happen if active region resolution is same */
 	return (c->vdisplay == n->vdisplay) && (c->hdisplay == n->hdisplay) &&
 	       (c->flags == n->flags);
+}
+
+static int s6e3hc3_c10_set_op_hz(struct exynos_panel *ctx, unsigned int hz)
+{
+	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
+	u32 vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
+
+	if (vrefresh > hz) {
+		dev_err(ctx->dev, "invalid op_hz=%d for vrefresh=%d\n",
+			hz, vrefresh);
+		return -EINVAL;
+	}
+
+	ctx->op_hz = hz;
+	if (hz == 60)
+		set_bit(C10_FEAT_OP_NS, spanel->feat);
+	else
+		clear_bit(C10_FEAT_OP_NS, spanel->feat);
+	s6e3hc3_c10_update_panel_feat(ctx, NULL, false);
+	dev_info(ctx->dev, "set op_hz at %d\n", hz);
+	return 0;
 }
 
 static void s6e3hc3_c10_get_panel_rev(struct exynos_panel *ctx, u32 id)
@@ -898,7 +923,6 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 			},
 			.underrun_param = &underrun_param,
 		},
-		.priv_data = &s6e3hc3_c10_mode_60,
 		.te2_timing = {
 			.rising_edge = 16,
 			.falling_edge = 48,
@@ -973,41 +997,11 @@ static const struct exynos_panel_mode s6e3hc3_c10_lp_mode = {
 	}
 };
 
-static void s6e3hc3_c10_panel_mode_create_cmdset(struct exynos_panel *ctx,
-					     const struct exynos_panel_mode *pmode)
-{
-	struct dentry *root;
-	const struct s6e3hc3_c10_mode_data *mdata = pmode->priv_data;
-
-	if (!mdata)
-		return;
-
-	root = debugfs_create_dir(pmode->mode.name, ctx->debugfs_cmdset_entry);
-	if (!root) {
-		dev_err(ctx->dev, "unable to create %s mode debugfs dir\n", pmode->mode.name);
-		return;
-	}
-
-	exynos_panel_debugfs_create_cmdset(ctx, root, mdata->auto_mode_cmd_set, "auto_mode");
-	exynos_panel_debugfs_create_cmdset(ctx, root, mdata->manual_mode_cmd_set, "manual_mode");
-	exynos_panel_debugfs_create_cmdset(ctx, root, mdata->manual_mode_ghbm_cmd_set,
-					   "manual_ghbm_mode");
-	exynos_panel_debugfs_create_cmdset(ctx, root, mdata->common_mode_cmd_set, "common_mode");
-	exynos_panel_debugfs_create_cmdset(ctx, root, mdata->wakeup_mode_cmd_set, "wakeup");
-}
-
 static void s6e3hc3_c10_panel_init(struct exynos_panel *ctx)
 {
 	struct dentry *csroot = ctx->debugfs_cmdset_entry;
-	int i;
 
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &s6e3hc3_c10_init_cmd_set, "init");
-	exynos_panel_debugfs_create_cmdset(ctx, csroot, &s6e3hc3_c10_early_exit_enable_cmd_set,
-					   "early_exit_enable");
-	exynos_panel_debugfs_create_cmdset(ctx, csroot, &s6e3hc3_c10_early_exit_disable_cmd_set,
-					   "early_exit_disable");
-	for (i = 0; i < ctx->desc->num_modes; i++)
-		s6e3hc3_c10_panel_mode_create_cmdset(ctx, &ctx->desc->modes[i]);
 }
 
 static int s6e3hc3_c10_panel_probe(struct mipi_dsi_device *dsi)
@@ -1018,11 +1012,13 @@ static int s6e3hc3_c10_panel_probe(struct mipi_dsi_device *dsi)
 	if (!spanel)
 		return -ENOMEM;
 
+	spanel->base.op_hz = 120;
+	spanel->hw_vrefresh = 60;
 	return exynos_panel_common_init(dsi, &spanel->base);
 }
 
 static const struct drm_panel_funcs s6e3hc3_c10_drm_funcs = {
-	.disable = exynos_panel_disable,
+	.disable = s6e3hc3_c10_disable,
 	.unprepare = exynos_panel_unprepare,
 	.prepare = exynos_panel_prepare,
 	.enable = s6e3hc3_c10_enable,
@@ -1047,6 +1043,7 @@ static const struct exynos_panel_funcs s6e3hc3_c10_exynos_funcs = {
 	.commit_done = s6e3hc3_c10_commit_done,
 	.atomic_check = s6e3hc3_c10_atomic_check,
 	.set_self_refresh = s6e3hc3_c10_set_self_refresh,
+	.set_op_hz = s6e3hc3_c10_set_op_hz,
 };
 
 const struct brightness_capability s6e3hc3_c10_brightness_capability = {
