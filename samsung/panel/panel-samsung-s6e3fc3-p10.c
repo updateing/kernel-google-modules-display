@@ -96,6 +96,93 @@ static const struct exynos_dsi_cmd s6e3fc3_p10_init_cmds[] = {
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_init);
 
+#define LHBM_GAMMA_CMD_SIZE 6
+/**
+ * struct s6e3fc3_p10_panel - panel specific runtime info
+ *
+ * This struct maintains s6e3fc3_p10 panel specific runtime info, any fixed details about panel
+ * should most likely go into struct exynos_panel_desc
+ */
+struct s6e3fc3_p10_panel {
+	/** @base: base panel struct */
+	struct exynos_panel base;
+
+	/** @local_hbm_gamma: lhbm gamma data */
+	struct local_hbm_gamma {
+		u8 hs_cmd[LHBM_GAMMA_CMD_SIZE];
+		u8 ns_cmd[LHBM_GAMMA_CMD_SIZE];
+	} local_hbm_gamma;
+};
+
+#define to_spanel(ctx) container_of(ctx, struct s6e3fc3_p10_panel, base)
+
+static void s6e3fc3_p10_lhbm_gamma_read(struct exynos_panel *ctx)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+	struct s6e3fc3_p10_panel *spanel = to_spanel(ctx);
+	int ret;
+	u8 *hs_cmd = spanel->local_hbm_gamma.hs_cmd;
+	u8 *ns_cmd = spanel->local_hbm_gamma.ns_cmd;
+	u8 buf[LHBM_GAMMA_CMD_SIZE * 2] = {0};
+
+	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x28, 0xF2); /* global para */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xCC); /* 10 bit */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x22, 0xD8); /* global para */
+	ret = mipi_dsi_dcs_read(dsi, 0xD8, hs_cmd + 1, LHBM_GAMMA_CMD_SIZE - 1);
+	if (ret == (LHBM_GAMMA_CMD_SIZE - 1)) {
+		// fill in gamma write command 0x65 in offset 0
+		hs_cmd[0] = 0x65;
+		exynos_bin2hex(hs_cmd + 1, LHBM_GAMMA_CMD_SIZE - 1,
+			buf, sizeof(buf));
+		dev_info(ctx->dev, "%s: hs_gamma: %s\n", __func__, buf);
+	} else {
+		dev_err(ctx->dev, "fail to read LHBM gamma in HS\n");
+	}
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x1D, 0xD8); /* global para */
+	ret = mipi_dsi_dcs_read(dsi, 0xD8, ns_cmd + 1, LHBM_GAMMA_CMD_SIZE - 1);
+	if (ret == (LHBM_GAMMA_CMD_SIZE - 1)) {
+		// fill in gamma write command 0x65 in offset 0
+		ns_cmd[0] = 0x65;
+		exynos_bin2hex(ns_cmd + 1, LHBM_GAMMA_CMD_SIZE - 1,
+			buf, sizeof(buf));
+		dev_info(ctx->dev, "%s: ns_gamma: %s\n", __func__, buf);
+	} else {
+		dev_err(ctx->dev, "fail to read LHBM gamma in NS\n");
+	}
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x28, 0xF2); /* global para */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xC4); /* 8 bit */
+	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
+}
+
+static void s6e3fc3_p10_lhbm_gamma_write(struct exynos_panel *ctx)
+{
+	struct s6e3fc3_p10_panel *spanel = to_spanel(ctx);
+	u8 *hs_cmd = spanel->local_hbm_gamma.hs_cmd;
+	u8 *ns_cmd = spanel->local_hbm_gamma.ns_cmd;
+
+	if (!hs_cmd[0] && !ns_cmd[0]) {
+		dev_err(ctx->dev, "%s: no lhbm gamma!\n", __func__);
+		return;
+	}
+
+	dev_dbg(ctx->dev, "%s\n", __func__);
+	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x28, 0xF2); /* global para */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xCC); /* 10 bit */
+	if (hs_cmd[0]) {
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x03, 0xCD, 0x65); /* global para */
+		exynos_dcs_write(ctx, hs_cmd, LHBM_GAMMA_CMD_SIZE); /* write gamma */
+	}
+	if (ns_cmd[0]) {
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x03, 0xC8, 0x65); /* global para */
+		exynos_dcs_write(ctx, ns_cmd, LHBM_GAMMA_CMD_SIZE); /* write gamma */
+	}
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x28, 0xF2); /* global para */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xC4); /* 8 bit */
+	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
+}
+
 static void s6e3fc3_p10_get_te2_setting(struct exynos_panel_te2_timing *timing,
 				    u8 *setting)
 {
@@ -254,6 +341,8 @@ static int s6e3fc3_p10_enable(struct drm_panel *panel)
 
 	s6e3fc3_p10_change_frequency(ctx, drm_mode_vrefresh(mode));
 
+	s6e3fc3_p10_lhbm_gamma_write(ctx);
+
 	/* DSC related configuration */
 	exynos_dcs_compression_mode(ctx, 0x1); /* DSC_DEC_ON */
 	EXYNOS_PPS_LONG_WRITE(ctx); /* PPS_SETTING */
@@ -364,6 +453,8 @@ static void s6e3fc3_p10_panel_init(struct exynos_panel *ctx)
 
 	exynos_panel_debugfs_create_cmdset(ctx, csroot,
 					   &s6e3fc3_p10_init_cmd_set, "init");
+	s6e3fc3_p10_lhbm_gamma_read(ctx);
+	s6e3fc3_p10_lhbm_gamma_write(ctx);
 }
 
 static void s6e3fc3_p10_get_panel_rev(struct exynos_panel *ctx, u32 id)
@@ -373,6 +464,17 @@ static void s6e3fc3_p10_get_panel_rev(struct exynos_panel *ctx, u32 id)
 	u8 rev = ((build_code & 0xE0) >> 3) | ((build_code & 0x0C) >> 2);
 
 	exynos_panel_get_panel_rev(ctx, rev);
+}
+
+static int s6e3fc3_p10_panel_probe(struct mipi_dsi_device *dsi)
+{
+	struct s6e3fc3_p10_panel *spanel;
+
+	spanel = devm_kzalloc(&dsi->dev, sizeof(*spanel), GFP_KERNEL);
+	if (!spanel)
+		return -ENOMEM;
+
+	return exynos_panel_common_init(dsi, &spanel->base);
 }
 
 static const struct exynos_display_underrun_param underrun_param = {
@@ -575,7 +677,7 @@ static const struct of_device_id exynos_panel_of_match[] = {
 MODULE_DEVICE_TABLE(of, exynos_panel_of_match);
 
 static struct mipi_dsi_driver exynos_panel_driver = {
-	.probe = exynos_panel_probe,
+	.probe = s6e3fc3_p10_panel_probe,
 	.remove = exynos_panel_remove,
 	.driver = {
 		.name = "panel-samsung-s6e3fc3-p10",
