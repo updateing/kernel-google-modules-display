@@ -356,13 +356,12 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 
 	for_each_oldnew_connector_in_state(old_state, conn, old_conn_state,
 					new_conn_state, i) {
-		struct writeback_device *wb;
 		bool old_job, new_job;
 
 		if (conn->connector_type != DRM_MODE_CONNECTOR_WRITEBACK)
 			continue;
 
-		wb = conn_to_wb_dev(conn);
+		conn_to_wb_dev(conn);
 
 		old_job = wb_check_job(old_conn_state);
 		new_job = wb_check_job(new_conn_state);

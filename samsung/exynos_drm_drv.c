@@ -102,10 +102,10 @@ static int exynos_atomic_check_windows(struct drm_device *dev, struct drm_atomic
 	int i;
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
-		struct exynos_drm_crtc_state *old_exynos_crtc_state, *new_exynos_crtc_state;
+		struct exynos_drm_crtc_state *new_exynos_crtc_state;
 		unsigned int old_win_cnt, new_win_cnt;
 
-		old_exynos_crtc_state = to_exynos_crtc_state(old_crtc_state);
+		to_exynos_crtc_state(old_crtc_state);
 		new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
 
 		if (!new_crtc_state->active_changed && !new_crtc_state->zpos_changed)
