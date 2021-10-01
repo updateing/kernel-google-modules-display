@@ -523,20 +523,20 @@ const struct brightness_capability s6e3fc3_p10_brightness_capability = {
 		},
 		.percentage = {
 			.min = 0,
-			.max = 62,
+			.max = 50,
 		},
 	},
 	.hbm = {
 		.nits = {
 			.min = 550,
-			.max = 800,
+			.max = 1000,
 		},
 		.level = {
 			.min = 2048,
 			.max = 4095,
 		},
 		.percentage = {
-			.min = 62,
+			.min = 50,
 			.max = 100,
 		},
 	},
