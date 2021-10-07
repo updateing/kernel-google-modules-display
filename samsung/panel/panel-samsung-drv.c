@@ -684,8 +684,8 @@ void exynos_panel_send_cmd_set_flags(struct exynos_panel *ctx,
 		dsi_flags |= EXYNOS_DSI_MSG_IGNORE_VBLANK;
 
 	/* if not batched or queued, all commands should be sent out immediately */
-	if (!(flags & async_mask))
-		dsi_flags |= MIPI_DSI_MSG_LASTCOMMAND;
+	if (flags & async_mask)
+		dsi_flags |= EXYNOS_DSI_MSG_QUEUE;
 
 	c = &cmd_set->cmds[cmd_set->num_cmd - 1];
 	if (!c->panel_rev) {
@@ -710,7 +710,7 @@ void exynos_panel_send_cmd_set_flags(struct exynos_panel *ctx,
 			continue;
 
 		if ((c == last_cmd) && !(flags & PANEL_CMD_SET_QUEUE))
-			dsi_flags |= MIPI_DSI_MSG_LASTCOMMAND;
+			dsi_flags &= ~EXYNOS_DSI_MSG_QUEUE;
 
 		exynos_dsi_dcs_write_buffer(dsi, c->cmd, c->cmd_len, dsi_flags);
 		if (delay_ms)
@@ -1908,7 +1908,6 @@ static int exynos_dsi_debugfs_add(struct mipi_dsi_device *dsi,
 		return -ENOMEM;
 
 	reg_data->dsi = dsi;
-	reg_data->flags = MIPI_DSI_MSG_LASTCOMMAND;
 
 	debugfs_create_u8("address", 0600, reg_root, &reg_data->address);
 	debugfs_create_u8("type", 0600, reg_root, &reg_data->type);

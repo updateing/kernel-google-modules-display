@@ -1786,7 +1786,7 @@ static void need_wait_vblank(struct dsim_device *dsim)
 }
 
 #define PL_FIFO_THRESHOLD	mult_frac(MAX_PL_FIFO, 75, 100) /* 75% */
-#define IS_LAST(flags)		(((flags) & MIPI_DSI_MSG_LASTCOMMAND) != 0)
+#define IS_LAST(flags)		(((flags) & EXYNOS_DSI_MSG_QUEUE) == 0)
 static int
 dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 {
@@ -1814,7 +1814,7 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 		((dsim->total_pend_pl + msg->tx_len) > PL_FIFO_THRESHOLD))) {
 		dsim_warn(dsim, "warning. changed last command. pend pl/pl(%u,%u)\n",
 				dsim->total_pend_ph, dsim->total_pend_pl);
-		flags |= MIPI_DSI_MSG_LASTCOMMAND;
+		flags &= ~EXYNOS_DSI_MSG_QUEUE;
 	}
 
 	dsim_debug(dsim, "%s last command\n", IS_LAST(flags) ? "" : "Not");

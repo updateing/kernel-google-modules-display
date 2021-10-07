@@ -29,8 +29,8 @@ struct exynos_drm_connector;
 /** Private DSI msg flags **/
 
 /* Stack all commands until lastcommand bit and trigger all in one go */
-#ifndef MIPI_DSI_MSG_LASTCOMMAND
-#define MIPI_DSI_MSG_LASTCOMMAND BIT(3)
+#ifndef EXYNOS_DSI_MSG_QUEUE
+#define EXYNOS_DSI_MSG_QUEUE BIT(13)
 #endif
 
 /* packetgo feature to batch msgs can wait for vblank, use this flag to ignore */
