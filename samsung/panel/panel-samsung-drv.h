@@ -317,6 +317,15 @@ struct exynos_panel_funcs {
 	 * otherwise returns false if no action was taken.
 	 */
 	bool (*set_self_refresh)(struct exynos_panel *exynos_panel, bool enable);
+
+	/**
+	 * @set_op_hz
+	 *
+	 * set display panel working on specified operation rate.
+	 *
+	 * Returns 0 if successfully setting operation rate.
+	 */
+	int (*set_op_hz)(struct exynos_panel *exynos_panel, unsigned int hz);
 };
 
 /**
@@ -440,6 +449,7 @@ struct exynos_panel {
 	 * greater than 0 means panel idle is active
 	 */
 	unsigned int panel_idle_vrefresh;
+	unsigned int op_hz;
 
 	enum exynos_hbm_mode hbm_mode;
 	bool dimming_on;

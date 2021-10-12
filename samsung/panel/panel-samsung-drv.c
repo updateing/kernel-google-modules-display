@@ -1910,11 +1910,76 @@ static const struct file_operations exynos_reset_panel_fops = {
 	.write = exynos_debugfs_reset_panel,
 };
 
+static ssize_t exynos_debugfs_op_hz_write(struct file *file,
+			       const char __user *user_buf,
+			       size_t count, loff_t *ppos)
+{
+	uint32_t hz;
+	int ret;
+	struct seq_file *m = file->private_data;
+	struct mipi_dsi_device *dsi = m->private;
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	const struct exynos_panel_funcs *funcs;
+
+	if (!ctx || !ctx->initialized || !ctx->enabled)
+		return -EPERM;
+
+	funcs = ctx->desc->exynos_panel_func;
+	if (!count || !funcs || !funcs->set_op_hz)
+		return -EINVAL;
+
+	ret = kstrtou32_from_user(user_buf, count, 0, &hz);
+	if (ret) {
+		dev_err(ctx->dev, "invalid op rate value\n");
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	ret = funcs->set_op_hz(ctx, hz);
+	mutex_unlock(&ctx->mode_lock);
+	if (ret) {
+		dev_err(ctx->dev, "failed to set op rate: %d Hz\n", hz);
+		return ret;
+	}
+
+	return count;
+}
+
+static int exynos_debugfs_op_hz_show(struct seq_file *m, void *data)
+{
+	struct mipi_dsi_device *dsi = m->private;
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	const struct exynos_panel_funcs *funcs;
+
+	if (!ctx || !ctx->initialized || !ctx->enabled)
+		return -EPERM;
+
+	funcs = ctx->desc->exynos_panel_func;
+	if (!funcs || !funcs->set_op_hz)
+		return -EINVAL;
+
+	seq_printf(m, "%d\n", ctx->op_hz);
+	return 0;
+}
+
+static int exynos_debugfs_op_hz_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, exynos_debugfs_op_hz_show, inode->i_private);
+}
+
+static const struct file_operations exynos_op_hz_fops = {
+	.owner = THIS_MODULE,
+	.open = exynos_debugfs_op_hz_open,
+	.write = exynos_debugfs_op_hz_write,
+	.read = seq_read,
+};
+
 static int exynos_dsi_debugfs_add(struct mipi_dsi_device *dsi,
 			 struct dentry *parent)
 {
 	struct dentry *reg_root;
 	struct exynos_dsi_reg_data *reg_data;
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 
 	reg_root = debugfs_create_dir("reg", parent);
 	if (!reg_root)
@@ -1936,6 +2001,10 @@ static int exynos_dsi_debugfs_add(struct mipi_dsi_device *dsi,
 
 	debugfs_create_file("name", 0600, parent, dsi, &exynos_dsi_name_fops);
 	debugfs_create_file("reset_panel",0200, parent, dsi, &exynos_reset_panel_fops);
+
+	if (ctx && ctx->desc->exynos_panel_func &&
+		ctx->desc->exynos_panel_func->set_op_hz)
+		debugfs_create_file("op_hz",0600, parent, dsi, &exynos_op_hz_fops);
 
 	return 0;
 }
