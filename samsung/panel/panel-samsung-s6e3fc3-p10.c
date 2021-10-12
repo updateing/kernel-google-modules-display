@@ -87,11 +87,25 @@ static const struct exynos_dsi_cmd s6e3fc3_p10_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x09, 0x5F), /* PASET */
 
 	EXYNOS_DSI_CMD0(test_key_on_f0),
-	/* FQ CON setting */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2),
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00), /* FQ CON */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x0E, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x04, 0xD4), /* HW, V-total */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x4C, 0xF6), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF6, 0x48, 0x21), /* Source Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x88, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x2D, 0x22), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x8E, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x2D, 0x22), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xA6, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x05, 0x18, 0x22, 0x21), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xBF, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x09, 0x28), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xC5, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x09, 0x28), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xB0, 0xDF, 0x66),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x66, 0x71), /* EM off setting */
 	EXYNOS_DSI_CMD0(freq_update),
-	/* TODO: HS mode settings */
 	EXYNOS_DSI_CMD0(test_key_off_f0)
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_init);
@@ -121,6 +135,91 @@ static const struct exynos_dsi_cmd s6e3fc3_p10_lhbm_location_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_off_f0)
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_lhbm_location);
+
+static const struct exynos_dsi_cmd s6e3fc3_p10_mode_ns_60_cmds[] = {
+	EXYNOS_DSI_CMD0(test_key_on_f0),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x80), /* FQ CON */
+	EXYNOS_DSI_CMD_SEQ(0x60, 0x00), /* 60 hz NS */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x0E, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00, 0x14), /* HW, V-total */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x4C, 0xF6), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF6, 0x48, 0x15), /* Source Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x88, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xCB, 0x1D, 0x30), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xCB, 0x1D, 0x16), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x8E, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xCB, 0x1D, 0x30), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xCB, 0x1D, 0x16), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xA6, 0xCB), /* Global Para */
+	/* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xCB, 0x03, 0x10, 0x16, 0x30),
+	/* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xCB, 0x03, 0x10, 0x16, 0x16),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xBF, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xCB, 0x06, 0x29), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xCB, 0x06, 0x34), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xC5, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xCB, 0x06, 0x29), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xCB, 0x06, 0x34), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xB0, 0xDF, 0x66),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x66, 0x4C), /* EM off setting */
+	EXYNOS_DSI_CMD0(freq_update),
+	EXYNOS_DSI_CMD0(test_key_off_f0)
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_mode_ns_60);
+
+static const struct exynos_dsi_cmd s6e3fc3_p10_mode_hs_60_cmds[] = {
+	EXYNOS_DSI_CMD0(test_key_on_f0),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00), /* FQ CON */
+	EXYNOS_DSI_CMD_SEQ(0x60, 0x00), /* 60 hz HS */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x0E, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x04, 0xD4), /* HW, V-total */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x4C, 0xF6), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF6, 0x48, 0x21), /* Source Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x88, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x2D, 0x22), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x8E, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x2D, 0x22), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xA6, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x05, 0x18, 0x22, 0x21), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xBF, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x09, 0x28), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xC5, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x09, 0x28), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xB0, 0xDF, 0x66),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x66, 0x71), /* EM off setting */
+	EXYNOS_DSI_CMD0(freq_update),
+	EXYNOS_DSI_CMD0(test_key_off_f0)
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_mode_hs_60);
+
+static const struct exynos_dsi_cmd s6e3fc3_p10_mode_hs_90_cmds[] = {
+	EXYNOS_DSI_CMD0(test_key_on_f0),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00), /* FQ CON */
+	EXYNOS_DSI_CMD_SEQ(0x60, 0x08), /* 90 hz HS */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x0E, 0xF2), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0x04, 0xD4), /* HW, V-total */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x4C, 0xF6), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xF6, 0x48, 0x21), /* Source Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x88, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x2D, 0x22), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x8E, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x2D, 0x22), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xA6, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x05, 0x18, 0x22, 0x21), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xBF, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x09, 0x28), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0xC5, 0xCB), /* Global Para */
+	EXYNOS_DSI_CMD_SEQ(0xCB, 0x09, 0x28), /* LTPS Change */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xB0, 0xDF, 0x66),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x66, 0x71), /* EM off setting */
+	EXYNOS_DSI_CMD0(freq_update),
+	EXYNOS_DSI_CMD0(test_key_off_f0)
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_mode_hs_90);
 
 #define LHBM_GAMMA_CMD_SIZE 6
 /**
@@ -312,7 +411,7 @@ static void s6e3fc3_p10_update_te2(struct exynos_panel *ctx)
 }
 
 static void s6e3fc3_p10_change_frequency(struct exynos_panel *ctx,
-				     unsigned int vrefresh)
+				    const unsigned int vrefresh)
 {
 	if (!ctx || (vrefresh != 60 && vrefresh != 90))
 		return;
@@ -323,6 +422,33 @@ static void s6e3fc3_p10_change_frequency(struct exynos_panel *ctx,
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
 
 	dev_dbg(ctx->dev, "%s: change to %uhz\n", __func__, vrefresh);
+}
+
+static int s6e3fc3_p10_set_op_hz(struct exynos_panel *ctx, unsigned int hz)
+{
+	const unsigned int vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
+
+	if ((vrefresh > hz) || ((hz != 60) && (hz != 90))) {
+		dev_err(ctx->dev, "invalid op_hz=%u for vrefresh=%u\n",
+			hz, vrefresh);
+		return -EINVAL;
+	}
+
+	ctx->op_hz = hz;
+	if (ctx->op_hz == 60) {
+		exynos_panel_send_cmd_set(ctx,
+			&s6e3fc3_p10_mode_ns_60_cmd_set);
+	} else {
+		if (vrefresh == 60) {
+			exynos_panel_send_cmd_set(ctx,
+				&s6e3fc3_p10_mode_hs_60_cmd_set);
+		} else {
+			exynos_panel_send_cmd_set(ctx,
+				&s6e3fc3_p10_mode_hs_90_cmd_set);
+		}
+	}
+	dev_info(ctx->dev, "set op_hz at %u\n", hz);
+	return 0;
 }
 
 static void s6e3fc3_p10_update_wrctrld(struct exynos_panel *ctx)
@@ -492,6 +618,8 @@ static int s6e3fc3_p10_panel_probe(struct mipi_dsi_device *dsi)
 	if (!spanel)
 		return -ENOMEM;
 
+	spanel->base.op_hz = 90;
+
 	return exynos_panel_common_init(dsi, &spanel->base);
 }
 
@@ -629,6 +757,7 @@ static const struct exynos_panel_funcs s6e3fc3_p10_exynos_funcs = {
 	.get_te2_edges = exynos_panel_get_te2_edges,
 	.configure_te2_edges = exynos_panel_configure_te2_edges,
 	.update_te2 = s6e3fc3_p10_update_te2,
+	.set_op_hz = s6e3fc3_p10_set_op_hz,
 };
 
 const struct brightness_capability s6e3fc3_p10_brightness_capability = {
