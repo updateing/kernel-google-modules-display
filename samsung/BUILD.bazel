@@ -38,6 +38,7 @@ kernel_module(
         "panel/panel-samsung-s6e3hc3.ko",
         "panel/panel-samsung-s6e3hc3-c10.ko",
         "panel/panel-samsung-sofef01.ko",
+        "panel/panel-boe-nt37290.ko",
     ],
     kernel_build = "//private/gs-google:cloudripper",
     visibility = [
