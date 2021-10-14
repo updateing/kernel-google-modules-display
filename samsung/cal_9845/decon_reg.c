@@ -705,6 +705,21 @@ static void dsc_reg_set_pps_58_59_rc_range_param0(u32 id, u32 dsc_id, u32 rc_ran
 	dsc_write_mask(id, DSC_PPS56_59(dsc_id), val, mask);
 }
 
+static void dsc_reg_set_pps_76_87_rc_range_params(u32 id, u32 dsc_id,
+		struct decon_dsc *dsc_enc)
+{
+	u32 val;
+
+	val = (dsc_enc->rc_range_parameters[0] << 16) | dsc_enc->rc_range_parameters[1];
+	dsc_write(id, DSC_PPS76_79(dsc_id), val);
+
+	val = (dsc_enc->rc_range_parameters[2] << 16) | dsc_enc->rc_range_parameters[3];
+	dsc_write(id, DSC_PPS80_83(dsc_id), val);
+
+	val = (dsc_enc->rc_range_parameters[4] << 16) | dsc_enc->rc_range_parameters[5];
+	dsc_write(id, DSC_PPS84_87(dsc_id), val);
+}
+
 /* full size default value */
 static u32 dsc_get_dual_slice_mode(struct exynos_dsc *dsc)
 {
@@ -827,12 +842,12 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 	const u32 rc_model_size = 0x2000;
 	u32 num_extra_mux_bits = NUM_EXTRA_MUX_BITS;
 	const u32 initial_xmit_delay = 0x200;
-	const u32 initial_dec_delay = 0x4c0;
+	u32 initial_dec_delay = 0x4c0;
 	/* when 'slice_w >= 70' */
 	const u32 initial_scale_value = 0x20;
-	const u32 first_line_bpg_offset = 0x0c;
+	u32 first_line_bpg_offset = 0x0c;
 	const u32 initial_offset = 0x1800;
-	const u32 rc_range_parameters = 0x0102;
+	const u32 rc_range_parameter0 = 0x0102;
 
 	u32 final_offset, final_scale;
 	u32 flag, nfl_bpg_offset, slice_bpg_offset;
@@ -842,10 +857,14 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 	u32 overlap_w = 0;
 	u32 dsc_enc0_w = 0;
 	u32 dsc_enc1_w = 0;
+	u32 tmp, hrd_delay;
 	u32 i, j;
 
 	width = config->image_width;
 	height = config->image_height;
+
+	if (config->dsc.first_line_bpg_offset)
+		first_line_bpg_offset = config->dsc.first_line_bpg_offset;
 
 	overlap_w = dsc_enc->overlap_w;
 
@@ -896,6 +915,14 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 		* (nfl_bpg_offset + slice_bpg_offset));
 	scale_decrement_interval = groups_per_line / (initial_scale_value - 8);
 
+	tmp = groups_per_line * first_line_bpg_offset;
+	hrd_delay = ((6144 + tmp) + 7) / bpp;
+	initial_dec_delay = hrd_delay - 512;
+#ifndef VESA_SCR_V4
+	if (!config->dsc.use_calculated_init_dec_delay)
+		initial_dec_delay = 0x01B4;
+#endif
+
 	/* 3bytes per pixel */
 	slice_width_byte_unit = slice_width * 3;
 	/* integer value, /3 for 1/3 compression */
@@ -935,6 +962,33 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 			dsc_enc1_w = dsc_enc1_w * 2;
 	}
 
+#ifndef VESA_SCR_V4
+	/* rc_range_parameters[9...14]: different with VESA SCR v4 */
+	dsc_enc->rc_range_parameters[0] = 0x1AB6;
+	dsc_enc->rc_range_parameters[1] = 0x2AF6;
+	dsc_enc->rc_range_parameters[2] = 0x2B34;
+	dsc_enc->rc_range_parameters[3] = 0x2B74;
+	dsc_enc->rc_range_parameters[4] = 0x3B74;
+	dsc_enc->rc_range_parameters[5] = 0x6BF4;
+
+	for (i = 0; i < 6; i++) {
+		if (config->dsc.range_min_qp[i] ||
+			config->dsc.range_max_qp[i] ||
+			config->dsc.range_bpg_offset[i]) {
+			int min_qp, max_qp, bpg_off;
+			u8 pps0, pps1;
+
+			min_qp = config->dsc.range_min_qp[i];
+			max_qp = config->dsc.range_max_qp[i];
+			bpg_off = config->dsc.range_bpg_offset[i];
+
+			pps0 = ((min_qp & 0x1F) << 3) | ((max_qp & 0x1F) >> 2);
+			pps1 = ((max_qp & 0x3) << 6) | (bpg_off & 0x3F);
+			dsc_enc->rc_range_parameters[i] = (pps0 << 8) | pps1;
+		}
+	}
+#endif
+
 	/* Save information to structure variable */
 	dsc_enc->comp_cfg = 0x30;
 	dsc_enc->bit_per_pixel = bpp << 4;
@@ -953,7 +1007,7 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 	dsc_enc->slice_bpg_offset = slice_bpg_offset;
 	dsc_enc->initial_offset = initial_offset;
 	dsc_enc->final_offset = final_offset;
-	dsc_enc->rc_range_parameters = rc_range_parameters;
+	dsc_enc->rc_range_parameter0 = rc_range_parameter0;
 
 	dsc_enc->width_per_enc = dsc_enc0_w;
 }
@@ -961,7 +1015,6 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 static void dsc_reg_set_pps(u32 id, u32 dsc_id, struct decon_dsc *dsc_enc)
 {
 	u32 val;
-	u32 initial_dec_delay;
 
 	val = PPS04_COMP_CFG(dsc_enc->comp_cfg);
 	val |= PPS05_BPP(dsc_enc->bit_per_pixel);
@@ -976,12 +1029,7 @@ static void dsc_reg_set_pps(u32 id, u32 dsc_id, struct decon_dsc *dsc_enc)
 	val |= PPS14_15_CHUNK_SIZE(dsc_enc->chunk_size);
 	dsc_write(id, DSC_PPS12_15(dsc_id), val);
 
-#ifndef VESA_SCR_V4
-	initial_dec_delay = 0x01B4;
-#else
-	initial_dec_delay = dsc_enc->initial_dec_delay;
-#endif
-	val = PPS18_19_INIT_DEC_DELAY(initial_dec_delay);
+	val = PPS18_19_INIT_DEC_DELAY(dsc_enc->initial_dec_delay);
 	val |= PPS16_17_INIT_XMIT_DELAY(dsc_enc->initial_xmit_delay);
 	dsc_write(id, DSC_PPS16_19(dsc_id), val);
 
@@ -1003,14 +1051,9 @@ static void dsc_reg_set_pps(u32 id, u32 dsc_id, struct decon_dsc *dsc_enc)
 
 	/* min_qp0 = 0 , max_qp0 = 4 , bpg_off0 = 2 */
 	dsc_reg_set_pps_58_59_rc_range_param0(id, dsc_id,
-		dsc_enc->rc_range_parameters);
+		dsc_enc->rc_range_parameter0);
 
-#ifndef VESA_SCR_V4
-	/* PPS79 ~ PPS87 : 3HF4 is different with VESA SCR v4 */
-	dsc_write(id, DSC_PPS76_79(dsc_id), 0x1AB62AF6);
-	dsc_write(id, DSC_PPS80_83(dsc_id), 0x2B342B74);
-	dsc_write(id, DSC_PPS84_87(dsc_id), 0x3B746BF4);
-#endif
+	dsc_reg_set_pps_76_87_rc_range_params(id, dsc_id, dsc_enc);
 }
 
 /*
@@ -1040,7 +1083,7 @@ static void dsc_get_decoder_pps_info(struct decon_dsc *dsc_dec,
 	dsc_dec->slice_bpg_offset = (u32) (pps_t[30] << 8 | pps_t[31]);
 	dsc_dec->initial_offset = (u32) (pps_t[32] << 8 | pps_t[33]);
 	dsc_dec->final_offset = (u32) (pps_t[34] << 8 | pps_t[35]);
-	dsc_dec->rc_range_parameters = (u32) (pps_t[58] << 8 | pps_t[59]);
+	dsc_dec->rc_range_parameter0 = (u32) (pps_t[58] << 8 | pps_t[59]);
 }
 
 static u32 dsc_cmp_pps_enc_dec(u32 id, struct decon_dsc *p_enc,
@@ -1139,11 +1182,11 @@ static u32 dsc_cmp_pps_enc_dec(u32 id, struct decon_dsc *p_enc,
 		cal_log_debug(id, "[dsc_pps] final_offset(enc:dec=%d:%d)\n",
 			p_enc->final_offset, p_dec->final_offset);
 	}
-	if (p_enc->rc_range_parameters != p_dec->rc_range_parameters) {
+	if (p_enc->rc_range_parameter0 != p_dec->rc_range_parameter0) {
 		diff_cnt++;
-		cal_log_debug(id, "[dsc_pps] rc_range_params(enc:dec=%d:%d)\n",
-						p_enc->rc_range_parameters,
-						p_dec->rc_range_parameters);
+		cal_log_debug(id, "[dsc_pps] rc_range_param0(enc:dec=%d:%d)\n",
+						p_enc->rc_range_parameter0,
+						p_dec->rc_range_parameter0);
 	}
 
 	cal_log_debug(id, "[dsc_pps] total different count : %d\n", diff_cnt);

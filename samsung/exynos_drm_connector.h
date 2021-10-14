@@ -51,6 +51,13 @@ struct exynos_display_dsc {
 	unsigned int dsc_count;
 	unsigned int slice_count;
 	unsigned int slice_height;
+
+	bool use_calculated_init_dec_delay;
+	unsigned int first_line_bpg_offset;
+	/* rc_range_parameters[9...14] */
+	int range_min_qp[6];
+	int range_max_qp[6];
+	int range_bpg_offset[6];
 };
 
 struct exynos_display_partial {

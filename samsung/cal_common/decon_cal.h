@@ -351,7 +351,10 @@ struct decon_dsc {
 	unsigned int slice_bpg_offset;
 	unsigned int initial_offset;
 	unsigned int final_offset;
-	unsigned int rc_range_parameters;
+	/* PPS58-59 (rc_range_parameter[0]) */
+	unsigned int rc_range_parameter0;
+	/* PPS76-87 (rc_range_parameter[9...14]) */
+	unsigned int rc_range_parameters[6];
 	unsigned int overlap_w;
 	unsigned int width_per_enc;
 	unsigned char *dec_pps_t;

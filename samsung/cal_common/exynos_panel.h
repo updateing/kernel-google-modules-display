@@ -78,6 +78,13 @@ struct exynos_dsc {
 	u32 slice_count;
 	u32 slice_width;
 	u32 slice_height;
+
+	bool use_calculated_init_dec_delay;
+	u32 first_line_bpg_offset;
+	/* rc_range_parameters[9...14] */
+	int range_min_qp[6];
+	int range_max_qp[6];
+	int range_bpg_offset[6];
 };
 
 /* return compressed DSC slice width */

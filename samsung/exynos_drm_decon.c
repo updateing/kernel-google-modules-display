@@ -280,11 +280,23 @@ static void decon_update_dsi_config(struct decon_config *config,
 
 	config->dsc.enabled = exynos_mode->dsc.enabled;
 	if (exynos_mode->dsc.enabled) {
+		int i;
+
 		config->dsc.dsc_count = exynos_mode->dsc.dsc_count;
 		config->dsc.slice_count = exynos_mode->dsc.slice_count;
 		config->dsc.slice_height = exynos_mode->dsc.slice_height;
 		config->dsc.slice_width = DIV_ROUND_UP(config->image_width,
 						       config->dsc.slice_count);
+
+		config->dsc.use_calculated_init_dec_delay =
+				exynos_mode->dsc.use_calculated_init_dec_delay;
+		config->dsc.first_line_bpg_offset = exynos_mode->dsc.first_line_bpg_offset;
+		/* rc_range_parameters[9...14] */
+		for (i = 0; i < 6; i++) {
+			config->dsc.range_min_qp[i] = exynos_mode->dsc.range_min_qp[i];
+			config->dsc.range_max_qp[i] = exynos_mode->dsc.range_max_qp[i];
+			config->dsc.range_bpg_offset[i] = exynos_mode->dsc.range_bpg_offset[i];
+		}
 	}
 
 	is_vid_mode = (exynos_mode->mode_flags & MIPI_DSI_MODE_VIDEO) != 0;
