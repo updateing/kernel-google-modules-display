@@ -247,7 +247,7 @@ static const struct exynos_dsi_cmd s6e3hc3_early_exit_enable_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB9, 0x41),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB0, 0x00, 0x06, 0xB9),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
-						0xB9, 0x07, 0xBA, 0x07, 0xBA, 0x07, 0xF2),
+						0xB9, 0x0C, 0x44, 0x0C, 0x44, 0x00, 0x1C),
 
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x21, 0x02),
 	EXYNOS_DSI_CMD0(early_exit_global_para),
@@ -847,6 +847,18 @@ static void s6e3hc3_commit_done(struct exynos_panel *ctx)
 		s6e3hc3_trigger_early_exit(ctx);
 }
 
+static void s6e3hc3_set_hbm_brightness(struct exynos_panel *ctx,
+				bool is_hbm_on)
+{
+	u32 level;
+
+	if (is_hbm_on)
+		level = ctx->desc->brt_capability->hbm.level.min;
+	else
+		level = ctx->desc->brt_capability->normal.level.max;
+	exynos_panel_set_brightness(ctx, level);
+}
+
 static void s6e3hc3_set_hbm_setting(struct exynos_panel *ctx,
 				const struct drm_display_mode *mode, bool is_hbm_on)
 {
@@ -873,6 +885,7 @@ static void s6e3hc3_set_hbm_setting(struct exynos_panel *ctx,
 	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
 
 	s6e3hc3_write_display_mode(ctx, mode);
+	s6e3hc3_set_hbm_brightness(ctx, is_hbm_on);
 }
 
 static void s6e3hc3_set_hbm_mode(struct exynos_panel *ctx,
