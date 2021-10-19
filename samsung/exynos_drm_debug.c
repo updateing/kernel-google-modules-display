@@ -23,7 +23,7 @@
 
 #include <cal_config.h>
 
-#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
+#if IS_ENABLED(CONFIG_ARM_EXYNOS_DEVFREQ)
 #include <soc/google/exynos-devfreq.h>
 #if defined(CONFIG_SOC_GS101)
 #include <dt-bindings/soc/google/gs101-devfreq.h>
@@ -69,7 +69,7 @@ static bool dpu_event_ignore
 	return true;
 }
 
-#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
+#if IS_ENABLED(CONFIG_ARM_EXYNOS_DEVFREQ)
 static void dpu_event_save_freqs(struct dpu_log_freqs *freqs)
 {
 	freqs->mif_freq = exynos_devfreq_get_domain_freq(DEVFREQ_MIF);

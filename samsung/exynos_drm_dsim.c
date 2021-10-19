@@ -43,7 +43,7 @@
 #include <soc/google/exynos-cpupm.h>
 #endif
 
-#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
+#if IS_ENABLED(CONFIG_ARM_EXYNOS_DEVFREQ)
 #include <soc/google/exynos-devfreq.h>
 #if defined(CONFIG_SOC_GS101)
 #include <dt-bindings/soc/google/gs101-devfreq.h>
@@ -1410,7 +1410,7 @@ err:
 }
 
 
-#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
+#if IS_ENABLED(CONFIG_ARM_EXYNOS_DEVFREQ)
 static void dsim_underrun_info(struct dsim_device *dsim, u32 underrun_cnt)
 {
 	printk_ratelimited("underrun irq occurs(%u): MIF(%lu), INT(%lu), DISP(%lu)\n",

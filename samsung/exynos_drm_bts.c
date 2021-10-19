@@ -13,7 +13,7 @@
 #include <soc/google/bts.h>
 #include <soc/google/cal-if.h>
 
-#ifdef CONFIG_ARM_EXYNOS_DEVFREQ
+#if IS_ENABLED(CONFIG_ARM_EXYNOS_DEVFREQ)
 #include <soc/google/exynos-devfreq.h>
 #if defined(CONFIG_SOC_GS101)
 #include <dt-bindings/soc/google/gs101-devfreq.h>
