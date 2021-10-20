@@ -1430,8 +1430,7 @@ static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel
 }
 
 static void exynos_drm_connector_attach_touch(struct exynos_panel *ctx,
-					      const struct drm_connector_state *connector_state,
-					      const struct drm_crtc_state *crtc_state)
+					      const struct drm_connector_state *connector_state)
 {
 	struct drm_encoder *encoder = connector_state->best_encoder;
 	struct drm_bridge *bridge;
@@ -1532,21 +1531,26 @@ static int exynos_drm_connector_atomic_check(struct drm_connector *connector,
 					     struct drm_atomic_state *state)
 {
 	struct exynos_drm_connector *exynos_connector = to_exynos_connector(connector);
-	struct drm_connector_state *connector_state =
-		drm_atomic_get_new_connector_state(state, connector);
 	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_connector);
-	struct drm_crtc_state *crtc_state;
+	struct drm_connector_state *old_conn_state, *new_conn_state, *conn_state;
 
-	/* nothing to do if disabled or if mode is unchanged */
-	if (!connector_state->crtc)
-		return 0;
+	old_conn_state = drm_atomic_get_old_connector_state(state, connector);
+	new_conn_state = drm_atomic_get_new_connector_state(state, connector);
 
-	crtc_state = drm_atomic_get_new_crtc_state(state, connector_state->crtc);
+	if (new_conn_state->crtc)
+		conn_state = new_conn_state;
+	else if (old_conn_state->crtc)
+		conn_state = old_conn_state;
+	else
+		return 0; /* connector is/was unused */
 
 	if (ctx->touch_dev)
-		exynos_drm_connector_attach_touch(ctx, connector_state, crtc_state);
+		exynos_drm_connector_attach_touch(ctx, conn_state);
 
-	return exynos_drm_connector_check_state(ctx, connector_state);
+	if (!new_conn_state->crtc)
+		return 0; /* nothing to do if disabled */
+
+	return exynos_drm_connector_check_state(ctx, new_conn_state);
 }
 
 static const struct drm_connector_helper_funcs exynos_connector_helper_funcs = {
