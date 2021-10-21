@@ -282,7 +282,7 @@ retry_hi_freq:
 	} else {
 		/* abnormal case : apply bus_util_pct of v_blank */
 		tx_allow_t_ns = (max_lat_t_ns * decon->bts.bus_util_pct) / 100;
-		DPU_DEBUG_BTS("  WARN: latency calc is abnormal!(-> %u%)\n",
+		DPU_DEBUG_BTS("  WARN: latency calc is abnormal!(-> %u%%)\n",
 				decon->bts.bus_util_pct);
 	}
 
