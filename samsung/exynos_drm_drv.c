@@ -922,7 +922,9 @@ static int exynos_drm_bind(struct device *dev)
 	 *	just specific driver own one instead because
 	 *	drm framework supports only one irq handler.
 	 */
+#if IS_ENABLED(CONFIG_DRM_LEGACY)
 	drm->irq_enabled = true;
+#endif
 
 	/* init kms poll for handling hpd */
 	drm_kms_helper_poll_init(drm);
