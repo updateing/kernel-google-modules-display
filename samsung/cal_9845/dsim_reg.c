@@ -1122,31 +1122,24 @@ static void dsim_reg_set_multi_slice(u32 id, struct dsim_reg_config *config)
 static void dsim_reg_set_size_of_slice(u32 id, struct dsim_reg_config *config)
 {
 	u32 slice_w = config->dsc.slice_width;
-	u32 val_01 = 0, mask_01 = 0;
-	u32 val_23 = 0, mask_23 = 0;
+	u32 val_01 = 0;
+	u32 val_23 = 0;
 
 	if (config->dsc.slice_count == 4) {
 		val_01 = DSIM_SLICE01_SIZE_OF_SLICE1(slice_w) |
 			DSIM_SLICE01_SIZE_OF_SLICE0(slice_w);
-		mask_01 = DSIM_SLICE01_SIZE_OF_SLICE1_MASK |
-			DSIM_SLICE01_SIZE_OF_SLICE0_MASK;
 		val_23 = DSIM_SLICE23_SIZE_OF_SLICE3(slice_w) |
 			DSIM_SLICE23_SIZE_OF_SLICE2(slice_w);
-		mask_23 = DSIM_SLICE23_SIZE_OF_SLICE3_MASK |
-			DSIM_SLICE23_SIZE_OF_SLICE2_MASK;
 
 		dsim_write(id, DSIM_SLICE01, val_01);
 		dsim_write(id, DSIM_SLICE23, val_23);
 	} else if (config->dsc.slice_count == 2) {
 		val_01 = DSIM_SLICE01_SIZE_OF_SLICE1(slice_w) |
 			DSIM_SLICE01_SIZE_OF_SLICE0(slice_w);
-		mask_01 = DSIM_SLICE01_SIZE_OF_SLICE1_MASK |
-			DSIM_SLICE01_SIZE_OF_SLICE0_MASK;
 
 		dsim_write(id, DSIM_SLICE01, val_01);
 	} else if (config->dsc.slice_count == 1) {
 		val_01 = DSIM_SLICE01_SIZE_OF_SLICE0(slice_w);
-		mask_01 = DSIM_SLICE01_SIZE_OF_SLICE0_MASK;
 
 		dsim_write(id, DSIM_SLICE01, val_01);
 	} else {
