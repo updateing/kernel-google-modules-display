@@ -919,9 +919,10 @@ static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 	}
 }
 
-static void _decon_stop(struct decon_device *decon, bool reset)
+static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
 {
 	int i;
+	u32 fps = min(decon->bts.fps, vrefresh) ? : 60;
 
 	/*
 	 * Make sure all window connections are disabled when getting disabled,
@@ -947,7 +948,7 @@ static void _decon_stop(struct decon_device *decon, bool reset)
 		}
 	}
 
-	decon_reg_stop(decon->id, &decon->config, reset, decon->bts.fps);
+	decon_reg_stop(decon->id, &decon->config, reset, fps);
 
 	if (reset && decon->dqe)
 		exynos_dqe_reset(decon->dqe);
@@ -992,7 +993,7 @@ static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_st
 		WARN_ON(!old_crtc_state->self_refresh_active);
 
 		if (old_exynos_crtc_state->bypass)
-			_decon_stop(decon, true);
+			_decon_stop(decon, true, drm_mode_vrefresh(&old_crtc_state->mode));
 
 		decon_exit_hibernation(decon);
 		goto ret;
@@ -1015,7 +1016,7 @@ static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_st
 	pm_runtime_get_sync(decon->dev);
 
 	if (decon->state == DECON_STATE_INIT)
-		_decon_stop(decon, true);
+		_decon_stop(decon, true, drm_mode_vrefresh(&old_crtc_state->mode));
 
 	_decon_enable(decon);
 
@@ -1054,7 +1055,7 @@ static void _decon_disable(struct decon_device *decon)
 	const struct drm_crtc_state *crtc_state = crtc->state;
 	bool reset = crtc_state->active_changed || crtc_state->connectors_changed;
 
-	_decon_stop(decon, reset);
+	_decon_stop(decon, reset, drm_mode_vrefresh(&crtc_state->mode));
 	decon_disable_irqs(decon);
 }
 
