@@ -160,13 +160,13 @@ static const struct exynos_dsi_cmd s6e3hc3_off_cmds[] = {
 static DEFINE_EXYNOS_CMD_SET(s6e3hc3_off);
 
 static const struct exynos_dsi_cmd s6e3hc3_lp_cmds[] = {
-	EXYNOS_DSI_CMD(display_off, 17),
+	EXYNOS_DSI_CMD(display_off, 0),
+	EXYNOS_DSI_CMD0_REV(unlock_cmd_f0, PANEL_REV_GE(PANEL_REV_PROTO1_1)),
+	/* Fixed TE */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB9, 0x41),
+
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB0, 0x00, 0x01, 0x60),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0x60, 0x00),	/* 30Hz */
-	EXYNOS_DSI_CMD0_REV(unlock_cmd_f0, PANEL_REV_GE(PANEL_REV_PROTO1_1)),
-
-	/* Changeable TE */
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB9, 0x00),
 
 	/* enable fast exit */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
@@ -175,12 +175,6 @@ static const struct exynos_dsi_cmd s6e3hc3_lp_cmds[] = {
 			       0xB0, 0x00, 0x10, 0xBD),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
 			       0xBD, 0x10),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
-			       0xB0, 0x00, 0x21, 0xBD),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
-			       0xBD, 0x01, 0x00, 0x03, 0x00, 0x0B, 0x00, 0x0B, 0x00, 0x0B, 0x00, 0x0B,
-			       0x00, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-			       0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
 			       0xB0, 0x00, 0x5E, 0xBD),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
@@ -205,7 +199,7 @@ static const struct exynos_dsi_cmd s6e3hc3_lp_low_cmds[] = {
 	EXYNOS_DSI_CMD(unlock_cmd_f0, 0),
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x25),	/* aod 10 nit */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1, 0x49, 0x01),	/* hlpm gamma */
-	EXYNOS_DSI_CMD(lock_cmd_f0, 17),
+	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
 	EXYNOS_DSI_CMD(display_on, 0)
 };
 
@@ -213,7 +207,7 @@ static const struct exynos_dsi_cmd s6e3hc3_lp_high_cmds[] = {
 	EXYNOS_DSI_CMD(unlock_cmd_f0, 0),
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x24),	/* aod 50 nit */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1, 0x49, 0x01),	/* hlpm gamma */
-	EXYNOS_DSI_CMD(lock_cmd_f0, 17),
+	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
 	EXYNOS_DSI_CMD(display_on, 0)
 };
 
@@ -245,9 +239,6 @@ static DEFINE_EXYNOS_CMD_SET(s6e3hc3_early_exit_disable);
 static const struct exynos_dsi_cmd s6e3hc3_early_exit_enable_cmds[] = {
 	/* Fixed TE */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB9, 0x41),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB0, 0x00, 0x06, 0xB9),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
-						0xB9, 0x0C, 0x44, 0x0C, 0x44, 0x00, 0x1C),
 
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x21, 0x02),
 	EXYNOS_DSI_CMD0(early_exit_global_para),
@@ -604,7 +595,6 @@ static void s6e3hc3_set_nolp_mode(struct exynos_panel *ctx,
 		return;
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
-	usleep_range(delay_us, delay_us + 10);
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF0, 0x5A, 0x5A);
 	s6e3hc3_write_display_mode(ctx, &pmode->mode);
 	if (ctx->panel_rev == PANEL_REV_PROTO1)
@@ -624,6 +614,9 @@ static const struct exynos_dsi_cmd s6e3hc3_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x35),			/* TE on */
 
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1), 0xB0, 0x00, 0x06, 0xB9),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_PROTO1_1),
+			0xB9, 0x0C, 0x44, 0x0C, 0x44, 0x00, 0x1C), /* TE Setting */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x22, 0xB9),	/* SEQ_GLOBAL_TSP_SYNC */
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0xB1, 0xA1),		/* SEQ_TSP_SYNC_ON */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),	/* SEQ_GLOBAL_TSP_SYNC */
