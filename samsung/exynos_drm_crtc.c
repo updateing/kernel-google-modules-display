@@ -36,16 +36,6 @@ enum crtc_active_state {
 	CRTC_STATE_SELF_REFRESH,
 };
 
-static inline enum crtc_active_state
-exynos_drm_crtc_get_active_state(const struct drm_crtc_state *crtc_state)
-{
-	if (crtc_state->active)
-		return CRTC_STATE_ACTIVE;
-	else if (crtc_state->self_refresh_active)
-		return CRTC_STATE_SELF_REFRESH;
-	return CRTC_STATE_INACTIVE;
-}
-
 static void exynos_drm_crtc_atomic_enable(struct drm_crtc *crtc,
 					  struct drm_crtc_state *old_state)
 {
@@ -67,7 +57,8 @@ static void exynos_drm_crtc_atomic_disable(struct drm_crtc *crtc,
 					   struct drm_crtc_state *old_state)
 {
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	const enum crtc_active_state active_state = exynos_drm_crtc_get_active_state(crtc->state);
+	const enum crtc_active_state active_state =
+		crtc->state->self_refresh_active ? CRTC_STATE_SELF_REFRESH : CRTC_STATE_INACTIVE;
 
 	if (active_state == exynos_crtc->active_state)
 		return;
