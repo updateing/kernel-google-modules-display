@@ -182,7 +182,7 @@ static u32 dpu_bts_get_vblank_time_ns(struct decon_device *decon)
 	if (decon->config.mode.op_mode == DECON_VIDEO_MODE)
 		v_blank_t_ns = (decon->bts.vbp + decon->bts.vfp) * line_t_ns;
 	else
-		v_blank_t_ns = decon->config.vblank_usec * 1000U;
+		v_blank_t_ns = decon->bts.vblank_usec * 1000U;
 
 	DPU_DEBUG_BTS("  -line_t_ns(%u) v_blank_t_ns(%u)\n",
 			line_t_ns, v_blank_t_ns);
