@@ -835,6 +835,8 @@ static void decon_mode_update_bts(struct decon_device *decon, const struct drm_d
 
 	decon_debug(decon, "update decon bts config for mode: %dx%dx%d\n",
 		    mode->hdisplay, mode->vdisplay, decon->bts.fps);
+
+	atomic_set(&decon->bts.delayed_update, 0);
 }
 
 static void decon_mode_set(struct exynos_drm_crtc *crtc,
@@ -870,7 +872,6 @@ static void decon_seamless_mode_bts_update(struct decon_device *decon,
 		atomic_set(&decon->bts.delayed_update, 3);
 	} else {
 		decon_mode_update_bts(decon, mode);
-		atomic_set(&decon->bts.delayed_update, 0);
 	}
 	DPU_ATRACE_END(__func__);
 }
@@ -1080,7 +1081,7 @@ static void _decon_disable(struct decon_device *decon)
 {
 	struct drm_crtc *crtc = &decon->crtc->base;
 	const struct drm_crtc_state *crtc_state = crtc->state;
-	bool reset = crtc_state->active_changed || crtc_state->connectors_changed;
+	bool reset = drm_atomic_crtc_needs_modeset(crtc_state);
 
 	_decon_stop(decon, reset, drm_mode_vrefresh(&crtc_state->mode));
 	decon_disable_irqs(decon);
