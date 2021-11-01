@@ -449,6 +449,7 @@ struct decon_device {
 	bool itmon_notified;
 #endif
 
+	atomic_t frames_pending;
 	wait_queue_head_t framedone_wait;
 
 	bool keep_unmask;

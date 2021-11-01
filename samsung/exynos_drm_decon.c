@@ -80,6 +80,17 @@ static int decon_request_te_irq(struct exynos_drm_crtc *exynos_crtc,
 				const struct exynos_drm_connector_state *exynos_conn_state);
 static bool decon_check_fs_pending_locked(struct decon_device *decon);
 
+#define FRAME_TIMEOUT msecs_to_jiffies(100)
+
+/* wait at least one frame time on top of common timeout */
+static inline unsigned long fps_timeout(int fps)
+{
+	/* default to 60 fps, if fps is not provided */
+	const frame_time_ms = DIV_ROUND_UP(MSEC_PER_SEC, fps ? : 60);
+
+	return msecs_to_jiffies(frame_time_ms) + FRAME_TIMEOUT;
+}
+
 void decon_dump(const struct decon_device *decon)
 {
 	int i;
@@ -746,6 +757,7 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 
 	spin_lock_irqsave(&decon->slock, flags);
 	decon_reg_start(decon->id, &decon->config);
+	atomic_inc(&decon->frames_pending);
 	if (!new_crtc_state->no_vblank)
 		decon_arm_event_locked(exynos_crtc);
 	spin_unlock_irqrestore(&decon->slock, flags);
@@ -922,7 +934,20 @@ static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
 {
 	int i;
-	u32 fps = min(decon->bts.fps, vrefresh) ? : 60;
+	const u32 fps = min(decon->bts.fps, vrefresh) ? : 60;
+	const unsigned long timeout = fps_timeout(fps);
+	unsigned long ret;
+
+	ret = wait_event_timeout(decon->framedone_wait,
+				 atomic_read(&decon->frames_pending) == 0,
+				 timeout);
+	if (!ret) {
+		WARN(1, "wait for frame done timed out (%dhz)", fps);
+		atomic_set(&decon->frames_pending, 0);
+	} else {
+		decon_debug(decon, "%s: frame done after: ~%dus (%dhz)", __func__,
+			    jiffies_to_usecs(timeout - ret), fps);
+	}
 
 	/*
 	 * Make sure all window connections are disabled when getting disabled,
@@ -1124,17 +1149,6 @@ static void decon_disable(struct exynos_drm_crtc *crtc)
 	decon_info(decon, "%s -\n", __func__);
 }
 
-#define TIMEOUT msecs_to_jiffies(100)
-
-/* wait at least one frame time on top of common timeout */
-static inline unsigned long fps_timeout(int fps)
-{
-	/* default to 60 fps, if fps is not provided */
-	const frame_time_ms = DIV_ROUND_UP(MSEC_PER_SEC, fps ? : 60);
-
-	return msecs_to_jiffies(frame_time_ms) + TIMEOUT;
-}
-
 static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 				const struct drm_crtc_state *old_crtc_state,
 				const struct drm_crtc_state *new_crtc_state)
@@ -1165,8 +1179,10 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 		if (!fs_irq_pending) {
 			DPU_EVENT_LOG(DPU_EVT_FRAMESTART_TIMEOUT, decon->id, NULL);
 			recovering = atomic_read(&decon->recovery.recovering);
-			pr_warn("decon%u framestart timeout (%d fps). recovering(%d)\n",
-					decon->id, fps, recovering);
+			decon_err(decon, "framestart timeout (%dhz), recovering: %d, pending: %d\n",
+				    fps, recovering, atomic_read(&decon->frames_pending));
+
+			atomic_set(&decon->frames_pending, 0);
 			if (!recovering)
 				decon_dump_all(decon, DPU_EVT_CONDITION_ALL, false);
 
@@ -1330,10 +1346,11 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_data)
 
 	if (irq_sts_reg & DPU_FRAME_DONE_INT_PEND) {
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMEDONE, decon->id, decon);
-		wake_up_interruptible_all(&decon->framedone_wait);
 		exynos_dqe_save_lpd_data(decon->dqe);
 		if (decon->dqe)
 			handle_histogram_event(decon->dqe);
+		atomic_dec_if_positive(&decon->frames_pending);
+		wake_up_all(&decon->framedone_wait);
 		decon_debug(decon, "%s: frame done\n", __func__);
 	}
 
