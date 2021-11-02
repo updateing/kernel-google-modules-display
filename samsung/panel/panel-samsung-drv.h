@@ -86,6 +86,7 @@
  * @PANEL_STATE_OFF: Panel is fully disabled and powered off
  * @PANEL_STATE_NORMAL: Panel is ON in Normal operating mode
  * @PANEL_STATE_LP: Panel is ON in Low Power mode
+ * @PANEL_STATE_BLANK: Panel is ON but no contents are shown on display
  */
 enum exynos_panel_state {
 	PANEL_STATE_UNINITIALIZED,
@@ -93,6 +94,7 @@ enum exynos_panel_state {
 	PANEL_STATE_OFF,
 	PANEL_STATE_NORMAL,
 	PANEL_STATE_LP,
+	PANEL_STATE_BLANK,
 };
 
 struct exynos_panel;
@@ -521,6 +523,7 @@ static inline bool is_panel_active(const struct exynos_panel *ctx)
 		return true;
 	case PANEL_STATE_UNINITIALIZED:
 	case PANEL_STATE_HANDOFF:
+	case PANEL_STATE_BLANK:
 	case PANEL_STATE_OFF:
 	default:
 		return false;

@@ -765,7 +765,7 @@ void exynos_panel_set_binned_lp(struct exynos_panel *ctx, const u16 brightness)
 
 	mutex_unlock(&ctx->lp_state_lock);
 
-	panel_state = !binned_lp->bl_threshold ? PANEL_STATE_OFF : PANEL_STATE_LP;
+	panel_state = !binned_lp->bl_threshold ? PANEL_STATE_BLANK : PANEL_STATE_LP;
 	exynos_panel_set_backlight_state(ctx, panel_state);
 
 	if (bl)
@@ -2499,6 +2499,7 @@ static unsigned long get_backlight_state_from_panel(struct backlight_device *bl,
 		state |= BL_STATE_LP;
 		break;
 	case PANEL_STATE_OFF:
+	case PANEL_STATE_BLANK:
 	default:
 		state &= ~(BL_STATE_LP);
 		state |= BL_STATE_STANDBY;
@@ -2735,7 +2736,8 @@ static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 
-	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_HANDOFF))
+	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_BLANK) ||
+	    (ctx->panel_state == PANEL_STATE_HANDOFF))
 		return;
 
 	drm_panel_prepare(&ctx->panel);
@@ -2746,8 +2748,8 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	const struct drm_connector_state *conn_state = ctx->exynos_connector.base.state;
-	const bool self_refresh_active = conn_state->crtc && conn_state->crtc->state &&
-		conn_state->crtc->state->self_refresh_active;
+	struct drm_crtc_state *crtc_state = !conn_state->crtc ? NULL : conn_state->crtc->state;
+	const bool self_refresh_active = crtc_state && crtc_state->self_refresh_active;
 
 	if (self_refresh_active) {
 		mutex_lock(&ctx->mode_lock);
@@ -2757,7 +2759,11 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
-		ctx->panel_state = PANEL_STATE_OFF;
+		if (crtc_state && crtc_state->mode_changed &&
+		    drm_atomic_crtc_effectively_active(crtc_state))
+			ctx->panel_state = PANEL_STATE_BLANK;
+		else
+			ctx->panel_state = PANEL_STATE_OFF;
 
 		drm_panel_disable(&ctx->panel);
 	}
@@ -2767,18 +2773,14 @@ static void exynos_panel_bridge_post_disable(struct drm_bridge *bridge,
 					     struct drm_bridge_state *old_bridge_state)
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
-	const struct drm_connector_state *conn_state = ctx->exynos_connector.base.state;
-	const bool self_refresh_active = conn_state->crtc && conn_state->crtc->state &&
-		conn_state->crtc->state->self_refresh_active;
 
-	if (self_refresh_active) {
-		dev_dbg(ctx->dev, "self refresh state : skip %s\n", __func__);
+	/* no need for full power off if state is not in full off mode */
+	if (ctx->panel_state != PANEL_STATE_OFF)
 		return;
-	}
 
 	drm_panel_unprepare(&ctx->panel);
 
-	exynos_panel_set_backlight_state(ctx, PANEL_STATE_OFF);
+	exynos_panel_set_backlight_state(ctx, ctx->panel_state);
 }
 
 /* Get the VSYNC start time within a TE period */
