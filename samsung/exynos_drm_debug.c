@@ -192,12 +192,11 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		break;
 	case DPU_EVT_DECON_RUNTIME_SUSPEND:
 	case DPU_EVT_DECON_RUNTIME_RESUME:
-		log->data.pd.decon_state = decon->state;
-		break;
 	case DPU_EVT_ENTER_HIBERNATION_IN:
 	case DPU_EVT_ENTER_HIBERNATION_OUT:
 	case DPU_EVT_EXIT_HIBERNATION_IN:
 	case DPU_EVT_EXIT_HIBERNATION_OUT:
+		log->data.pd.decon_state = decon->state;
 		log->data.pd.rpm_active = pm_runtime_active(decon->dev);
 		break;
 	case DPU_EVT_PLANE_PREPARE_FB:
@@ -683,17 +682,14 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 			break;
 		case DPU_EVT_DECON_RUNTIME_SUSPEND:
 		case DPU_EVT_DECON_RUNTIME_RESUME:
-			scnprintf(buf + len, sizeof(buf) - len,
-					"\tDecon state: %d",
-					log->data.pd.decon_state);
-			break;
 		case DPU_EVT_ENTER_HIBERNATION_IN:
 		case DPU_EVT_ENTER_HIBERNATION_OUT:
 		case DPU_EVT_EXIT_HIBERNATION_IN:
 		case DPU_EVT_EXIT_HIBERNATION_OUT:
 			scnprintf(buf + len, sizeof(buf) - len,
-					"\tDPU POWER %s",
-					log->data.pd.rpm_active ? "ON" : "OFF");
+					"\tDPU POWER:%s DECON STATE:%u",
+					log->data.pd.rpm_active ? "ON" : "OFF",
+					log->data.pd.decon_state);
 			break;
 		case DPU_EVT_PLANE_PREPARE_FB:
 		case DPU_EVT_PLANE_CLEANUP_FB:

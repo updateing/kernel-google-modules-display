@@ -1034,6 +1034,8 @@ ret:
 		decon_debug(decon, "bypass mode: drop extra power ref\n");
 		pm_runtime_put_sync(decon->dev);
 	}
+
+	WARN_ON(!pm_runtime_active(decon->dev));
 }
 
 static void decon_disable_irqs(struct decon_device *decon)
