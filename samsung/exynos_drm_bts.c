@@ -625,18 +625,24 @@ dpu_bts_calc_dpp_bw(struct bts_dpp_info *dpp, u32 fps, u32 lcd_h, u32 vblank_us,
 
 	DPU_DEBUG_BTS("  DPP%d bandwidth: avg %u, rt %u, rot %u\n", idx, avg_bw, rt_bw, rot_bw);
 
+	rt_bw = max(rt_bw, rot_bw);
 	if (dpp->is_afbc) {
-		u32 afbc_util_pct;
+		u32 afbc_util_pct, afbc_rt_util_pct;
 
-		if (dpp->is_yuv)
+		if (dpp->is_yuv) {
 			afbc_util_pct = bts->afbc_yuv_util_pct;
-		else
+			afbc_rt_util_pct = bts->afbc_yuv_rt_util_pct;
+		} else {
 			afbc_util_pct = bts->afbc_rgb_util_pct;
+			afbc_rt_util_pct = bts->afbc_rgb_rt_util_pct;
+		}
 
 		avg_bw = mult_frac(avg_bw, afbc_util_pct, 100);
+		rt_bw = mult_frac(rt_bw, afbc_rt_util_pct, 100);
 	}
+
 	dpp->bw = avg_bw;
-	dpp->rt_bw = max(rt_bw, rot_bw);
+	dpp->rt_bw = rt_bw;
 	DPU_DEBUG_BTS("           final: avg %u, rt %u\n", dpp->bw, dpp->rt_bw);
 }
 
