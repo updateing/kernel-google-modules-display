@@ -170,7 +170,7 @@ static void exynos_panel_update_te2(struct exynos_panel *ctx)
 {
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 
-	if (!ctx->initialized || !ctx->enabled || !funcs || !funcs->update_te2)
+	if (!is_panel_active(ctx) || !funcs || !funcs->update_te2)
 		return;
 
 	funcs->update_te2(ctx);
@@ -523,8 +523,10 @@ static void exynos_panel_handoff(struct exynos_panel *ctx)
 	ctx->enabled = gpiod_get_raw_value(ctx->reset_gpio) > 0;
 	if (ctx->enabled) {
 		dev_info(ctx->dev, "panel enabled at boot\n");
+		ctx->panel_state = PANEL_STATE_HANDOFF;
 		exynos_panel_set_power(ctx, true);
 	} else {
+		ctx->panel_state = PANEL_STATE_UNINITIALIZED;
 		gpiod_direction_output(ctx->reset_gpio, 0);
 	}
 }
@@ -587,7 +589,7 @@ int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connec
 		if (!preferred_mode || (mode->type & DRM_MODE_TYPE_PREFERRED)) {
 			preferred_mode = mode;
 			/* if enabled at boot, assume preferred mode was set */
-			if (ctx->enabled && !current_mode)
+			if ((ctx->panel_state == PANEL_STATE_HANDOFF) && !current_mode)
 				ctx->current_mode = pmode;
 		}
 	}
@@ -722,9 +724,6 @@ EXPORT_SYMBOL(exynos_panel_send_cmd_set_flags);
 
 void exynos_panel_set_lp_mode(struct exynos_panel *ctx, const struct exynos_panel_mode *pmode)
 {
-	if (!ctx->enabled)
-		return;
-
 	exynos_panel_send_cmd_set(ctx, ctx->desc->lp_cmd_set);
 
 	dev_info(ctx->dev, "enter %dhz LP mode\n", drm_mode_vrefresh(&pmode->mode));
@@ -772,7 +771,7 @@ void exynos_panel_set_binned_lp(struct exynos_panel *ctx, const u16 brightness)
 	if (bl)
 		sysfs_notify(&bl->dev.kobj, NULL, "lp_state");
 
-	if (panel_state != PANEL_STATE_OFF)
+	if (panel_state == PANEL_STATE_LP)
 		exynos_panel_update_te2(ctx);
 }
 EXPORT_SYMBOL(exynos_panel_set_binned_lp);
@@ -834,7 +833,7 @@ static int exynos_update_status(struct backlight_device *bl)
 	int min_brightness = ctx->desc->min_brightness ? : 1;
 	u32 bl_range = 0;
 
-	if (!ctx->enabled || !ctx->initialized) {
+	if (!is_panel_active(ctx)) {
 		dev_dbg(ctx->dev, "panel is not enabled\n");
 		return -EPERM;
 	}
@@ -932,7 +931,7 @@ static ssize_t gamma_store(struct device *dev, struct device_attribute *attr,
 	char *input_buf;
 	const char *out_buf;
 
-	if (!ctx->enabled || !ctx->initialized)
+	if (!is_panel_active(ctx))
 		return -EPERM;
 
 	funcs = ctx->desc->exynos_panel_func;
@@ -971,7 +970,7 @@ static ssize_t set_te2_timing(struct exynos_panel *ctx, size_t count,
 	u32 timing[MAX_TE2_TYPE * 2] = {0};
 	const struct exynos_panel_funcs *funcs;
 
-	if (!ctx->enabled)
+	if (!is_panel_active(ctx))
 		return -EPERM;
 
 	funcs = ctx->desc->exynos_panel_func;
@@ -1030,7 +1029,7 @@ static ssize_t te2_timing_store(struct device *dev,
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	ssize_t ret;
 
-	if (!ctx->initialized)
+	if (!is_panel_initialized(ctx))
 		return -EAGAIN;
 
 	ret = set_te2_timing(ctx, count, buf, false);
@@ -1048,7 +1047,7 @@ static ssize_t te2_timing_show(struct device *dev,
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	ssize_t ret;
 
-	if (!ctx->initialized)
+	if (!is_panel_initialized(ctx))
 		return -EAGAIN;
 
 	ret = get_te2_timing(ctx, buf, false);
@@ -1067,7 +1066,7 @@ static ssize_t te2_lp_timing_store(struct device *dev,
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	ssize_t ret;
 
-	if (!ctx->initialized)
+	if (!is_panel_initialized(ctx))
 		return -EAGAIN;
 
 	ret = set_te2_timing(ctx, count, buf, true);
@@ -1102,10 +1101,10 @@ static void panel_update_idle_mode_locked(struct exynos_panel *ctx)
 
 	WARN_ON(!mutex_is_locked(&ctx->mode_lock));
 
-	if (unlikely(!ctx->initialized || !ctx->current_mode || !funcs))
+	if (unlikely(!ctx->current_mode || !funcs))
 		return;
 
-	if (!ctx->enabled || !funcs->set_self_refresh)
+	if (!is_panel_active(ctx) || !funcs->set_self_refresh)
 		return;
 
 	if (funcs->set_self_refresh(ctx, ctx->self_refresh_active))
@@ -1176,7 +1175,7 @@ static void exynos_panel_connector_print_state(struct drm_printer *p,
 	if (ret)
 		return;
 
-	drm_printf(p, "\tenabled: %d\n", ctx->enabled);
+	drm_printf(p, "\tpanel_state: %d\n", ctx->panel_state);
 	drm_printf(p, "\tidle: %s (%s)\n",
 		   ctx->panel_idle_vrefresh ? "active" : "inactive",
 		   ctx->panel_idle_enabled ? "enabled" : "disabled");
@@ -1461,7 +1460,7 @@ static bool exynos_panel_is_mode_seamless(const struct exynos_panel *ctx,
 	const struct exynos_panel_funcs *funcs;
 
 	/* no need to go through seamless mode set if panel is disabled */
-	if (!ctx->enabled || !ctx->initialized)
+	if (!is_panel_active(ctx))
 		return false;
 
 	funcs = ctx->desc->exynos_panel_func;
@@ -1887,7 +1886,7 @@ static ssize_t exynos_debugfs_reset_panel(struct file *file,
 	struct mipi_dsi_device *dsi = file->private_data;
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 
-	if (!ctx->initialized || !ctx->enabled)
+	if (!is_panel_active(ctx))
 		return -EPERM;
 
 	ret = kstrtobool_from_user(user_buf, count, &reset_panel);
@@ -2097,7 +2096,7 @@ static ssize_t hbm_mode_store(struct device *dev,
 	mutex_lock(&ctx->mode_lock);
 	pmode = ctx->current_mode;
 
-	if (!ctx->enabled || !ctx->initialized || !pmode) {
+	if (!is_panel_active(ctx) || !pmode) {
 		dev_err(ctx->dev, "panel is not enabled\n");
 		ret = -EPERM;
 		goto unlock;
@@ -2144,7 +2143,7 @@ static ssize_t dimming_on_store(struct device *dev,
 	bool dimming_on;
 	int ret;
 
-	if (!ctx->enabled || !ctx->initialized) {
+	if (!is_panel_active(ctx)) {
 		dev_err(ctx->dev, "panel is not enabled\n");
 		return -EPERM;
 	}
@@ -2182,7 +2181,7 @@ static ssize_t local_hbm_mode_store(struct device *dev,
 	bool local_hbm_en;
 	int ret;
 
-	if (!ctx->enabled || !ctx->initialized) {
+	if (!is_panel_active(ctx)) {
 		dev_err(ctx->dev, "panel is not enabled\n");
 		return -EPERM;
 	}
@@ -2488,7 +2487,7 @@ static unsigned long get_backlight_state_from_panel(struct backlight_device *bl,
 	unsigned long state = bl->props.state;
 
 	switch (panel_state) {
-	case PANEL_STATE_ON:
+	case PANEL_STATE_NORMAL:
 		state &= ~(BL_STATE_STANDBY | BL_STATE_LP);
 		break;
 	case PANEL_STATE_LP:
@@ -2496,6 +2495,7 @@ static unsigned long get_backlight_state_from_panel(struct backlight_device *bl,
 		state |= BL_STATE_LP;
 		break;
 	case PANEL_STATE_OFF:
+	default:
 		state &= ~(BL_STATE_LP);
 		state |= BL_STATE_STANDBY;
 		break;
@@ -2651,10 +2651,16 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	bool need_update_backlight = false;
+	bool is_active;
 
 	mutex_lock(&ctx->mode_lock);
+	if (ctx->panel_state == PANEL_STATE_HANDOFF)
+		is_active = !exynos_panel_init(ctx);
+	else
+		is_active = is_panel_active(ctx);
+
 	/* avoid turning on panel again if already enabled (ex. while booting or self refresh) */
-	if (!ctx->enabled || exynos_panel_init(ctx)) {
+	if (!is_active) {
 		drm_panel_enable(&ctx->panel);
 		need_update_backlight = true;
 	}
@@ -2663,16 +2669,18 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
 
 		ctx->self_refresh_active = false;
+		ctx->panel_state = PANEL_STATE_NORMAL;
 		panel_update_idle_mode_locked(ctx);
 	} else {
 		const bool is_lp_mode = ctx->current_mode &&
 					ctx->current_mode->exynos_mode.is_lp_mode;
-		enum exynos_panel_state panel_state = is_lp_mode ? PANEL_STATE_LP : PANEL_STATE_ON;
 
-		exynos_panel_set_backlight_state(ctx, panel_state);
+		ctx->panel_state = is_lp_mode ? PANEL_STATE_LP : PANEL_STATE_NORMAL;
+
+		exynos_panel_set_backlight_state(ctx, ctx->panel_state);
 
 		/* For the case of OFF->AOD, TE2 will be updated in backlight_update_status */
-		if (panel_state == PANEL_STATE_ON)
+		if (ctx->panel_state == PANEL_STATE_NORMAL)
 			exynos_panel_update_te2(ctx);
 	}
 	mutex_unlock(&ctx->mode_lock);
@@ -2692,7 +2700,6 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_atomic_state *state = new_crtc_state->state;
-	struct drm_crtc_state *old_crtc_state;
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	int ret;
 
@@ -2708,9 +2715,13 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 	if (!drm_atomic_crtc_needs_modeset(new_crtc_state))
 		return 0;
 
-	old_crtc_state = drm_atomic_get_old_crtc_state(state, new_crtc_state->crtc);
-	if (!old_crtc_state->enable && ctx->enabled)
-		old_crtc_state->self_refresh_active = true;
+	if (ctx->panel_state == PANEL_STATE_HANDOFF) {
+		struct drm_crtc_state *old_crtc_state =
+			drm_atomic_get_old_crtc_state(state, new_crtc_state->crtc);
+
+		if (!old_crtc_state->enable)
+			old_crtc_state->self_refresh_active = true;
+	}
 
 	return exynos_drm_connector_check_mode(ctx, conn_state, &new_crtc_state->mode);
 }
@@ -2720,7 +2731,7 @@ static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 
-	if (ctx->enabled)
+	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_HANDOFF))
 		return;
 
 	drm_panel_prepare(&ctx->panel);
@@ -2742,6 +2753,8 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
+		ctx->panel_state = PANEL_STATE_OFF;
+
 		drm_panel_disable(&ctx->panel);
 	}
 }
@@ -2870,13 +2883,12 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	mutex_lock(&ctx->mode_lock);
 	current_mode = ctx->current_mode;
 
-	if (!ctx->initialized && ctx->enabled) {
-		/* if panel was enabled at boot and there's no mode change skip mode set */
-		if (current_mode == pmode) {
-			mutex_unlock(&ctx->mode_lock);
-			return;
-		}
+	if (current_mode == pmode) {
+		mutex_unlock(&ctx->mode_lock);
+		return;
+	}
 
+	if (ctx->panel_state == PANEL_STATE_HANDOFF) {
 		WARN(1, "mode change at boot to %s\n", adjusted_mode->name);
 
 		/*
@@ -2884,12 +2896,8 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 		 * force panel reset on next enable. That way it will go into new mode
 		 */
 		ctx->enabled = false;
+		ctx->panel_state = PANEL_STATE_UNINITIALIZED;
 		exynos_panel_set_power(ctx, false);
-	}
-
-	if (current_mode == pmode) {
-		mutex_unlock(&ctx->mode_lock);
-		return;
 	}
 
 	dev_dbg(ctx->dev, "changing display mode to %dx%d@%d\n",
@@ -2899,42 +2907,47 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 
 	DPU_ATRACE_BEGIN(__func__);
 	if (funcs) {
+		const bool is_active = is_panel_active(ctx);
 		const bool was_lp_mode = current_mode &&
 					 current_mode->exynos_mode.is_lp_mode;
 		const bool is_lp_mode = pmode->exynos_mode.is_lp_mode;
 		bool state_changed = false;
 
 		if (is_lp_mode && funcs->set_lp_mode) {
-			if (ctx->hbm.local_hbm.enabled && funcs->set_local_hbm_mode) {
-				dev_warn(ctx->dev,
-					"LHBM is on when switching to LP mode(%s), turn off LHBM first\n",
-					pmode->mode.name);
-				panel_update_local_hbm_locked(ctx, false);
+			if (is_active) {
+				if (ctx->hbm.local_hbm.enabled && funcs->set_local_hbm_mode) {
+					dev_warn(ctx->dev,
+						"LHBM is on when switching to LP mode(%s), turn off LHBM first\n",
+						pmode->mode.name);
+					panel_update_local_hbm_locked(ctx, false);
+				}
+				funcs->set_lp_mode(ctx, pmode);
+				need_update_backlight = true;
 			}
-			funcs->set_lp_mode(ctx, pmode);
 			if (ctx->vddd && ctx->vddd_lp_uV)
 				regulator_set_voltage(ctx->vddd, ctx->vddd_lp_uV, ctx->vddd_lp_uV);
-			need_update_backlight = true;
 		} else if (was_lp_mode && !is_lp_mode && funcs->set_nolp_mode) {
 			if (ctx->vddd && ctx->vddd_normal_uV)
 				regulator_set_voltage(ctx->vddd, ctx->vddd_normal_uV,
 						      ctx->vddd_normal_uV);
-			funcs->set_nolp_mode(ctx, pmode);
-			state_changed = true;
-			need_update_backlight = true;
+			if (is_active) {
+				funcs->set_nolp_mode(ctx, pmode);
+				need_update_backlight = true;
+				state_changed = true;
+			}
 		} else if (funcs->mode_set) {
-			if (exynos_connector_state->sync_rr_switch && ctx->enabled)
+			if (exynos_connector_state->sync_rr_switch && is_active)
 				exynos_panel_check_modeset_timing(crtc, &current_mode->mode);
 			funcs->mode_set(ctx, pmode);
-			state_changed = true;
+			state_changed = is_active;
 		}
 
 		ctx->current_mode = pmode;
 
 		if (state_changed) {
 			if (was_lp_mode)
-				exynos_panel_set_backlight_state(ctx, ctx->enabled ?
-								 PANEL_STATE_ON : PANEL_STATE_OFF);
+				exynos_panel_set_backlight_state(
+					ctx, is_active ? PANEL_STATE_NORMAL : PANEL_STATE_OFF);
 			else if (ctx->bl)
 				backlight_state_changed(ctx->bl);
 

@@ -77,10 +77,22 @@
 #define IS_HBM_ON(mode)	((mode) >= HBM_ON_IRC_ON && (mode) < HBM_STATE_MAX)
 #define IS_HBM_ON_IRC_OFF(mode)	(((mode) == HBM_ON_IRC_OFF))
 
+/**
+ * enum exynos_panel_state - panel operating state
+ * @PANEL_STATE_UNINITIALIZED: Panel has never been initialized, and panel OTP info such as
+ *			       panel serial and revision has not been read yet
+ * @PANEL_STATE_HANDOFF: Panel looked active when driver was loaded. The panel is uninitialized
+ *			in this state and will switch to PANEL_STATE_ON once it gets initialized
+ * @PANEL_STATE_OFF: Panel is fully disabled and powered off
+ * @PANEL_STATE_NORMAL: Panel is ON in Normal operating mode
+ * @PANEL_STATE_LP: Panel is ON in Low Power mode
+ */
 enum exynos_panel_state {
-	PANEL_STATE_ON = 0,
+	PANEL_STATE_UNINITIALIZED,
+	PANEL_STATE_HANDOFF,
+	PANEL_STATE_OFF,
+	PANEL_STATE_NORMAL,
 	PANEL_STATE_LP,
-	PANEL_STATE_OFF
 };
 
 struct exynos_panel;
@@ -436,8 +448,11 @@ struct exynos_panel {
 	struct drm_bridge bridge;
 	const struct exynos_panel_desc *desc;
 	const struct exynos_panel_mode *current_mode;
+
+	/* Deprected: please refer to panel_state instead */
 	bool enabled;
 	bool initialized;
+	enum exynos_panel_state panel_state;
 
 	/* indicates whether panel idle feature is enabled */
 	bool panel_idle_enabled;
@@ -497,6 +512,26 @@ struct exynos_panel {
 		struct workqueue_struct *wq;
 	} hbm;
 };
+
+static inline bool is_panel_active(const struct exynos_panel *ctx)
+{
+	switch (ctx->panel_state) {
+	case PANEL_STATE_LP:
+	case PANEL_STATE_NORMAL:
+		return true;
+	case PANEL_STATE_UNINITIALIZED:
+	case PANEL_STATE_HANDOFF:
+	case PANEL_STATE_OFF:
+	default:
+		return false;
+	}
+}
+
+static inline bool is_panel_initialized(const struct exynos_panel *ctx)
+{
+	return ctx->panel_state != PANEL_STATE_UNINITIALIZED &&
+	       ctx->panel_state != PANEL_STATE_HANDOFF;
+}
 
 static inline int exynos_dcs_write(struct exynos_panel *ctx, const void *data,
 		size_t len)
