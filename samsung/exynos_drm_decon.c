@@ -287,6 +287,7 @@ static void decon_update_dsi_config(struct decon_config *config,
 		config->dsc.slice_height = exynos_mode->dsc.slice_height;
 		config->dsc.slice_width = DIV_ROUND_UP(config->image_width,
 						       config->dsc.slice_count);
+		config->dsc.cfg = exynos_mode->dsc.cfg;
 	}
 
 	is_vid_mode = (exynos_mode->mode_flags & MIPI_DSI_MODE_VIDEO) != 0;
