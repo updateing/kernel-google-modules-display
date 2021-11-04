@@ -1444,7 +1444,7 @@ static void exynos_drm_connector_attach_touch(struct exynos_panel *ctx,
 	if (!bridge || bridge->dev)
 		return;
 
-	drm_bridge_attach(encoder, bridge, NULL, 0);
+	drm_bridge_attach(encoder, bridge, &ctx->bridge, 0);
 	dev_info(ctx->dev, "attach bridge %p to encoder %p\n", bridge, encoder);
 }
 
