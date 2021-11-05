@@ -401,6 +401,7 @@ struct exynos_panel_desc {
 	const struct exynos_dsi_cmd_set *off_cmd_set;
 	/* @lp_mode: provides a low power mode if available, otherwise null */
 	const struct exynos_panel_mode *lp_mode;
+	const size_t lp_mode_count;
 	const struct exynos_dsi_cmd_set *lp_cmd_set;
 	const struct exynos_binned_lp *binned_lp;
 	const size_t num_binned_lp;
@@ -479,6 +480,7 @@ struct exynos_panel {
 
 	struct mutex lp_state_lock;
 	const struct exynos_binned_lp *current_binned_lp;
+	struct drm_property_blob *lp_mode_blob;
 
 	char panel_id[PANEL_ID_MAX];
 	char panel_extinfo[PANEL_EXTINFO_MAX];

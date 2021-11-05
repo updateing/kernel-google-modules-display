@@ -1197,6 +1197,78 @@ static void exynos_panel_connector_print_state(struct drm_printer *p,
 	mutex_unlock(&ctx->mode_lock);
 }
 
+/**
+ * is_umode_lp_compatible - check switching between provided modes can be seamless during LP
+ * @pmode: initial display mode
+ * @umode: target display mode
+ *
+ * Returns true if the switch to target mode can be seamless during LP
+ */
+static inline bool is_umode_lp_compatible(const struct exynos_panel_mode *pmode,
+					  const struct drm_mode_modeinfo *umode)
+{
+	return pmode->mode.vdisplay == umode->vdisplay && pmode->mode.hdisplay == umode->hdisplay;
+}
+
+static int exynos_panel_get_lp_mode(struct exynos_drm_connector *exynos_conn,
+				    const struct exynos_drm_connector_state *exynos_state,
+				    uint64_t *val)
+{
+	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_conn);
+	struct drm_property_blob *blob = ctx->lp_mode_blob;
+	const struct exynos_panel_mode *cur_mode = READ_ONCE(ctx->current_mode);
+	struct drm_mode_modeinfo umode;
+
+	if (!cur_mode || !ctx->desc->lp_mode)
+		return -EINVAL;
+
+	if (blob) {
+		if (is_umode_lp_compatible(cur_mode, blob->data)) {
+			dev_dbg(ctx->dev, "%s: returning existing lp mode compatible with: %s\n",
+				__func__, cur_mode->mode.name);
+			*val = blob->base.id;
+			return 0;
+		}
+		ctx->lp_mode_blob = NULL;
+		drm_property_blob_put(blob);
+	}
+
+	/* when mode count is 0, assume driver is only providing single LP mode */
+	if (ctx->desc->lp_mode_count <= 1) {
+		dev_dbg(ctx->dev, "%s: only single LP mode available\n", __func__);
+		drm_mode_convert_to_umode(&umode, &ctx->desc->lp_mode->mode);
+	} else {
+		int i;
+
+		for (i = 0; i < ctx->desc->lp_mode_count; i++) {
+			const struct exynos_panel_mode *lp_mode = &ctx->desc->lp_mode[i];
+
+			drm_mode_convert_to_umode(&umode, &lp_mode->mode);
+
+			if (is_umode_lp_compatible(cur_mode, &umode)) {
+				dev_dbg(ctx->dev, "%s: found lp mode: %s for mode:%s\n", __func__,
+					lp_mode->mode.name, cur_mode->mode.name);
+				break;
+			}
+		}
+
+		if (i == ctx->desc->lp_mode_count) {
+			dev_warn(ctx->dev, "%s: unable to find compatible LP mode for mode: %s\n",
+				 __func__, cur_mode->mode.name);
+			return -ENOENT;
+		}
+	}
+
+	blob = drm_property_create_blob(exynos_conn->base.dev, sizeof(umode), &umode);
+	if (IS_ERR(blob))
+		return PTR_ERR(blob);
+
+	ctx->lp_mode_blob = blob;
+	*val = blob->base.id;
+
+	return 0;
+}
+
 static int exynos_panel_connector_get_property(
 				   struct exynos_drm_connector *exynos_connector,
 				   const struct exynos_drm_connector_state *exynos_state,
@@ -1222,6 +1294,8 @@ static int exynos_panel_connector_get_property(
 	} else if (property == p->sync_rr_switch) {
 		*val = exynos_state->sync_rr_switch;
 		dev_dbg(ctx->dev, "%s: sync_rr_switch(%s)\n", __func__, *val ? "true" : "false");
+	} else if (property == p->lp_mode) {
+		return exynos_panel_get_lp_mode(exynos_connector, exynos_state, val);
 	} else
 		return -EINVAL;
 
@@ -1423,8 +1497,13 @@ static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel
 	}
 
 	pmode = ctx->desc->lp_mode;
-	if (pmode && drm_mode_equal(&pmode->mode, mode))
-		return pmode;
+	if (pmode) {
+		const size_t count = ctx->desc->lp_mode_count ? : 1;
+
+		for (i = 0; i < count; i++, pmode++)
+			if (drm_mode_equal(&pmode->mode, mode))
+				return pmode;
+	}
 
 	return NULL;
 }
@@ -2060,27 +2139,6 @@ static void exynos_debugfs_panel_remove(struct exynos_panel *ctx)
 }
 #endif
 
-static int exynos_panel_attach_lp_mode(struct exynos_drm_connector *exynos_conn,
-				       const struct drm_display_mode *lp_mode)
-{
-	struct exynos_drm_connector_properties *p =
-		exynos_drm_connector_get_properties(exynos_conn);
-	struct drm_mode_modeinfo umode;
-	struct drm_property_blob *blob;
-
-	if (!lp_mode)
-		return -ENOENT;
-
-	drm_mode_convert_to_umode(&umode, lp_mode);
-	blob = drm_property_create_blob(exynos_conn->base.dev, sizeof(umode), &umode);
-	if (IS_ERR(blob))
-		return PTR_ERR(blob);
-
-	drm_object_attach_property(&exynos_conn->base.base, p->lp_mode, blob->base.id);
-
-	return 0;
-}
-
 static ssize_t hbm_mode_store(struct device *dev,
 			       struct device_attribute *attr,
 			       const char *buf, size_t count)
@@ -2558,11 +2616,8 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 			dev_err(ctx->dev, "Failed to attach brightness capability (%d)\n", ret);
 	}
 
-	if (desc->lp_mode) {
-		ret = exynos_panel_attach_lp_mode(&ctx->exynos_connector, &desc->lp_mode->mode);
-		if (ret)
-			dev_err(ctx->dev, "Failed to attach lp mode (%d)\n", ret);
-	}
+	if (desc->lp_mode)
+		drm_object_attach_property(obj, p->lp_mode, 0);
 
 	return ret;
 }

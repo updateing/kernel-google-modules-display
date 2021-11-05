@@ -250,8 +250,7 @@ int exynos_drm_connector_create_properties(struct drm_device *dev)
 	struct exynos_drm_connector_properties *p = dev_get_exynos_connector_properties(dev);
 	int ret;
 
-	p->lp_mode = drm_property_create(dev, DRM_MODE_PROP_IMMUTABLE | DRM_MODE_PROP_BLOB,
-					 "lp_mode", 0);
+	p->lp_mode = drm_property_create(dev, DRM_MODE_PROP_BLOB, "lp_mode", 0);
 	if (IS_ERR(p->lp_mode))
                 return PTR_ERR(p->lp_mode);
 
