@@ -387,6 +387,7 @@ int decon_reg_wait_update_done_timeout(u32 id, unsigned long timeout_us);
 int decon_reg_wait_update_done_and_mask(u32 id, struct decon_mode *mode,
 		u32 timeout_us);
 
+bool decon_reg_is_idle(u32 id);
 /* For window update and multi resolution feature */
 int decon_reg_wait_idle_status_timeout(u32 id, unsigned long timeout);
 void decon_reg_set_partial_update(u32 id, struct decon_config *config,

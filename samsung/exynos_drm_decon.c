@@ -952,15 +952,15 @@ static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
 	unsigned long ret;
 
 	ret = wait_event_timeout(decon->framedone_wait,
-				 atomic_read(&decon->frames_pending) == 0,
+				 atomic_read(&decon->frames_pending) == 0 ||
+				 decon_reg_is_idle(decon->id),
 				 timeout);
-	if (!ret) {
-		WARN(1, "wait for frame done timed out (%dhz)", fps);
-		atomic_set(&decon->frames_pending, 0);
-	} else {
+	if (!ret)
+		WARN(1, "decon%d: wait for frame done timed out (%dhz)", decon->id, fps);
+	else
 		decon_debug(decon, "%s: frame done after: ~%dus (%dhz)", __func__,
 			    jiffies_to_usecs(timeout - ret), fps);
-	}
+	atomic_set(&decon->frames_pending, 0);
 
 	/*
 	 * Make sure all window connections are disabled when getting disabled,

@@ -1998,6 +1998,11 @@ int decon_reg_wait_update_done_and_mask(u32 id, struct decon_mode *mode,
 	return result;
 }
 
+bool decon_reg_is_idle(u32 id)
+{
+	return decon_read_mask(id, GLOBAL_CON, GLOBAL_CON_IDLE_STATUS) != 0;
+}
+
 int decon_reg_wait_idle_status_timeout(u32 id, unsigned long timeout)
 {
 	u32 val;
