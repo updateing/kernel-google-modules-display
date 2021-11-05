@@ -521,8 +521,6 @@ struct exynos_panel {
 
 	enum exynos_hbm_mode hbm_mode;
 	bool dimming_on;
-	/* request_dimming_on from drm commit */
-	bool request_dimming_on;
 	/* indicates the LCD backlight is controlled by DCS */
 	bool bl_ctrl_dcs;
 	struct backlight_device *bl;
@@ -551,8 +549,6 @@ struct exynos_panel {
 		struct local_hbm {
 			bool gamma_para_ready;
 			u8 gamma_cmd[LOCAL_HBM_GAMMA_CMD_SIZE_MAX];
-			/* request local hbm mode from atomic_commit */
-			bool request_hbm_mode;
 			/* indicate if local hbm enabled or not */
 			bool enabled;
 			/* max local hbm on period in ms */
@@ -561,14 +557,6 @@ struct exynos_panel {
 			struct delayed_work timeout_work;
 		} local_hbm;
 
-		/* request global hbm mode from drm commit */
-		enum exynos_hbm_mode request_global_hbm_mode;
-		/* send mipi commands asynchronously after frame start */
-		struct work_struct hbm_work;
-		/* mipi command update flags in hbm_work */
-		u8 update_flags;
-		struct mutex hbm_work_lock;
-		struct drm_crtc_commit *commit;
 		struct workqueue_struct *wq;
 	} hbm;
 };

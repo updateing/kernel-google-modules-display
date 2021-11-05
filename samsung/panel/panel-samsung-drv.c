@@ -52,6 +52,7 @@ static ssize_t exynos_panel_parse_byte_buf(char *input_str, size_t input_len,
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len);
 static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
 							     const struct drm_display_mode *mode);
+static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enabled);
 
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
@@ -639,13 +640,6 @@ int exynos_panel_disable(struct drm_panel *panel)
 			ctx->hbm.local_hbm.enabled = false;
 			sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 			cancel_delayed_work_sync(&ctx->hbm.local_hbm.timeout_work);
-		}
-		if (exynos_panel_func->set_hbm_mode) {
-			cancel_work_sync(&ctx->hbm.hbm_work);
-			if (ctx->hbm.commit) {
-				drm_crtc_commit_put(ctx->hbm.commit);
-				ctx->hbm.commit = NULL;
-			}
 		}
 	}
 
@@ -1549,81 +1543,51 @@ static void exynos_panel_commit_properties(
 				const struct exynos_drm_connector_state *conn_state)
 {
 	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
-	u8 update_flags = 0;
 
 	if (!conn_state->pending_update_flags)
 		return;
 
-	if (exynos_panel_func->set_hbm_mode ||
-		exynos_panel_func->set_local_hbm_mode) {
-		cancel_work_sync(&ctx->hbm.hbm_work);
-		mutex_lock(&ctx->hbm.hbm_work_lock);
-		update_flags = ctx->hbm.update_flags;
-		ctx->hbm.update_flags = 0;
-		mutex_unlock(&ctx->hbm.hbm_work_lock);
+	DPU_ATRACE_BEGIN(__func__);
+	if ((conn_state->pending_update_flags & HBM_FLAG_BL_UPDATE) &&
+		(ctx->bl->props.brightness != conn_state->brightness_level)) {
+		DPU_ATRACE_BEGIN("set_bl");
+		ctx->bl->props.brightness = conn_state->brightness_level;
+		backlight_update_status(ctx->bl);
+		DPU_ATRACE_END("set_bl");
 	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_GHBM_UPDATE) &&
 		exynos_panel_func->set_hbm_mode &&
-		(ctx->hbm_mode != conn_state->global_hbm_mode))
-		update_flags |= HBM_FLAG_GHBM_UPDATE;
-
-	if ((conn_state->pending_update_flags & HBM_FLAG_BL_UPDATE) &&
-		(ctx->bl->props.brightness != conn_state->brightness_level))
-		update_flags |= HBM_FLAG_BL_UPDATE;
+		(ctx->hbm_mode != conn_state->global_hbm_mode)) {
+		DPU_ATRACE_BEGIN("set_hbm");
+		mutex_lock(&ctx->mode_lock);
+		exynos_panel_func->set_hbm_mode(ctx, conn_state->global_hbm_mode);
+		backlight_state_changed(ctx->bl);
+		mutex_unlock(&ctx->mode_lock);
+		DPU_ATRACE_END("set_hbm");
+	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_LHBM_UPDATE) &&
 		exynos_panel_func->set_local_hbm_mode &&
-		(ctx->hbm.local_hbm.enabled != conn_state->local_hbm_on))
-		update_flags |= HBM_FLAG_LHBM_UPDATE;
+		(ctx->hbm.local_hbm.enabled != conn_state->local_hbm_on)) {
+		DPU_ATRACE_BEGIN("set_lhbm");
+		dev_info(ctx->dev, "%s: set LHBM to %d\n", __func__,
+			conn_state->local_hbm_on);
+		mutex_lock(&ctx->mode_lock);
+		panel_update_local_hbm_locked(ctx, conn_state->local_hbm_on);
+		mutex_unlock(&ctx->mode_lock);
+		DPU_ATRACE_END("set_lhbm");
+	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_DIMMING_UPDATE) &&
 		exynos_panel_func->set_dimming_on &&
-		(ctx->dimming_on != conn_state->dimming_on))
-		update_flags |= HBM_FLAG_DIMMING_UPDATE;
-
-	dev_dbg(ctx->dev, "%s: update_flags(0x%x)", __func__, update_flags);
-	if (update_flags & (HBM_FLAG_GHBM_UPDATE | HBM_FLAG_LHBM_UPDATE)) {
-		struct drm_crtc_commit *commit = conn_state->base.commit;
-		struct drm_crtc_commit *old_commit;
-
-		if (commit)
-			drm_crtc_commit_get(commit);
-
-		mutex_lock(&ctx->hbm.hbm_work_lock);
-		old_commit = ctx->hbm.commit;
-		if (WARN_ON(old_commit))
-			drm_crtc_commit_put(old_commit);
-
-		ctx->hbm.commit = commit;
-
-		if (update_flags & HBM_FLAG_GHBM_UPDATE)
-			ctx->hbm.request_global_hbm_mode = conn_state->global_hbm_mode;
-
-		if (update_flags & HBM_FLAG_BL_UPDATE)
-			ctx->bl->props.brightness = conn_state->brightness_level;
-
-		if (update_flags & HBM_FLAG_LHBM_UPDATE)
-			ctx->hbm.local_hbm.request_hbm_mode = conn_state->local_hbm_on;
-
-		if (update_flags & HBM_FLAG_DIMMING_UPDATE)
-			ctx->request_dimming_on = conn_state->dimming_on;
-
-		ctx->hbm.update_flags = update_flags;
-		update_flags = 0;
-		queue_work(system_highpri_wq, &ctx->hbm.hbm_work);
-		mutex_unlock(&ctx->hbm.hbm_work_lock);
-	}
-
-	if (update_flags & HBM_FLAG_BL_UPDATE) {
-		ctx->bl->props.brightness = conn_state->brightness_level;
-		backlight_update_status(ctx->bl);
-	}
-
-
-	if (update_flags & HBM_FLAG_DIMMING_UPDATE)
+		(ctx->dimming_on != conn_state->dimming_on)) {
+		DPU_ATRACE_BEGIN("set_dimming");
 		exynos_panel_set_dimming(ctx, conn_state->dimming_on);
+		DPU_ATRACE_END("set_dimming");
+	}
 
+	DPU_ATRACE_END(__func__);
 }
 
 static void exynos_panel_connector_atomic_commit(
@@ -3216,87 +3180,6 @@ static void local_hbm_timeout_work(struct work_struct *work)
 	sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 }
 
-static void hbm_work(struct work_struct *work)
-{
-	struct exynos_panel *ctx =
-			 container_of(work, struct exynos_panel, hbm.hbm_work);
-	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
-	struct drm_crtc_commit *commit = ctx->hbm.commit;
-	u32 delay_us, timeout_ms, te_period_us;
-	int fps;
-
-	dev_dbg(ctx->dev, "%s (update_flags: 0x%02x)\n", __func__, ctx->hbm.update_flags);
-
-	mutex_lock(&ctx->mode_lock);
-	fps = drm_mode_vrefresh(&ctx->current_mode->mode);
-	mutex_unlock(&ctx->mode_lock);
-	WARN_ON(fps < 0);
-	if (fps <= 0)
-		fps = 1;
-	te_period_us = USEC_PER_SEC / fps;
-
-	/* delay begins at TE rising, ends at VSYNC rising */
-	delay_us = exynos_panel_vsync_start_time_us(te_period_us);
-	timeout_ms = te_period_us / USEC_PER_MSEC + 20;
-
-	/* considering the variation */
-	delay_us = delay_us * 105 / 100;
-
-	DPU_ATRACE_BEGIN("ghbm");
-	mutex_lock(&ctx->hbm.hbm_work_lock);
-
-	WARN_ON(!commit);
-
-	if (commit) {
-		int ret;
-
-		DPU_ATRACE_BEGIN("wait_for_flip");
-		ctx->hbm.commit = NULL;
-		ret = wait_for_completion_timeout(&commit->flip_done,
-						  msecs_to_jiffies(timeout_ms));
-		WARN_ON(ret < 0);
-		drm_crtc_commit_put(commit);
-		DPU_ATRACE_END("wait_for_flip");
-	}
-
-	usleep_range(delay_us, delay_us + 100);
-	if (ctx->hbm.update_flags & HBM_FLAG_GHBM_UPDATE) {
-		DPU_ATRACE_BEGIN("set_hbm");
-		mutex_lock(&ctx->mode_lock);
-		exynos_panel_func->set_hbm_mode(ctx, ctx->hbm.request_global_hbm_mode);
-		backlight_state_changed(ctx->bl);
-		mutex_unlock(&ctx->mode_lock);
-		DPU_ATRACE_END("set_hbm");
-	}
-
-	if (ctx->hbm.update_flags & HBM_FLAG_BL_UPDATE) {
-		DPU_ATRACE_BEGIN("set_bl");
-		backlight_update_status(ctx->bl);
-		DPU_ATRACE_END("set_bl");
-	}
-
-	if (ctx->hbm.update_flags & HBM_FLAG_LHBM_UPDATE) {
-		DPU_ATRACE_BEGIN("set_lhbm");
-		dev_info(ctx->dev, "%s: set LHBM to %d (%dHz)\n",
-			__func__, ctx->hbm.local_hbm.request_hbm_mode, fps);
-		mutex_lock(&ctx->mode_lock);
-		panel_update_local_hbm_locked(ctx, ctx->hbm.local_hbm.request_hbm_mode);
-		mutex_unlock(&ctx->mode_lock);
-		DPU_ATRACE_END("set_lhbm");
-	}
-
-	if (ctx->hbm.update_flags & HBM_FLAG_DIMMING_UPDATE) {
-		DPU_ATRACE_BEGIN("set_dimming");
-		exynos_panel_set_dimming(ctx, ctx->request_dimming_on);
-		DPU_ATRACE_END("set_dimming");
-	}
-
-	ctx->hbm.update_flags = 0;
-	mutex_unlock(&ctx->hbm.hbm_work_lock);
-
-	DPU_ATRACE_END("hbm");
-}
-
 static void hbm_data_init(struct exynos_panel *ctx)
 {
 	ctx->hbm.local_hbm.gamma_para_ready = false;
@@ -3307,10 +3190,7 @@ static void hbm_data_init(struct exynos_panel *ctx)
 		dev_err(ctx->dev, "failed to create hbm workq!\n");
 	else {
 		INIT_DELAYED_WORK(&ctx->hbm.local_hbm.timeout_work, local_hbm_timeout_work);
-		INIT_WORK(&ctx->hbm.hbm_work, hbm_work);
 	}
-	ctx->hbm.update_flags = 0;
-	mutex_init(&ctx->hbm.hbm_work_lock);
 }
 
 static void exynos_panel_te2_init(struct exynos_panel *ctx)
