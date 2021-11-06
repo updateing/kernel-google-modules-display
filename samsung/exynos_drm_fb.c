@@ -540,6 +540,31 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 	drm_atomic_helper_commit_modeset_enables(dev, old_state);
 	DPU_ATRACE_END("modeset");
 
+	DPU_ATRACE_BEGIN("connector_pre_commit");
+	for_each_oldnew_connector_in_state(old_state, connector,
+				 old_conn_state, new_conn_state, i) {
+		if (!new_conn_state->crtc)
+			continue;
+
+		new_crtc_state = drm_atomic_get_new_crtc_state(old_state, new_conn_state->crtc);
+		if (!new_crtc_state->active)
+			continue;
+
+		if (is_exynos_drm_connector(connector)) {
+			struct exynos_drm_connector *exynos_connector =
+				to_exynos_connector(connector);
+			const struct exynos_drm_connector_helper_funcs *funcs =
+				exynos_connector->helper_private;
+			if (!funcs->atomic_pre_commit)
+				continue;
+
+			funcs->atomic_pre_commit(exynos_connector,
+					to_exynos_connector_state(old_conn_state),
+					to_exynos_connector_state(new_conn_state));
+		}
+	}
+	DPU_ATRACE_END("connector_pre_commit");
+
 	DPU_ATRACE_BEGIN("commit_planes");
 	drm_atomic_helper_commit_planes(dev, old_state,
 					DRM_PLANE_COMMIT_ACTIVE_ONLY);
@@ -554,9 +579,10 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 
 	drm_atomic_helper_fake_vblank(old_state);
 
+	DPU_ATRACE_BEGIN("connector_commit");
 	for_each_oldnew_connector_in_state(old_state, connector,
 				 old_conn_state, new_conn_state, i) {
-		if (new_conn_state->writeback_job || !new_conn_state->crtc)
+		if (!new_conn_state->crtc)
 			continue;
 
 		new_crtc_state = drm_atomic_get_new_crtc_state(old_state, new_conn_state->crtc);
@@ -574,7 +600,7 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 					to_exynos_connector_state(new_conn_state));
 		}
 	}
-
+	DPU_ATRACE_END("connector_commit");
 	DPU_ATRACE_BEGIN("wait_for_crtc_flip");
 	exynos_crtc_wait_for_flip_done(old_state);
 	DPU_ATRACE_END("wait_for_crtc_flip");

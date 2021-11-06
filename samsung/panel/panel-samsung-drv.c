@@ -53,6 +53,9 @@ static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len);
 static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
 							     const struct drm_display_mode *mode);
 static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enabled);
+static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
+					 const struct exynos_panel_mode *current_mode,
+					 struct exynos_panel *ctx);
 
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
@@ -1467,11 +1470,11 @@ static int exynos_panel_connector_get_property(
 	} else if (property == p->dimming_on) {
 		*val = exynos_state->dimming_on;
 		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__, *val ? "true" : "false");
-	} else if (property == p->sync_rr_switch) {
-		*val = exynos_state->sync_rr_switch;
-		dev_dbg(ctx->dev, "%s: sync_rr_switch(%s)\n", __func__, *val ? "true" : "false");
 	} else if (property == p->lp_mode) {
 		return exynos_panel_get_lp_mode(exynos_connector, exynos_state, val);
+	} else if (property == p->mipi_sync) {
+		*val = exynos_state->mipi_sync;
+		dev_dbg(ctx->dev, "%s: mipi_sync(0x%llx)\n", __func__, *val);
 	} else
 		return -EINVAL;
 
@@ -1507,10 +1510,9 @@ static int exynos_panel_connector_set_property(
 		exynos_state->dimming_on = val;
 		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__,
 			 exynos_state->dimming_on ? "true" : "false");
-	} else if (property == p->sync_rr_switch) {
-		exynos_state->sync_rr_switch = val;
-		dev_dbg(ctx->dev, "%s: sync_rr_switch(%s)\n", __func__,
-			 exynos_state->sync_rr_switch ? "true" : "false");
+	} else if (property == p->mipi_sync) {
+		exynos_state->mipi_sync = val;
+		dev_dbg(ctx->dev, "%s: mipi_sync(0x%lx)\n", __func__, exynos_state->mipi_sync);
 	} else
 		return -EINVAL;
 
@@ -1538,22 +1540,26 @@ static void exynos_panel_set_dimming(struct exynos_panel *ctx, bool dimming_on)
 	mutex_unlock(&ctx->mode_lock);
 }
 
-static void exynos_panel_commit_properties(
+static void exynos_panel_pre_commit_properties(
 				struct exynos_panel *ctx,
 				const struct exynos_drm_connector_state *conn_state)
 {
 	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+	bool mipi_sync;
+	bool ghbm_updated = false;
 
 	if (!conn_state->pending_update_flags)
 		return;
 
 	DPU_ATRACE_BEGIN(__func__);
-	if ((conn_state->pending_update_flags & HBM_FLAG_BL_UPDATE) &&
-		(ctx->bl->props.brightness != conn_state->brightness_level)) {
-		DPU_ATRACE_BEGIN("set_bl");
-		ctx->bl->props.brightness = conn_state->brightness_level;
-		backlight_update_status(ctx->bl);
-		DPU_ATRACE_END("set_bl");
+	mipi_sync = conn_state->mipi_sync &
+		(MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM | MIPI_CMD_SYNC_BL);
+
+	if (mipi_sync) {
+		exynos_panel_check_mipi_sync_timing(conn_state->base.crtc,
+						    ctx->current_mode, ctx);
+		exynos_dsi_dcs_write_buffer_force_batch_begin(dsi);
 	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_GHBM_UPDATE) &&
@@ -1565,6 +1571,15 @@ static void exynos_panel_commit_properties(
 		backlight_state_changed(ctx->bl);
 		mutex_unlock(&ctx->mode_lock);
 		DPU_ATRACE_END("set_hbm");
+		ghbm_updated = true;
+	}
+
+	if ((conn_state->pending_update_flags & HBM_FLAG_BL_UPDATE) &&
+		(ctx->bl->props.brightness != conn_state->brightness_level)) {
+		DPU_ATRACE_BEGIN("set_bl");
+		ctx->bl->props.brightness = conn_state->brightness_level;
+		backlight_update_status(ctx->bl);
+		DPU_ATRACE_END("set_bl");
 	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_LHBM_UPDATE) &&
@@ -1587,7 +1602,38 @@ static void exynos_panel_commit_properties(
 		DPU_ATRACE_END("set_dimming");
 	}
 
+	if (mipi_sync)
+		exynos_dsi_dcs_write_buffer_force_batch_end(dsi);
+
+	if ((MIPI_CMD_SYNC_GHBM & conn_state->mipi_sync)) {
+		/**
+		 * panel needs one extra VSYNC period to apply GHBM. The frame
+		 * update should be delayed.
+		 */
+		DPU_ATRACE_BEGIN("ghbm_wait");
+		if (!drm_crtc_vblank_get(conn_state->base.crtc)) {
+			drm_crtc_wait_one_vblank(conn_state->base.crtc);
+			drm_crtc_vblank_put(conn_state->base.crtc);
+		} else {
+			pr_warn("%s failed to get vblank for ghbm wait\n", __func__);
+		}
+		DPU_ATRACE_END("ghbm_wait");
+	}
+
+	if (ghbm_updated)
+		sysfs_notify(&ctx->bl->dev.kobj, NULL, "hbm_mode");
+
 	DPU_ATRACE_END(__func__);
+}
+
+static void exynos_panel_connector_atomic_pre_commit(
+				struct exynos_drm_connector *exynos_connector,
+			    struct exynos_drm_connector_state *exynos_old_state,
+			    struct exynos_drm_connector_state *exynos_new_state)
+{
+	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_connector);
+
+	exynos_panel_pre_commit_properties(ctx, exynos_new_state);
 }
 
 static void exynos_panel_connector_atomic_commit(
@@ -1601,8 +1647,6 @@ static void exynos_panel_connector_atomic_commit(
 	if (!exynos_panel_func)
 		return;
 
-	exynos_panel_commit_properties(ctx, exynos_new_state);
-
 	mutex_lock(&ctx->mode_lock);
 	if (exynos_panel_func->commit_done)
 		exynos_panel_func->commit_done(ctx);
@@ -1612,6 +1656,7 @@ static void exynos_panel_connector_atomic_commit(
 }
 
 static const struct exynos_drm_connector_helper_funcs exynos_panel_connector_helper_funcs = {
+	.atomic_pre_commit = exynos_panel_connector_atomic_pre_commit,
 	.atomic_commit = exynos_panel_connector_atomic_commit,
 };
 
@@ -2736,7 +2781,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->global_hbm_mode, 0);
 	drm_object_attach_property(obj, p->local_hbm_on, 0);
 	drm_object_attach_property(obj, p->dimming_on, 0);
-	drm_object_attach_property(obj, p->sync_rr_switch, 0);
+	drm_object_attach_property(obj, p->mipi_sync, 0);
 	drm_object_attach_property(obj, p->is_partial, desc->is_partial);
 	drm_object_attach_property(obj, p->panel_idle_support, desc->is_panel_idle_supported);
 
@@ -2978,25 +3023,28 @@ static void exynos_panel_bridge_post_disable(struct drm_bridge *bridge,
 }
 
 /* Get the VSYNC start time within a TE period */
-static u64 exynos_panel_vsync_start_time_us(u32 te_period_us)
+static u64 exynos_panel_vsync_start_time_us(u32 te_us, u32 te_period_us)
 {
-	/* Approximate the VSYNC start time with TE falling edge. Approximate
-	 * the TE falling edge with 55% TE width
-	 */
-	/* TODO: Change to ctx->current_mode->exynos_mode.vblank_usec when it's accurate */
+	/* Approximate the VSYNC start time with TE falling edge. */
+	if (te_us > 0 && te_us < te_period_us)
+		return te_us * 105 / 100; /* add 5% for variation */
+
+	/* Approximate the TE falling edge with 55% TE width */
 	return te_period_us * 55 / 100;
 }
 
-static void exynos_panel_check_modeset_timing(struct drm_crtc *crtc,
-					 const struct drm_display_mode *old_mode)
+static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
+						const struct exynos_panel_mode *current_mode,
+						struct exynos_panel *ctx)
 {
 	u32 te_period_us;
 	int retry;
 	u64 left, right;
+	bool vblank_taken = false;
 
-	DPU_ATRACE_BEGIN(__func__);
-	pr_debug("%s: check mode_set timing enter.\n", __func__);
-	te_period_us = USEC_PER_SEC / drm_mode_vrefresh(old_mode);
+	DPU_ATRACE_BEGIN("mipi_time_window");
+	te_period_us = USEC_PER_SEC / drm_mode_vrefresh(&current_mode->mode);
+	pr_debug("%s: check mode_set timing enter. te %d\n", __func__, te_period_us);
 
 	/*
 	 * Safe time window to send RR (refresh rate) command illustrated below. RR switch
@@ -3018,7 +3066,7 @@ static void exynos_panel_check_modeset_timing(struct drm_crtc *crtc,
 	 * VSYNC------+----------+-------+----
 	 *            RR1        RR2
 	 */
-	left = exynos_panel_vsync_start_time_us(te_period_us);
+	left = exynos_panel_vsync_start_time_us(current_mode->exynos_mode.te_usec, te_period_us);
 	right = te_period_us - USEC_PER_MSEC;
 	/* check for next TE every 1ms */
 	retry = te_period_us / USEC_PER_MSEC + 1;
@@ -3026,15 +3074,56 @@ static void exynos_panel_check_modeset_timing(struct drm_crtc *crtc,
 	do {
 		ktime_t last_te = 0, now;
 		s64 since_last_te_us;
+		s64 rr_switch_delta_us;
+		s64 te_period_before_rr_switch_us;
 
 		drm_crtc_vblank_count_and_time(crtc, &last_te);
 		now = ktime_get();
 		since_last_te_us = ktime_us_delta(now, last_te);
+		/* Need a vblank as a reference point */
+		if (since_last_te_us > te_period_us) {
+			DPU_ATRACE_BEGIN("time_window_wait_crtc");
+			if (vblank_taken || !drm_crtc_vblank_get(crtc)) {
+				drm_crtc_wait_one_vblank(crtc);
+				vblank_taken = true;
+			} else {
+				pr_warn("%s failed to get vblank for ref point.\n", __func__);
+			}
+			DPU_ATRACE_END("time_window_wait_crtc");
+			continue;
+		}
+
+		/**
+		 * If a refresh rate switch happens right before last_te. last_te is not reliable
+		 * because it could be for the new refresh rate or the old refresh rate.
+		 * Wait another vblank in this case.
+		 */
+		rr_switch_delta_us = ktime_us_delta(last_te, ctx->last_rr_switch_ts);
+		te_period_before_rr_switch_us = ctx->last_rr != 0 ? USEC_PER_SEC / ctx->last_rr : 0;
+		if (rr_switch_delta_us > 0 && rr_switch_delta_us < te_period_before_rr_switch_us) {
+			DPU_ATRACE_BEGIN("time_window_wait_crtc2");
+			if (vblank_taken || !drm_crtc_vblank_get(crtc)) {
+				drm_crtc_wait_one_vblank(crtc);
+				vblank_taken = true;
+			} else {
+				pr_warn("%s failed to get vblank for rr wait\n", __func__);
+			}
+			DPU_ATRACE_END("time_window_wait_crtc2");
+			continue;
+		}
+
 		if (since_last_te_us <= right) {
 			if (since_last_te_us < left) {
 				u32 delay_us = left - since_last_te_us;
 
+				DPU_ATRACE_BEGIN("time_window_wait");
 				usleep_range(delay_us, delay_us + 100);
+				DPU_ATRACE_END("time_window_wait");
+				/*
+				 * if a mode switch happens, a TE signal might
+				 * happen during the sleep. need to re-sync
+				 */
+				continue;
 			}
 			break;
 		}
@@ -3042,8 +3131,11 @@ static void exynos_panel_check_modeset_timing(struct drm_crtc *crtc,
 		usleep_range(USEC_PER_MSEC, USEC_PER_MSEC + 100);
 	} while (--retry > 0);
 
+	if (vblank_taken)
+		drm_crtc_vblank_put(crtc);
+
 	pr_debug("%s: check mode_set timing exit.\n", __func__);
-	DPU_ATRACE_END(__func__);
+	DPU_ATRACE_END("mipi_time_window");
 }
 
 static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enabled)
@@ -3074,16 +3166,16 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				      to_exynos_connector_state(connector_state);
 	const struct exynos_panel_mode *pmode = exynos_panel_get_mode(ctx, mode);
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
-	const struct exynos_panel_mode *current_mode;
+	const struct exynos_panel_mode *old_mode;
 	bool need_update_backlight = false;
 
 	if (WARN_ON(!pmode))
 		return;
 
 	mutex_lock(&ctx->mode_lock);
-	current_mode = ctx->current_mode;
+	old_mode = ctx->current_mode;
 
-	if (current_mode == pmode) {
+	if (old_mode == pmode) {
 		mutex_unlock(&ctx->mode_lock);
 		return;
 	}
@@ -3109,8 +3201,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	DPU_ATRACE_BEGIN(__func__);
 	if (funcs) {
 		const bool is_active = is_panel_active(ctx);
-		const bool was_lp_mode = current_mode &&
-					 current_mode->exynos_mode.is_lp_mode;
+		const bool was_lp_mode = old_mode && old_mode->exynos_mode.is_lp_mode;
 		const bool is_lp_mode = pmode->exynos_mode.is_lp_mode;
 		bool state_changed = false;
 
@@ -3137,8 +3228,9 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				state_changed = true;
 			}
 		} else if (funcs->mode_set) {
-			if (exynos_connector_state->sync_rr_switch && is_active)
-				exynos_panel_check_modeset_timing(crtc, &current_mode->mode);
+			if ((MIPI_CMD_SYNC_REFRESH_RATE & exynos_connector_state->mipi_sync) &&
+					is_active)
+				exynos_panel_check_mipi_sync_timing(crtc, old_mode, ctx);
 			funcs->mode_set(ctx, pmode);
 			state_changed = is_active;
 		}
@@ -3157,6 +3249,11 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 		}
 	} else {
 		ctx->current_mode = pmode;
+	}
+
+	if (drm_mode_vrefresh(&pmode->mode) != drm_mode_vrefresh(&old_mode->mode)) {
+		ctx->last_rr_switch_ts = ktime_get();
+		ctx->last_rr = drm_mode_vrefresh(&old_mode->mode);
 	}
 
 	mutex_unlock(&ctx->mode_lock);

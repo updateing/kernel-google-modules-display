@@ -545,6 +545,13 @@ struct exynos_panel {
 	ktime_t last_self_refresh_active_ts;
 	struct delayed_work idle_work;
 
+	/**
+	 * Record the last refresh rate switch. Note the mode switch doesn't
+	 * mean rr switch so it differs from last_mode_set_ts
+	 */
+	ktime_t last_rr_switch_ts;
+	u32 last_rr;
+
 	struct {
 		struct local_hbm {
 			bool gamma_para_ready;
