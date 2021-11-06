@@ -134,6 +134,39 @@ static const u32 nt37290_bl_range[] = {
 	94, 180, 270, 360, 2047
 };
 
+/* Truncate 8-bit signed value to 6-bit signed value */
+#define TO_6BIT_SIGNED(v) (v & 0x3F)
+
+static const struct drm_dsc_config nt37290_dsc_cfg = {
+	.first_line_bpg_offset = 13,
+	.rc_range_params = {
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+		{4, 10, TO_6BIT_SIGNED(-10)},
+		{5, 10, TO_6BIT_SIGNED(-10)},
+		{5, 11, TO_6BIT_SIGNED(-10)},
+		{5, 11, TO_6BIT_SIGNED(-12)},
+		{8, 12, TO_6BIT_SIGNED(-12)},
+		{12, 13, TO_6BIT_SIGNED(-12)},
+	},
+};
+
+#define NT37290_DSC_CONFIG \
+	.dsc = { \
+		.enabled = true, \
+		.dsc_count = 2, \
+		.slice_count = 2, \
+		.slice_height = 24, \
+		.cfg = &nt37290_dsc_cfg, \
+	}
+
 static const struct exynos_panel_mode nt37290_modes[] = {
 	{
 		/* 1440x3120 @ 60Hz */
@@ -156,17 +189,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			.dsc = {
-				.enabled = true,
-				.dsc_count = 2,
-				.slice_count = 2,
-				.slice_height = 24,
-				.use_calculated_init_dec_delay = true,
-				.first_line_bpg_offset = 13,
-				.range_min_qp = {4, 5, 5, 5, 8, 12},
-				.range_max_qp = {10, 10, 11, 11, 12, 13},
-				.range_bpg_offset = {-10, -10, -10, -12, -12, -12},
-			},
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 	},
@@ -191,17 +214,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			.dsc = {
-				.enabled = true,
-				.dsc_count = 2,
-				.slice_count = 2,
-				.slice_height = 24,
-				.use_calculated_init_dec_delay = true,
-				.first_line_bpg_offset = 13,
-				.range_min_qp = {4, 5, 5, 5, 8, 12},
-				.range_max_qp = {10, 10, 11, 11, 12, 13},
-				.range_bpg_offset = {-10, -10, -10, -12, -12, -12},
-			},
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 	},
