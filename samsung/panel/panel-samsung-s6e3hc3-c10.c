@@ -31,6 +31,13 @@
 	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND)
 
 /**
+ * enum s6e3hc3_c10_panel_feature - features supported by this panel
+ * @C10_FEAT_HBM: high brightness mode
+ * @C10_FEAT_EARLY_EXIT: early exit from a long frame
+ * @C10_FEAT_OP_NS: normal speed (not high speed)
+ * @C10_FEAT_FRAME_AUTO: automatic (not manual) frame control
+ * @C10_FEAT_MAX: placeholder, counter for number of features
+ *
  * The following features are correlated, if one or more of them change, the others need
  * to be updated unconditionally.
  */
