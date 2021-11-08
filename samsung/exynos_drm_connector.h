@@ -31,6 +31,12 @@ struct exynos_drm_connector;
 
 /* packetgo feature to batch msgs can wait for vblank, use this flag to ignore */
 #define EXYNOS_DSI_MSG_IGNORE_VBLANK  BIT(14)
+/* Mark the start of mipi commands transaction. Following commands should not be
+ * sent to panel until see a EXYNOS_DSI_MSG_FORCE_FLUSH flag
+ */
+#define EXYNOS_DSI_MSG_FORCE_BATCH BIT(13)
+/* Mark the end of mipi commands transaction */
+#define EXYNOS_DSI_MSG_FORCE_FLUSH  BIT(12)
 
 struct exynos_drm_connector_properties {
 	struct drm_property *max_luminance;

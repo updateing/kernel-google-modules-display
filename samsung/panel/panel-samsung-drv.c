@@ -1910,7 +1910,9 @@ ssize_t exynos_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 
 	switch (len) {
 	case 0:
-		return -EINVAL;
+		/* allow flag only messages to dsim */
+		type = 0;
+		break;
 
 	case 1:
 		type = MIPI_DSI_DCS_SHORT_WRITE;

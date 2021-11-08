@@ -787,7 +787,20 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 				struct exynos_panel *ctx);
 ssize_t exynos_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 				const void *data, size_t len, u16 flags);
+ssize_t exynos_dsi_cmd_send_flags(struct mipi_dsi_device *dsi, u16 flags);
 
 int exynos_panel_probe(struct mipi_dsi_device *dsi);
 int exynos_panel_remove(struct mipi_dsi_device *dsi);
+
+static inline void exynos_dsi_dcs_write_buffer_force_batch_begin(struct mipi_dsi_device *dsi)
+{
+	exynos_dsi_dcs_write_buffer(dsi, NULL, 0, EXYNOS_DSI_MSG_FORCE_BATCH);
+}
+
+static inline void exynos_dsi_dcs_write_buffer_force_batch_end(struct mipi_dsi_device *dsi)
+{
+	exynos_dsi_dcs_write_buffer(dsi, NULL, 0,
+				    EXYNOS_DSI_MSG_FORCE_FLUSH | EXYNOS_DSI_MSG_IGNORE_VBLANK);
+}
+
 #endif /* _PANEL_SAMSUNG_DRV_ */
