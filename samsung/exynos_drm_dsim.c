@@ -497,8 +497,6 @@ dsim_get_clock_mode(const struct dsim_device *dsim,
 static void dsim_update_clock_config(struct dsim_device *dsim,
 				     const struct dsim_pll_param *p)
 {
-	uint32_t underrun_cnt;
-
 	dsim->config.dphy_pms.p = p->p;
 	dsim->config.dphy_pms.m = p->m;
 	dsim->config.dphy_pms.s = p->s;
@@ -530,8 +528,8 @@ static void dsim_update_clock_config(struct dsim_device *dsim,
 	if (p->cmd_underrun_cnt) {
 		dsim->config.cmd_underrun_cnt[0] = p->cmd_underrun_cnt;
 	} else {
-		dsim_calc_underrun(dsim, dsim->clk_param.hs_clk, &underrun_cnt);
-		dsim->config.cmd_underrun_cnt[0] = underrun_cnt;
+		dsim_warn(dsim, "cmd_underrun_cnt is not set correctly\n");
+		WARN_ON(1);
 	}
 
 	dsim_debug(dsim, "\tunderrun_lp_ref 0x%x\n", dsim->config.cmd_underrun_cnt[0]);
@@ -541,9 +539,13 @@ static int dsim_set_clock_mode(struct dsim_device *dsim,
 			       const struct drm_display_mode *mode)
 {
 	struct dsim_pll_param *p = dsim_get_clock_mode(dsim, mode);
+	uint32_t underrun_cnt;
 
 	if (!p)
 		return -ENOENT;
+
+	if (!dsim_calc_underrun(dsim, p->pll_freq, &underrun_cnt))
+		p->cmd_underrun_cnt = underrun_cnt;
 
 	dsim_update_clock_config(dsim, p);
 	dsim->current_pll_param = p;
