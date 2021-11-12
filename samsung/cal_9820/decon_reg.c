@@ -948,7 +948,7 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 	const u32 initial_scale_value = 0x20;
 	const u32 first_line_bpg_offset = 0x0c;
 	const u32 initial_offset = 0x1800;
-	const u32 rc_range_parameter0 = 0x0102;
+	const u32 rc_range_parameters = 0x0102;
 
 	u32 final_offset, final_scale;
 	u32 flag, nfl_bpg_offset, slice_bpg_offset;
@@ -1075,7 +1075,7 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 	dsc_enc->slice_bpg_offset = slice_bpg_offset;
 	dsc_enc->initial_offset = initial_offset;
 	dsc_enc->final_offset = final_offset;
-	dsc_enc->rc_range_parameter0 = rc_range_parameter0;
+	dsc_enc->rc_range_parameters = rc_range_parameters;
 
 	dsc_enc->width_per_enc = dsc_enc0_w;
 }
@@ -1118,7 +1118,7 @@ static void dsc_reg_set_pps(u32 dsc_id, struct decon_dsc *dsc_enc)
 
 	/* min_qp0 = 0 , max_qp0 = 4 , bpg_off0 = 2 */
 	dsc_reg_set_pps_58_59_rc_range_param0(dsc_id,
-		dsc_enc->rc_range_parameter0);
+		dsc_enc->rc_range_parameters);
 #ifndef VESA_SCR_V4
 	/* PPS79 ~ PPS87 : 3HF4 is different with VESA SCR v4 */
 	dsc_write(dsc_id, 0x006C, 0x1AB62AF6);
@@ -1154,7 +1154,7 @@ static void dsc_get_decoder_pps_info(struct decon_dsc *dsc_dec,
 	dsc_dec->slice_bpg_offset = (u32) (pps_t[30] << 8 | pps_t[31]);
 	dsc_dec->initial_offset = (u32) (pps_t[32] << 8 | pps_t[33]);
 	dsc_dec->final_offset = (u32) (pps_t[34] << 8 | pps_t[35]);
-	dsc_dec->rc_range_parameter0 = (u32) (pps_t[58] << 8 | pps_t[59]);
+	dsc_dec->rc_range_parameters = (u32) (pps_t[58] << 8 | pps_t[59]);
 }
 
 static u32 dsc_cmp_pps_enc_dec(struct decon_dsc *p_enc, struct decon_dsc *p_dec)
@@ -1252,11 +1252,11 @@ static u32 dsc_cmp_pps_enc_dec(struct decon_dsc *p_enc, struct decon_dsc *p_dec)
 		pr_debug("[dsc_pps] final_offset (enc:dec = %d:%d)\n",
 			p_enc->final_offset, p_dec->final_offset);
 	}
-	if (p_enc->rc_range_parameter0 != p_dec->rc_range_parameter0) {
+	if (p_enc->rc_range_parameters != p_dec->rc_range_parameters) {
 		diff_cnt++;
-		pr_debug("[dsc_pps] rc_range_parameter0 (enc:dec = %d:%d)\n",
-						p_enc->rc_range_parameter0,
-						p_dec->rc_range_parameter0);
+		pr_debug("[dsc_pps] rc_range_parameters (enc:dec = %d:%d)\n",
+						p_enc->rc_range_parameters,
+						p_dec->rc_range_parameters);
 	}
 
 	pr_debug("[dsc_pps] total different count : %d\n", diff_cnt);
