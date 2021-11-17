@@ -22,10 +22,11 @@ EXTRA_CFLAGS += -DCONFIG_DRM_SAMSUNG_DSI=1
 EXTRA_CFLAGS += -DCONFIG_DRM_SAMSUNG_WB=1
 EXTRA_CFLAGS += -DCONFIG_DRM_SAMSUNG_TUI=1
 EXTRA_CFLAGS += -DDYNAMIC_DEBUG_MODULE=1
-EXTRA_CFLAGS += -I$(realpath $(KERNEL_SRC)/$(M)/../include)
 
 EXTRA_CFLAGS += -Werror
 
-modules modules_install clean:
-	$(MAKE) -C $(KERNEL_SRC) M=$(M) W=1 $(KBUILD_OPTIONS) EXTRA_CFLAGS="$(EXTRA_CFLAGS)" $(@)
+include $(KERNEL_SRC)/../gs/kernel/device-modules/Makefile.include
 
+modules modules_install clean:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) W=1 \
+	$(KBUILD_OPTIONS) EXTRA_CFLAGS="$(EXTRA_CFLAGS)" KBUILD_EXTRA_SYMBOLS="$(EXTRA_SYMBOLS)" $(@)
