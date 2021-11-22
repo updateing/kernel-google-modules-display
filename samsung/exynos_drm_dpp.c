@@ -16,6 +16,7 @@
 #include <drm/exynos_drm.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_fourcc_gs101.h>
 
 #include <linux/of.h>
 #include <linux/of_device.h>
