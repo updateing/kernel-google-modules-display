@@ -585,6 +585,10 @@ static void s6e3hc3_c10_write_display_mode(struct exynos_panel *ctx,
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	u8 val = S6E3HC3_WRCTRLD_BCTRL_BIT;
 
+	/* b/204940038 keep IRC always-on before EVT */
+	if (irc && (PANEL_REV_LT(PANEL_REV_EVT1) & ctx->panel_rev))
+		*irc = true;
+
 	if (irc && (*irc != spanel->hw_irc)) {
 		spanel->hw_irc = *irc;
 		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
