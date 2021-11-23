@@ -468,6 +468,8 @@ struct exynos_panel {
 
 	struct te2_data te2;
 	ktime_t last_commit_ts;
+	ktime_t last_mode_set_ts;
+	struct delayed_work idle_work;
 
 	struct {
 		struct local_hbm {
