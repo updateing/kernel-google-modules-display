@@ -96,6 +96,32 @@ static const struct exynos_dsi_cmd s6e3fc3_p10_init_cmds[] = {
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_init);
 
+static const struct exynos_dsi_cmd s6e3fc3_p10_lhbm_location_cmds[] = {
+	EXYNOS_DSI_CMD0(test_key_on_f0),
+	EXYNOS_DSI_CMD0(test_key_on_f1),
+
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x28, 0xF2),
+	/* 10 bits */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0xCC),
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0x33, 0x68),
+	/* box location */
+	EXYNOS_DSI_CMD_SEQ(0x68, 0xCC),
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0x34, 0x68),
+	/* center position set, x: 0x21C, y: 0x6B1, size: 0x63 */
+	EXYNOS_DSI_CMD_SEQ(0x68, 0x21, 0xC6, 0xB1, 0x63),
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x28, 0xF2),
+	/* 8 bits */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC4),
+
+	EXYNOS_DSI_CMD0(test_key_off_f1),
+	EXYNOS_DSI_CMD0(test_key_off_f0)
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_lhbm_location);
+
 #define LHBM_GAMMA_CMD_SIZE 6
 /**
  * struct s6e3fc3_p10_panel - panel specific runtime info
@@ -342,6 +368,7 @@ static int s6e3fc3_p10_enable(struct drm_panel *panel)
 	s6e3fc3_p10_change_frequency(ctx, drm_mode_vrefresh(mode));
 
 	s6e3fc3_p10_lhbm_gamma_write(ctx);
+	exynos_panel_send_cmd_set(ctx, &s6e3fc3_p10_lhbm_location_cmd_set);
 
 	/* DSC related configuration */
 	exynos_dcs_compression_mode(ctx, 0x1); /* DSC_DEC_ON */
@@ -392,32 +419,6 @@ static void s6e3fc3_p10_set_dimming_on(struct exynos_panel *exynos_panel,
 	s6e3fc3_p10_update_wrctrld(exynos_panel);
 }
 
-static const struct exynos_dsi_cmd s6e3fc3_p10_lhbm_location_cmds[] = {
-	EXYNOS_DSI_CMD0(test_key_on_f0),
-	EXYNOS_DSI_CMD0(test_key_on_f1),
-
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x28, 0xF2),
-	/* 10 bits */
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xCC),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0x33, 0x68),
-	/* box location */
-	EXYNOS_DSI_CMD_SEQ(0x68, 0xCC),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0x34, 0x68),
-	/* center position set, x: 0x21C, y: 0x6B1, size: 0x63 */
-	EXYNOS_DSI_CMD_SEQ(0x68, 0x21, 0xC6, 0xB1, 0x63),
-	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x28, 0xF2),
-	/* 8 bits */
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC4),
-
-	EXYNOS_DSI_CMD0(test_key_off_f1),
-	EXYNOS_DSI_CMD0(test_key_off_f0)
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_lhbm_location);
-
 static void s6e3fc3_p10_set_local_hbm_mode(struct exynos_panel *exynos_panel,
 				 bool local_hbm_en)
 {
@@ -425,9 +426,6 @@ static void s6e3fc3_p10_set_local_hbm_mode(struct exynos_panel *exynos_panel,
 		return;
 
 	exynos_panel->hbm.local_hbm.enabled = local_hbm_en;
-	if (local_hbm_en)
-		exynos_panel_send_cmd_set(exynos_panel,
-			&s6e3fc3_p10_lhbm_location_cmd_set);
 	s6e3fc3_p10_update_wrctrld(exynos_panel);
 }
 
