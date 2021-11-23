@@ -16,6 +16,44 @@
 
 #include "panel-samsung-drv.h"
 
+/**
+ * enum nt37290_panel_feature - features supported by this panel
+ * @G10_FEAT_EARLY_EXIT: early exit from a long frame
+ * @G10_FEAT_FRAME_AUTO: automatic (not manual) frame control
+ * @G10_FEAT_MAX: placeholder, counter for number of features
+ *
+ * The following features are correlated, if one or more of them change, the others need
+ * to be updated unconditionally.
+ */
+enum nt37290_panel_feature {
+	G10_FEAT_EARLY_EXIT = 0,
+	G10_FEAT_FRAME_AUTO,
+	G10_FEAT_MAX,
+};
+
+/**
+ * struct nt37290_panel - panel specific runtime info
+ *
+ * This struct maintains nt37290 panel specific runtime info, any fixed details about panel
+ * should most likely go into struct exynos_panel_desc. The variables with the prefix hw_ keep
+ * track of the features that were actually committed to hardware, and should be modified
+ * after sending cmds to panel, i.e. updating hw state.
+ */
+struct nt37290_panel {
+	/** @base: base panel struct */
+	struct exynos_panel base;
+	/** @feat: software/working correlated features, not guaranteed to be effective in panel */
+	DECLARE_BITMAP(feat, G10_FEAT_MAX);
+	/** @hw_feat: correlated states effective in panel */
+	DECLARE_BITMAP(hw_feat, G10_FEAT_MAX);
+	/** @hw_vrefresh: vrefresh rate effective in panel */
+	u32 hw_vrefresh;
+};
+
+#define to_spanel(ctx) container_of(ctx, struct nt37290_panel, base)
+
+static const u8 cmd2_page0[] = { 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00 };
+
 static const struct exynos_dsi_cmd nt37290_off_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_DELAY(100, 0x28),
 	EXYNOS_DSI_CMD_SEQ_DELAY(120, 0x10),
@@ -43,7 +81,7 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 			   0x86, 0x02, 0x83, 0x00, 0x0A, 0x04, 0x86, 0x03,
 			   0x2E, 0x10, 0xF0),
 	/* change refresh frame to 1 after 2Ch command in skip mode */
-	EXYNOS_DSI_CMD_SEQ(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00),
+	EXYNOS_DSI_CMD0(cmd2_page0),
 	EXYNOS_DSI_CMD_SEQ(0xBA, 0x00),
 
 	/* CMD2 Page 1 */
@@ -81,9 +119,81 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_init);
 
+static void nt37290_update_panel_feat(struct exynos_panel *ctx,
+	const struct exynos_panel_mode *pmode, bool enforce)
+{
+	struct nt37290_panel *spanel = to_spanel(ctx);
+	u32 vrefresh;
+	DECLARE_BITMAP(changed_feat, G10_FEAT_MAX);
+	bool ee, fi;
+
+	if (pmode)
+		vrefresh = drm_mode_vrefresh(&pmode->mode);
+	else
+		vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
+
+	if (enforce) {
+		bitmap_fill(changed_feat, G10_FEAT_MAX);
+	} else {
+		bitmap_xor(changed_feat, spanel->feat, spanel->hw_feat, G10_FEAT_MAX);
+		if (bitmap_empty(changed_feat, G10_FEAT_MAX) &&
+			vrefresh == spanel->hw_vrefresh)
+			return;
+	}
+
+	spanel->hw_vrefresh = vrefresh;
+	bitmap_copy(spanel->hw_feat, spanel->feat, G10_FEAT_MAX);
+	ee = test_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
+	fi = test_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
+
+	dev_dbg(ctx->dev, "ee=%s fi=%s vrefresh=%u\n",
+		ee ? "on" : "off", fi ? "auto" : "manual", vrefresh);
+
+	if (vrefresh == 120 && !fi) {
+		/* freq_mode_hs */
+		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x2F, 0x00);
+	} else {
+		/* freq_mode_hs */
+		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x00);
+
+		/* freq_ctrl_hs */
+		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x30);
+
+		/* early exit */
+		EXYNOS_DCS_BUF_ADD(ctx, 0x5A, !ee);
+
+		/* TODO: add support of auto frame insertion */
+		if (!fi) {
+			/* auto frame insertion off (manual) */
+			EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
+			EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x1C);
+			if (vrefresh == 60)
+				EXYNOS_DCS_BUF_ADD(ctx,
+					0xBA, 0x91, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x00);
+		}
+
+		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x2C);
+	}
+}
+
+static void nt37290_change_frequency(struct exynos_panel *ctx,
+				     const struct exynos_panel_mode *pmode)
+{
+	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
+	struct nt37290_panel *spanel = to_spanel(ctx);
+
+	clear_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
+	clear_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
+
+	nt37290_update_panel_feat(ctx, pmode, false);
+
+	dev_dbg(ctx->dev, "change to %u hz\n", vrefresh);
+}
+
 static int nt37290_enable(struct drm_panel *panel)
 {
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
+	struct nt37290_panel *spanel = to_spanel(ctx);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 	if (!pmode) {
@@ -94,15 +204,38 @@ static int nt37290_enable(struct drm_panel *panel)
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
 	exynos_panel_reset(ctx);
-
 	exynos_panel_send_cmd_set(ctx, &nt37290_init_cmd_set);
 
-	ctx->enabled = true;
+	/* TODO: add support of early exit and auto */
+	clear_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
+	clear_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
+	nt37290_update_panel_feat(ctx, pmode, true);
 
 	if (!pmode->exynos_mode.is_lp_mode)
 		EXYNOS_DCS_WRITE_SEQ(ctx, 0x29);
 
 	return 0;
+}
+
+static int nt37290_disable(struct drm_panel *panel)
+{
+	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
+	struct nt37290_panel *spanel = to_spanel(ctx);
+
+	/* panel register state gets reset after disabling hardware */
+	bitmap_clear(spanel->hw_feat, 0, G10_FEAT_MAX);
+	spanel->hw_vrefresh = 60;
+
+	return exynos_panel_disable(panel);
+}
+
+static void nt37290_mode_set(struct exynos_panel *ctx,
+			     const struct exynos_panel_mode *pmode)
+{
+	if (!is_panel_active(ctx))
+		return;
+
+	nt37290_change_frequency(ctx, pmode);
 }
 
 static bool nt37290_is_mode_seamless(const struct exynos_panel *ctx,
@@ -227,8 +360,21 @@ static void nt37290_panel_init(struct exynos_panel *ctx)
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &nt37290_init_cmd_set, "init");
 }
 
+static int nt37290_panel_probe(struct mipi_dsi_device *dsi)
+{
+	struct nt37290_panel *spanel;
+
+	spanel = devm_kzalloc(&dsi->dev, sizeof(*spanel), GFP_KERNEL);
+	if (!spanel)
+		return -ENOMEM;
+
+	spanel->hw_vrefresh = 60;
+
+	return exynos_panel_common_init(dsi, &spanel->base);
+}
+
 static const struct drm_panel_funcs nt37290_drm_funcs = {
-	.disable = exynos_panel_disable,
+	.disable = nt37290_disable,
 	.unprepare = exynos_panel_unprepare,
 	.prepare = exynos_panel_prepare,
 	.enable = nt37290_enable,
@@ -240,6 +386,7 @@ static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.set_lp_mode = exynos_panel_set_lp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
 	.is_mode_seamless = nt37290_is_mode_seamless,
+	.mode_set = nt37290_mode_set,
 	.panel_init = nt37290_panel_init,
 	.get_panel_rev = nt37290_get_panel_rev,
 };
@@ -301,7 +448,7 @@ static const struct of_device_id exynos_panel_of_match[] = {
 MODULE_DEVICE_TABLE(of, exynos_panel_of_match);
 
 static struct mipi_dsi_driver exynos_panel_driver = {
-	.probe = exynos_panel_probe,
+	.probe = nt37290_panel_probe,
 	.remove = exynos_panel_remove,
 	.driver = {
 		.name = "panel-boe-nt37290",
