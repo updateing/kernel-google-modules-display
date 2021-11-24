@@ -375,6 +375,14 @@ static inline bool is_auto_mode_preferred(struct exynos_panel *ctx)
 	if (IS_HBM_ON(ctx->hbm_mode) || ctx->dimming_on)
 		return false;
 
+	if (ctx->idle_delay_ms) {
+		const ktime_t now = ktime_get();
+		const ktime_t delta = ktime_sub(now, ctx->last_mode_set_ts);
+
+		if (ktime_to_ms(delta) < ctx->idle_delay_ms)
+			return false;
+	}
+
 	return ctx->panel_idle_enabled;
 }
 
@@ -889,12 +897,25 @@ static void s6e3hc3_trigger_early_exit(struct exynos_panel *ctx)
 			delta_us);
 		return;
 	}
-
-	dev_dbg(ctx->dev, "sending early exit out cmd\n");
+	/* triggering early exit causes a switch to 120hz */
+	ctx->last_mode_set_ts = ktime_get();
 
 	DPU_ATRACE_BEGIN(__func__);
 	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
-	EXYNOS_DCS_WRITE_TABLE(ctx, freq_update);
+	if (ctx->idle_delay_ms) {
+		const struct exynos_panel_mode *pmode = ctx->current_mode;
+
+		/*
+		 * setting manual mode (at 120hz) removes any effect from early exit,
+		 * so there's no need to update early exit status
+		 */
+		s6e3hc3_set_manual_mode(ctx, pmode);
+
+		dev_dbg(ctx->dev, "%s: set manual mode for: %s\n", __func__, pmode->mode.name);
+	} else {
+		dev_dbg(ctx->dev, "sending early exit out cmd\n");
+		EXYNOS_DCS_WRITE_TABLE(ctx, freq_update);
+	}
 	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
 	DPU_ATRACE_END(__func__);
 }
