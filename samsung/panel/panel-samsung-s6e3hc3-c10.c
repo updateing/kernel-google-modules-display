@@ -193,6 +193,11 @@ static void s6e3hc3_c10_update_te2(struct exynos_panel *ctx)
 	if (!ret) {
 		rising = timing.rising_edge;
 		falling = timing.falling_edge;
+		if (option == S6E3HC3_TE2_FIXED) {
+			/* fixed TE2 has 2H shift */
+			rising += 2;
+			falling += 2;
+		}
 
 		width[1] = (rising >> 8) & 0xF;
 		width[2] = rising & 0xFF;
