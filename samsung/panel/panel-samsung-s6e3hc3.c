@@ -48,6 +48,9 @@ struct s6e3hc3_panel {
 
 	/** @is_hbm_update: indicates if there is a hbm state update request */
 	bool is_hbm_update;
+
+	/** @force_changeable_te: force changeable TE (instead of fixed) during early exit */
+	bool force_changeable_te;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct s6e3hc3_panel, base)
@@ -388,14 +391,18 @@ static inline bool is_auto_mode_preferred(struct exynos_panel *ctx)
 
 static void s6e3hc3_update_early_exit(struct exynos_panel *ctx, bool enable)
 {
+	const struct s6e3hc3_panel *spanel = to_spanel(ctx);
 	const u32 flags = PANEL_CMD_SET_QUEUE;
 
 	dev_dbg(ctx->dev, "%s: en=%d\n", __func__, enable);
 
-	if (enable)
+	if (enable) {
 		exynos_panel_send_cmd_set_flags(ctx, &s6e3hc3_early_exit_enable_cmd_set, flags);
-	else
+		if (spanel->force_changeable_te)
+			EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, 0, 0xB9, 0x00);
+	} else {
 		exynos_panel_send_cmd_set_flags(ctx, &s6e3hc3_early_exit_disable_cmd_set, flags);
+	}
 }
 
 static u32 s6e3hc3_get_min_idle_vrefresh(struct exynos_panel *ctx,
@@ -1232,8 +1239,11 @@ static void s6e3hc3_panel_mode_create_cmdset(struct exynos_panel *ctx,
 static void s6e3hc3_panel_init(struct exynos_panel *ctx)
 {
 	struct dentry *csroot = ctx->debugfs_cmdset_entry;
+	struct s6e3hc3_panel *spanel = to_spanel(ctx);
 	int i;
 
+	debugfs_create_bool("force_changeable_te", 0644, ctx->debugfs_entry,
+			    &spanel->force_changeable_te);
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &s6e3hc3_init_cmd_set, "init");
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &s6e3hc3_early_exit_enable_cmd_set,
 					   "early_exit_enable");
