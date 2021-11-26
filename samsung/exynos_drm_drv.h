@@ -234,6 +234,7 @@ struct exynos_drm_crtc_state {
 	uint32_t color_mode;
 	uint32_t in_bpc;
 	uint32_t force_bpc; /* crtc(DECON) bpc mode */
+	uint64_t expected_present_time;
 	struct exynos_dqe_state dqe;
 	struct drm_property_blob *cgc_lut;
 	struct drm_property_blob *disp_dither;
@@ -313,6 +314,7 @@ struct exynos_drm_crtc {
 		struct drm_property *histogram_threshold;
 		struct drm_property *partial;
 		struct drm_property *cgc_lut_fd;
+		struct drm_property *expected_present_time;
 	} props;
 	u8 active_state;
 	u32 rcd_plane_mask;

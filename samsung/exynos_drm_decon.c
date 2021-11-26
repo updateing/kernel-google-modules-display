@@ -685,6 +685,40 @@ static void decon_arm_event_locked(struct exynos_drm_crtc *exynos_crtc)
 	decon->event = event;
 }
 
+#define RESERVED_TIME_FOR_KICKOFF_NS		3500000
+static void decon_wait_earliest_process_time(
+		const struct exynos_drm_crtc_state *new_exynos_crtc_state)
+{
+	ktime_t earliest_process_time, now;
+
+	if (ktime_compare(new_exynos_crtc_state->expected_present_time,
+				RESERVED_TIME_FOR_KICKOFF_NS) <= 0)
+		return;
+
+	earliest_process_time = ktime_sub_ns(new_exynos_crtc_state->expected_present_time,
+					RESERVED_TIME_FOR_KICKOFF_NS);
+	now = ktime_get();
+
+	if (ktime_after(earliest_process_time, now)) {
+		const struct drm_crtc_state *crtc_state = &new_exynos_crtc_state->base;
+		int32_t vrefresh = drm_mode_vrefresh(&crtc_state->mode);
+		int32_t max_delay_us = mult_frac(1000, 1020, vrefresh);
+		int32_t delay_until_process;
+
+		DPU_ATRACE_BEGIN("wait for earliest present time");
+
+		delay_until_process = (int32_t)ktime_us_delta(earliest_process_time, now);
+		if (delay_until_process > max_delay_us) {
+			delay_until_process = max_delay_us;
+			pr_warn("expected present time seems incorrect(now %llu, earliest %llu)\n",
+					now, earliest_process_time);
+		}
+		usleep_range(delay_until_process, delay_until_process + 10);
+
+		DPU_ATRACE_END("wait for earliest process time");
+	}
+}
+
 static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 		struct drm_crtc_state *old_crtc_state)
 {
@@ -770,6 +804,8 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 
 	if (new_exynos_crtc_state->seamless_mode_changed)
 		decon_seamless_mode_set(exynos_crtc, old_crtc_state);
+
+	decon_wait_earliest_process_time(new_exynos_crtc_state);
 
 	spin_lock_irqsave(&decon->slock, flags);
 	decon_reg_start(decon->id, &decon->config);

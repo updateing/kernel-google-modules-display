@@ -549,6 +549,8 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 		exynos_crtc_state->cgc_gem = (U642I64(val) >= 0) ?
 			exynos_drm_gem_fd_to_obj(crtc->dev, U642I64(val)) : NULL;
 		replaced = true;
+	} else if (property == exynos_crtc->props.expected_present_time) {
+		exynos_crtc_state->expected_present_time = val;
 	} else {
 		return -EINVAL;
 	}
@@ -608,6 +610,8 @@ static int exynos_drm_crtc_get_property(struct drm_crtc *crtc,
 	else if (property == exynos_crtc->props.cgc_lut_fd)
 		*val =  (exynos_crtc_state->cgc_gem) ?
 			dma_buf_fd(exynos_crtc_state->cgc_gem->dma_buf, 0) : 0;
+	else if (property == exynos_crtc->props.expected_present_time)
+		*val = exynos_crtc_state->expected_present_time;
 	else
 		return -EINVAL;
 
@@ -930,6 +934,10 @@ struct exynos_drm_crtc *exynos_drm_crtc_create(struct drm_device *drm_dev,
 	ret = exynos_drm_crtc_create_partial_property(exynos_crtc);
 	if (ret)
 		goto err_crtc;
+
+	if (exynos_drm_crtc_create_range(crtc, "expected_present_time",
+		&exynos_crtc->props.expected_present_time, 0, (uint64_t)(~((uint64_t)0))))
+		pr_err("create drm property expected_present_time failed\n");
 
 	return exynos_crtc;
 
