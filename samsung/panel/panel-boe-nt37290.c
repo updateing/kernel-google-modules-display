@@ -151,14 +151,14 @@ static void nt37290_update_panel_feat(struct exynos_panel *ctx,
 
 	if (vrefresh == 120 && !fi) {
 		/* freq_mode_hs */
-		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x2F, 0x00);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x00);
+		/* restore TE timing (no shift) */
+		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
 	} else {
 		/* freq_mode_hs */
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x00);
-
 		/* freq_ctrl_hs */
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x30);
-
 		/* early exit */
 		EXYNOS_DCS_BUF_ADD(ctx, 0x5A, !ee);
 
@@ -172,7 +172,9 @@ static void nt37290_update_panel_feat(struct exynos_panel *ctx,
 					0xBA, 0x91, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x00);
 		}
 
-		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x2C);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x2C);
+		/* TE shift 8.2ms */
+		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x01);
 	}
 }
 
