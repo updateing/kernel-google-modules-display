@@ -664,6 +664,21 @@ static inline void backlight_state_changed(struct backlight_device *bl)
 	usleep_range(delay * 1000, delay * 1000 + 10);			\
 } while (0)
 
+#define EXYNOS_DCS_BUF_ADD(ctx, seq...) \
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, EXYNOS_DSI_MSG_IGNORE_VBLANK, seq)
+
+#define EXYNOS_DCS_BUF_ADD_SET(ctx, set) \
+	exynos_dsi_dcs_write_buffer(to_mipi_dsi_device(ctx->dev), set, ARRAY_SIZE(set), \
+	EXYNOS_DSI_MSG_IGNORE_VBLANK)
+
+#define EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, seq...) \
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, \
+	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND, seq)
+
+#define EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, set) \
+	exynos_dsi_dcs_write_buffer(to_mipi_dsi_device(ctx->dev), set, ARRAY_SIZE(set), \
+	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND)
+
 #define EXYNOS_PPS_LONG_WRITE(ctx) do {					\
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
 	int ret;							\
