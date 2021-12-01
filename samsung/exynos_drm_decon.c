@@ -898,7 +898,7 @@ void decon_mode_bts_pre_update(struct decon_device *decon,
 	} else if (drm_atomic_crtc_needs_modeset(crtc_state)) {
 		unsigned int vblank_usec = decon_get_vblank_usec(crtc_state, old_state);
 
-		decon_mode_update_bts(decon, &crtc_state->mode, vblank_usec);
+		decon_mode_update_bts(decon, &crtc_state->adjusted_mode, vblank_usec);
 	} else if (!atomic_dec_if_positive(&decon->bts.delayed_update)) {
 		decon_mode_update_bts(decon, &crtc_state->mode, decon->bts.pending_vblank_usec);
 	}
