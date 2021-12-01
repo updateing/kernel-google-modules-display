@@ -679,14 +679,16 @@ static inline void backlight_state_changed(struct backlight_device *bl)
 	exynos_dsi_dcs_write_buffer(to_mipi_dsi_device(ctx->dev), set, ARRAY_SIZE(set), \
 	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND)
 
-#define EXYNOS_PPS_LONG_WRITE(ctx) do {					\
+#define EXYNOS_PPS_WRITE_BUF(ctx, payload) do {				\
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
 	int ret;							\
 	ret = mipi_dsi_picture_parameter_set(dsi,			\
-		(struct drm_dsc_picture_parameter_set *)ctx->desc->dsc_pps);	\
+		(struct drm_dsc_picture_parameter_set *)(payload));	\
 	if (ret < 0)							\
-		dev_err(ctx->dev, "failed to write cmd(%d)\n", ret);	\
+		dev_err(ctx->dev, "failed to write pps(%d)\n", ret);	\
 } while (0)
+
+#define EXYNOS_PPS_LONG_WRITE(ctx) EXYNOS_PPS_WRITE_BUF(ctx, ctx->desc->dsc_pps)
 
 #define for_each_display_mode(i, mode, ctx)			\
 	for (i = 0, mode = &ctx->desc->modes[i].mode;		\
