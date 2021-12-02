@@ -112,12 +112,6 @@ static const u8 display_on[] = { 0x29 };
 static const u8 sleep_in[] = { 0x10 };
 static const u8 freq_update[] = { 0xF7, 0x0F };
 
-static const struct exynos_dsi_cmd s6e3hc3_c10_off_cmds[] = {
-	EXYNOS_DSI_CMD(display_off, 20),
-	EXYNOS_DSI_CMD(sleep_in, 100),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_c10_off);
-
 static const struct exynos_dsi_cmd s6e3hc3_c10_lp_cmds[] = {
 	EXYNOS_DSI_CMD(display_off, 17),
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
@@ -664,10 +658,6 @@ static void s6e3hc3_c10_set_nolp_mode(struct exynos_panel *ctx,
 }
 
 static const struct exynos_dsi_cmd s6e3hc3_c10_init_cmds[] = {
-	EXYNOS_DSI_CMD_SEQ(0x9D, 0x01),			/* PPS_DSC_EN */
-
-	EXYNOS_DSI_CMD_SEQ_DELAY(120, 0x11),		/* sleep out: 120ms delay */
-
 	EXYNOS_DSI_CMD_SEQ(0x35),			/* TE on */
 
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
@@ -687,6 +677,7 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 	const struct drm_display_mode *mode;
+	const bool needs_reset = ctx->panel_state != PANEL_STATE_BLANK;
 	bool is_fhd;
 
 	if (!pmode) {
@@ -699,10 +690,16 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
-	exynos_panel_reset(ctx);
+	if (needs_reset)
+		exynos_panel_reset(ctx);
 
 	/* DSC related configuration */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0x9D, 0x01);
 	EXYNOS_PPS_WRITE_BUF(ctx, is_fhd ? FHD_PPS_SETTING : WQHD_PPS_SETTING);
+
+	if (needs_reset)
+		EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, 120, 0x11); /* sleep out: 120ms delay */
+
 	exynos_panel_send_cmd_set(ctx, &s6e3hc3_c10_init_cmd_set);
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
@@ -726,13 +723,23 @@ static int s6e3hc3_c10_disable(struct drm_panel *panel)
 {
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
+	int ret;
+
+	ret = exynos_panel_disable(panel);
+	if (ret)
+		return ret;
 
 	/* panel register state gets reset after disabling hardware */
 	bitmap_clear(spanel->hw_feat, 0, C10_FEAT_MAX);
 	spanel->hw_vrefresh = 60;
 	spanel->hw_idle_vrefresh = 0;
 
-	return exynos_panel_disable(panel);
+	EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 20, display_off);
+
+	if (ctx->panel_state == PANEL_STATE_OFF)
+		EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 100, sleep_in);
+
+	return 0;
 }
 
 /*
@@ -1245,7 +1252,6 @@ const struct exynos_panel_desc samsung_s6e3hc3_c10 = {
 	.bl_num_ranges = ARRAY_SIZE(s6e3hc3_c10_bl_range),
 	.modes = s6e3hc3_c10_modes,
 	.num_modes = ARRAY_SIZE(s6e3hc3_c10_modes),
-	.off_cmd_set = &s6e3hc3_c10_off_cmd_set,
 	.lp_mode = s6e3hc3_c10_lp_modes,
 	.lp_mode_count = ARRAY_SIZE(s6e3hc3_c10_lp_modes),
 	.lp_cmd_set = &s6e3hc3_c10_lp_cmd_set,
