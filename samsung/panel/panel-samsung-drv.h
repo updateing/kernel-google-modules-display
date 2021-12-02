@@ -735,6 +735,8 @@ static inline void backlight_state_changed(struct backlight_device *bl)
 #define EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, set) \
 	EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, set, MIPI_DSI_MSG_LASTCOMMAND)
 
+#define DSC_PPS_SIZE sizeof(struct drm_dsc_picture_parameter_set)
+
 #define EXYNOS_PPS_WRITE_BUF(ctx, payload) do {				\
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
 	int ret;							\
