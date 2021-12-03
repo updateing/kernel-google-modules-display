@@ -2271,9 +2271,11 @@ static ssize_t local_hbm_mode_store(struct device *dev,
 	if (ctx->exynos_connector.base.state)
 		crtc = ctx->exynos_connector.base.state->crtc;
 	drm_modeset_unlock(&config->connection_mutex);
-	if (crtc) {
+	ret = drm_crtc_vblank_get(crtc);
+	if (!ret) {
 		drm_crtc_wait_one_vblank(crtc);
 		drm_crtc_wait_one_vblank(crtc);
+		drm_crtc_vblank_put(crtc);
 	}
 
 	sysfs_notify(&bd->dev.kobj, NULL, "local_hbm_mode");

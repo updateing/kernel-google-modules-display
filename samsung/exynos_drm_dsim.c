@@ -1860,6 +1860,9 @@ static void need_wait_vblank(struct dsim_device *dsim)
 	if (!crtc)
 		return;
 
+	if (drm_crtc_vblank_get(crtc))
+		return;
+
 	vblank = &crtc->dev->vblank[crtc->index];
 	ready_allow_period =
 		mult_frac(vblank->framedur_ns, 95, 100) - PKTGO_READY_MARGIN_NS;
@@ -1873,6 +1876,7 @@ static void need_wait_vblank(struct dsim_device *dsim)
 
 	if (diff > ready_allow_period)
 		drm_crtc_wait_one_vblank(crtc);
+	drm_crtc_vblank_put(crtc);
 }
 
 #define PL_FIFO_THRESHOLD	mult_frac(MAX_PL_FIFO, 75, 100) /* 75% */

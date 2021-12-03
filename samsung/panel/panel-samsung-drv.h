@@ -671,19 +671,16 @@ static inline void backlight_state_changed(struct backlight_device *bl)
 } while (0)
 
 #define EXYNOS_DCS_BUF_ADD(ctx, seq...) \
-	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, EXYNOS_DSI_MSG_IGNORE_VBLANK, seq)
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, 0, seq)
 
 #define EXYNOS_DCS_BUF_ADD_SET(ctx, set) \
-	exynos_dsi_dcs_write_buffer(to_mipi_dsi_device(ctx->dev), set, ARRAY_SIZE(set), \
-	EXYNOS_DSI_MSG_IGNORE_VBLANK)
+	EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, set, 0)
 
 #define EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, seq...) \
-	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, \
-	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND, seq)
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, MIPI_DSI_MSG_LASTCOMMAND, seq)
 
 #define EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, set) \
-	exynos_dsi_dcs_write_buffer(to_mipi_dsi_device(ctx->dev), set, ARRAY_SIZE(set), \
-	EXYNOS_DSI_MSG_IGNORE_VBLANK | MIPI_DSI_MSG_LASTCOMMAND)
+	EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, set, MIPI_DSI_MSG_LASTCOMMAND)
 
 #define EXYNOS_PPS_WRITE_BUF(ctx, payload) do {				\
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
