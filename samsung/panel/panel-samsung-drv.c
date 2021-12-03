@@ -1924,7 +1924,7 @@ static ssize_t exynos_debugfs_op_hz_write(struct file *file,
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	const struct exynos_panel_funcs *funcs;
 
-	if (!ctx || !ctx->initialized || !ctx->enabled)
+	if (!is_panel_active(ctx))
 		return -EPERM;
 
 	funcs = ctx->desc->exynos_panel_func;
@@ -1954,7 +1954,7 @@ static int exynos_debugfs_op_hz_show(struct seq_file *m, void *data)
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	const struct exynos_panel_funcs *funcs;
 
-	if (!ctx || !ctx->initialized || !ctx->enabled)
+	if (!is_panel_active(ctx))
 		return -EPERM;
 
 	funcs = ctx->desc->exynos_panel_func;
