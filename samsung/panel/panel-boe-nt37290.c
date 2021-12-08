@@ -52,10 +52,50 @@ struct nt37290_panel {
 
 #define to_spanel(ctx) container_of(ctx, struct nt37290_panel, base)
 
+static const u8 display_off[] = { 0x28 };
+static const u8 display_on[] = { 0x29 };
 static const u8 cmd2_page0[] = { 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00 };
+static const u8 stream_2c[] = { 0x2C };
+
+static const struct exynos_dsi_cmd nt37290_lp_cmds[] = {
+	/* enter AOD */
+	EXYNOS_DSI_CMD_SEQ(0x39),
+	/* manual mode (no frame skip) */
+	EXYNOS_DSI_CMD_SEQ(0x2F, 0x00),
+};
+static DEFINE_EXYNOS_CMD_SET(nt37290_lp);
+
+static const struct exynos_dsi_cmd nt37290_lp_off_cmds[] = {
+	EXYNOS_DSI_CMD0(display_off),
+};
+
+static const struct exynos_dsi_cmd nt37290_lp_low_cmds[] = {
+	/* 10 nit */
+	EXYNOS_DSI_CMD_SEQ_DELAY(9, 0x51, 0x00, 0x00, 0x00, 0x00, 0x03, 0x33),
+	/* 2Ch needs to be sent twice in next 2 vsync */
+	EXYNOS_DSI_CMD(stream_2c, 9),
+	EXYNOS_DSI_CMD0(stream_2c),
+	EXYNOS_DSI_CMD0(display_on),
+};
+
+static const struct exynos_dsi_cmd nt37290_lp_high_cmds[] = {
+	/* 50 nit */
+	EXYNOS_DSI_CMD_SEQ_DELAY(9, 0x51, 0x00, 0x00, 0x00, 0x00, 0x0F, 0xFE),
+	/* 2Ch needs to be sent twice in next 2 vsync */
+	EXYNOS_DSI_CMD(stream_2c, 9),
+	EXYNOS_DSI_CMD0(stream_2c),
+	EXYNOS_DSI_CMD0(display_on),
+};
+
+static const struct exynos_binned_lp nt37290_binned_lp[] = {
+	BINNED_LP_MODE("off", 0, nt37290_lp_off_cmds),
+	/* TODO: specify TE2 timing (default rising = 0, falling = 19) */
+	BINNED_LP_MODE_TIMING("low", 80, nt37290_lp_low_cmds, 0, 19),
+	BINNED_LP_MODE_TIMING("high", 2047, nt37290_lp_high_cmds, 0, 19),
+};
 
 static const struct exynos_dsi_cmd nt37290_off_cmds[] = {
-	EXYNOS_DSI_CMD_SEQ_DELAY(100, 0x28),
+	EXYNOS_DSI_CMD(display_off, 100),
 	EXYNOS_DSI_CMD_SEQ_DELAY(120, 0x10),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_off);
@@ -183,13 +223,34 @@ static void nt37290_change_frequency(struct exynos_panel *ctx,
 {
 	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 	struct nt37290_panel *spanel = to_spanel(ctx);
+	bool was_lp_mode = ctx->current_mode->exynos_mode.is_lp_mode;
 
 	clear_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
 	clear_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
 
-	nt37290_update_panel_feat(ctx, pmode, false);
+	/* need to send 2Fh command while exiting AOD */
+	nt37290_update_panel_feat(ctx, pmode, was_lp_mode);
 
-	dev_dbg(ctx->dev, "change to %u hz\n", vrefresh);
+	dev_dbg(ctx->dev, "change to %u hz, was_lp_mode %d\n", vrefresh, was_lp_mode);
+}
+
+static void nt37290_set_nolp_mode(struct exynos_panel *ctx,
+				  const struct exynos_panel_mode *pmode)
+{
+	if (!is_panel_active(ctx))
+		return;
+
+	/* exit AOD */
+	EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, 34, 0x38);
+
+	nt37290_change_frequency(ctx, pmode);
+
+	/* 2Ch needs to be sent twice in next 2 vsync */
+	EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 34, stream_2c);
+	EXYNOS_DCS_WRITE_TABLE(ctx, stream_2c);
+	EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+
+	dev_info(ctx->dev, "exit LP mode\n");
 }
 
 static int nt37290_enable(struct drm_panel *panel)
@@ -214,7 +275,9 @@ static int nt37290_enable(struct drm_panel *panel)
 	nt37290_update_panel_feat(ctx, pmode, true);
 
 	if (!pmode->exynos_mode.is_lp_mode)
-		EXYNOS_DCS_WRITE_SEQ(ctx, 0x29);
+		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+	else
+		exynos_panel_set_lp_mode(ctx, pmode);
 
 	return 0;
 }
@@ -355,6 +418,33 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 	},
 };
 
+static const struct exynos_panel_mode nt37290_lp_mode = {
+	.mode = {
+		/* 1440x3120 @ 30Hz */
+		.name = "1440x3120x30",
+		.clock = 149310,
+		.hdisplay = 1440,
+		.hsync_start = 1440 + 80, // add hfp
+		.hsync_end = 1440 + 80 + 24, // add hsa
+		.htotal = 1440 + 80 + 24 + 36, // add hbp
+		.vdisplay = 3120,
+		.vsync_start = 3120 + 12, // add vfp
+		.vsync_end = 3120 + 12 + 4, // add vsa
+		.vtotal = 3120 + 12 + 4 + 14, // add vbp
+		.flags = 0,
+		.width_mm = 76,
+		.height_mm = 160,
+	},
+	.exynos_mode = {
+		.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+		.vblank_usec = 120,
+		.bpc = 8,
+		NT37290_DSC_CONFIG,
+		.underrun_param = &underrun_param,
+		.is_lp_mode = true,
+	},
+};
+
 static void nt37290_panel_init(struct exynos_panel *ctx)
 {
 	struct dentry *csroot = ctx->debugfs_cmdset_entry;
@@ -386,6 +476,7 @@ static const struct drm_panel_funcs nt37290_drm_funcs = {
 static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.set_brightness = exynos_panel_set_brightness,
 	.set_lp_mode = exynos_panel_set_lp_mode,
+	.set_nolp_mode = nt37290_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
 	.is_mode_seamless = nt37290_is_mode_seamless,
 	.mode_set = nt37290_mode_set,
@@ -439,6 +530,10 @@ const struct exynos_panel_desc boe_nt37290 = {
 	.modes = nt37290_modes,
 	.num_modes = ARRAY_SIZE(nt37290_modes),
 	.off_cmd_set = &nt37290_off_cmd_set,
+	.lp_mode = &nt37290_lp_mode,
+	.lp_cmd_set = &nt37290_lp_cmd_set,
+	.binned_lp = nt37290_binned_lp,
+	.num_binned_lp = ARRAY_SIZE(nt37290_binned_lp),
 	.panel_func = &nt37290_drm_funcs,
 	.exynos_panel_func = &nt37290_exynos_funcs,
 };
