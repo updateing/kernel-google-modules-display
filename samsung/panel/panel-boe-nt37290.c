@@ -491,25 +491,25 @@ const struct brightness_capability nt37290_brightness_capability = {
 			.max = 500,
 		},
 		.level = {
-			.min = 4,
+			.min = 3,
 			.max = 2047,
 		},
 		.percentage = {
 			.min = 0,
-			.max = 62,
+			.max = 50,
 		},
 	},
 	.hbm = {
 		.nits = {
 			.min = 550,
-			.max = 800,
+			.max = 1000,
 		},
 		.level = {
-			.min = 2232,
-			.max = 3152,
+			.min = 2048,
+			.max = 4094,
 		},
 		.percentage = {
-			.min = 62,
+			.min = 50,
 			.max = 100,
 		},
 	},
@@ -517,7 +517,8 @@ const struct brightness_capability nt37290_brightness_capability = {
 
 const struct exynos_panel_desc boe_nt37290 = {
 	.data_lane_cnt = 4,
-	.max_brightness = 3152,
+	.max_brightness = 4094,
+	.min_brightness = 3,
 	.dft_brightness = 1023,
 	.brt_capability = &nt37290_brightness_capability,
 	/* supported HDR format bitmask : 1(DOLBY_VISION), 2(HDR10), 3(HLG) */
