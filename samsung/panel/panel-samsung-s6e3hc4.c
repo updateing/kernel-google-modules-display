@@ -102,8 +102,8 @@ static const unsigned char PPS_SETTING[] = {
 #define S6E3HC4_WRCTRLD_HBM_BIT        0xC0
 #define S6E3HC4_WRCTRLD_LOCAL_HBM_BIT  0x10
 
-#define S6E3HC4_TE2_CHANGEABLE 0x31
-#define S6E3HC4_TE2_FIXED      0x41
+#define S6E3HC4_TE2_CHANGEABLE 0x03
+#define S6E3HC4_TE2_FIXED      0x21
 
 static const u8 unlock_cmd_f0[] = { 0xF0, 0x5A, 0x5A };
 static const u8 lock_cmd_f0[]   = { 0xF0, 0xA5, 0xA5 };
@@ -135,20 +135,30 @@ static DEFINE_EXYNOS_CMD_SET(s6e3hc4_lp);
 static const struct exynos_dsi_cmd s6e3hc4_lp_off_cmds[] = {
 	EXYNOS_DSI_CMD0(display_off),
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94), /* global para */
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x00), /* AOD low mode off */
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x20),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 };
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_low_cmds[] = {
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x01, 0x60), /* global para */
+	EXYNOS_DSI_CMD_SEQ(0x60, 0x00), /* freq set */
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x25),	/* aod 10 nit */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94), /* global para */
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x01, 0x07, 0x98, 0x02), /* AOD low Mode, 10 nit */
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 	EXYNOS_DSI_CMD0(display_on)
 };
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_high_cmds[] = {
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x01, 0x60), /* global para */
+	EXYNOS_DSI_CMD_SEQ(0x60, 0x00), /* freq set */
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x24),	/* aod 50 nit */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94), /* global para */
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x00, 0x07, 0x98, 0x02), /* AOD high Mode, 50 nit */
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 	EXYNOS_DSI_CMD0(display_on)
 };
@@ -210,8 +220,8 @@ static void s6e3hc4_update_te2(struct exynos_panel *ctx)
 		rising, falling);
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
-	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x38, 0xF2);
-	EXYNOS_DCS_BUF_ADD(ctx, 0xF2, 0x0C);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x42, 0xF2);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xF2, 0x0D);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x01, 0xB9);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB9, option);
 	if (option == S6E3HC4_TE2_FIXED) {
@@ -220,7 +230,7 @@ static void s6e3hc4_update_te2(struct exynos_panel *ctx)
 			(rising >> 8) & 0xF, rising & 0xFF,
 			(falling >> 8) & 0xF, falling & 0xFF);
 	} else {
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x22, 0xB9);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x1E, 0xB9);
 		EXYNOS_DCS_BUF_ADD(ctx, (rising >> 8) & 0xF, rising & 0xFF,
 			(falling >> 8) & 0xF, falling & 0xFF);
 	}
@@ -274,18 +284,32 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 
+	/* TE setting */
 	if (test_bit(FEAT_EARLY_EXIT, changed_feat)) {
-		/* TE setting */
 		if (test_bit(FEAT_EARLY_EXIT, spanel->feat)) {
 			/* Fixed TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x51);
-			/* TE width setting for 145 us */
-			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x14, 0xB9);
-			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x07, 0xBA, 0x07, 0xBA, 0x07, 0xBC);
+			/* TE width setting */
+			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x08, 0xB9);
+			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x07, 0xBA, 0x07, 0xBC,
+				0x07, 0xBA, 0x07, 0xBC);
 		} else {
 			/* Changeable TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x00);
 		}
+	}
+
+	/*
+	 * Operating Mode: NS or HS
+	 *
+	 * Description: the configs could possibly be overrided by frequency setting,
+	 * depending on FI mode.
+	 */
+	if (test_bit(FEAT_OP_NS, changed_feat)) {
+		/* mode set */
+		EXYNOS_DCS_BUF_ADD(ctx, 0xF2, 0x01);
+		val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x18 : 0x00;
+		EXYNOS_DCS_BUF_ADD(ctx, 0x60, val);
 	}
 
 	/*
@@ -295,138 +319,72 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	 */
 
 	/*
-	 * clock base and frequency
+	 * Early-exit: enable or disable
+	 *
+	 * Description: early-exit sequence overrides some configs HBM set.
 	 */
-	EXYNOS_DCS_BUF_ADD(ctx, 0xF2, 0x01);
-	if (test_bit(FEAT_OP_NS, spanel->feat)) {
-		if (vrefresh == 10)
-			val = 0x1B;
-		else if (vrefresh == 30)
-			val = 0x19;
+	if (test_bit(FEAT_EARLY_EXIT, spanel->feat)) {
+		if (test_bit(FEAT_HBM, spanel->feat))
+			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x00, 0x83, 0x03, 0x01);
 		else
-			val = 0x18;
+			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x01, 0x83, 0x03, 0x03);
 	} else {
-		if (vrefresh == 10)
-			val = 0x03;
-		else if (vrefresh == 30)
-			val = 0x02;
-		else if (vrefresh == 60)
-			val = 0x01;
+		if (test_bit(FEAT_HBM, spanel->feat))
+			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x80, 0x03, 0x03, 0x01);
 		else
-			val = 0x00;
+			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x81, 0x83, 0x03, 0x03);
 	}
-	EXYNOS_DCS_BUF_ADD(ctx, 0x60, val);
-	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
+	if (test_bit(FEAT_EARLY_EXIT, spanel->feat) ||
+		!test_bit(FEAT_HBM, spanel->feat)) {
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x0C, 0xBD);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00);
+	}
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x10, 0xBD);
+	val = test_bit(FEAT_EARLY_EXIT, spanel->feat) ? 0x10 : 0x00;
+	EXYNOS_DCS_BUF_ADD(ctx, 0xBD, val);
+	if (test_bit(FEAT_HBM, spanel->feat)) {
+		if (test_bit(FEAT_OP_NS, spanel->feat)) {
+			/* suppose that frequency = 60 */
+			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x4E, 0xBD);
+			EXYNOS_DCS_BUF_ADD(ctx,
+				0xBD, 0x00, 0x00, 0x00, 0x04, 0x00, 0x08, 0x00, 0x14);
+		} else {
+			/* suppose that frequency = 120 */
+			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x1E, 0xBD);
+			EXYNOS_DCS_BUF_ADD(ctx,
+				0xBD, 0x00, 0x00, 0x00, 0x02, 0x00, 0x06, 0x00, 0x16);
+		}
+	}
 
 	/*
-	 * frame insertion, early-exit, PWM, AID cycle setting
-	 * Note: skip index reg 0xB0 setting as writing reg 0xBD starts
-	 * from 1st byte
+	 * Frequency setting: FI, frequency, idle frequency
+	 *
+	 * Description: this sequence possibly overrides some configs early-exit
+	 * and operation set, depending on FI mode.
 	 */
-	if (test_bit(FEAT_HBM, spanel->feat)) {
-		if (test_bit(FEAT_FRAME_AUTO, spanel->feat)) {
-			if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23, 0x00, 0x03, 0x03, 0x01);
-			else
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23, 0x80, 0x03, 0x03, 0x01);
-		} else {
-			if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x00, 0x03, 0x03, 0x01);
-			else
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x80, 0x03, 0x03, 0x01);
-		}
-	} else {
-		if (test_bit(FEAT_FRAME_AUTO, spanel->feat)) {
-			if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23, 0x01, 0x03, 0x03, 0x03);
-			else
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23, 0x81, 0x03, 0x03, 0x03);
-		} else {
-			if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x01, 0x03, 0x03, 0x03);
-			else
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x81, 0x03, 0x03, 0x03);
-		}
-	}
-	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
-
-	/* early-exit timing */
-	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x10, 0xBD);
-	if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x10);
-	else
-		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00);
-
-	if (!(test_bit(FEAT_FRAME_AUTO, spanel->feat))) {
+	if (test_bit(FEAT_FRAME_AUTO, spanel->feat)) {
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x0C, 0xBD);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x12, 0xBD);
 		if (test_bit(FEAT_OP_NS, spanel->feat)) {
-			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x51, 0xBD);
-			if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x02, 0x00, 0x05);
-			else
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x04, 0x00, 0x08, 0x00, 0x14);
+			/* suppose that idle_vrefresh == 10 */
+			EXYNOS_DCS_BUF_ADD(ctx,
+				0xBD, 0x00, 0x00, 0x12, 0x00, 0x02, 0x01);
 		} else {
-			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x21, 0xBD);
-			if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x01, 0x00, 0x03, 0x00, 0x0B,
-				0x00, 0x0B, 0x00, 0x0B, 0x00, 0x0B, 0x00, 0x0B);
-			else
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x02, 0x00, 0x06, 0x00, 0x16,
-				0x00, 0x16,	0x00, 0x16, 0x00, 0x16, 0x00, 0x16);
+			/* suppose that idle_vrefresh == 10 */
+			EXYNOS_DCS_BUF_ADD(ctx,
+				0xBD, 0x00, 0x00, 0x16, 0x00, 0x06, 0x01);
 		}
-	}
-	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
-
-	/* frequency setting */
-	if (test_bit(FEAT_OP_NS, spanel->feat)) {
-		if (test_bit(FEAT_FRAME_AUTO, spanel->feat)) {
-			if (idle_vrefresh != 10 && idle_vrefresh != 30) {
-				dev_err(ctx->dev, "unsupported idle_vrefresh: %d\n",
-					idle_vrefresh);
-			} else {
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23);
-				EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x12, 0xBD);
-				if (test_bit(FEAT_EARLY_EXIT, spanel->feat)) {
-					if (idle_vrefresh == 10)
-						EXYNOS_DCS_BUF_ADD(ctx,
-						0xBD, 0x01, 0x00, 0x05, 0x00, 0x00, 0x00);
-					/* idle_vrefresh == 30 */
-					else
-						EXYNOS_DCS_BUF_ADD(ctx,
-						0xBD, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00);
-				} else {
-					if (idle_vrefresh == 10)
-						EXYNOS_DCS_BUF_ADD(ctx,
-						0xBD, 0x01, 0x00, 0x14, 0x00, 0x00, 0x00);
-					/* idle_vrefresh == 30 */
-					else
-						EXYNOS_DCS_BUF_ADD(ctx,
-						0xBD, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00);
-				}
-			}
-		} else {
+		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23);
+	} else {
+		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21);
+		if (test_bit(FEAT_OP_NS, spanel->feat)) {
 			if (vrefresh == 10)
 				val = 0x1B;
 			else if (vrefresh == 30)
 				val = 0x19;
 			else
 				val = 0x18;
-			EXYNOS_DCS_BUF_ADD(ctx, 0x60, val);
-		}
-	} else {
-		if (test_bit(FEAT_FRAME_AUTO, spanel->feat)) {
-			if (idle_vrefresh != 10) {
-				dev_err(ctx->dev, "unsupported idle_vrefresh: %d\n",
-					idle_vrefresh);
-			} else {
-				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23);
-				EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x12, 0xBD);
-				if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-					EXYNOS_DCS_BUF_ADD(ctx,
-					0xBD, 0x01, 0x00, 0x0B, 0x00, 0x03, 0x01);
-				else
-					EXYNOS_DCS_BUF_ADD(ctx,
-					0xBD, 0x01, 0x00, 0x16, 0x00, 0x06, 0x01);
-			}
 		} else {
 			if (vrefresh == 10)
 				val = 0x03;
@@ -436,11 +394,11 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 				val = 0x01;
 			else
 				val = 0x00;
-			EXYNOS_DCS_BUF_ADD(ctx, 0x60, val);
 		}
+		EXYNOS_DCS_BUF_ADD(ctx, 0x60, val);
 	}
-	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
 
+	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);;
 }
 
@@ -585,6 +543,7 @@ static void s6e3hc4_write_display_mode(struct exynos_panel *ctx,
 		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0x9B, 0x92);
 		EXYNOS_DCS_BUF_ADD(ctx, 0x92, *irc ? 0x25 : 0x05);
+		EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
 		EXYNOS_DCS_BUF_ADD_SET(ctx, lock_cmd_f0);
 	}
 
@@ -635,7 +594,7 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x40, 0xB9),	/* SEQ_GLOBAL_TSP_SYNC_SETTING */
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0x30, 0x03),		/* SEQ_TSP_SYNC_SETTING*/
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),	/* SEQ_GLOBAL_TSP_SYNC_ON */
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0x88, 0x80),		/* SEQ_TSP_SYNC_ON */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC8, 0xC0),		/* SEQ_TSP_SYNC_ON */
 	EXYNOS_DSI_CMD0(freq_update),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 
