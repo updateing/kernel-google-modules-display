@@ -16,6 +16,9 @@
 
 #include "panel-samsung-drv.h"
 
+#define NT37290_TE2_CHANGEABLE 0x02
+#define NT37290_TE2_FIXED      0x22
+
 /**
  * enum nt37290_panel_feature - features supported by this panel
  * @G10_FEAT_EARLY_EXIT: early exit from a long frame
@@ -89,9 +92,9 @@ static const struct exynos_dsi_cmd nt37290_lp_high_cmds[] = {
 
 static const struct exynos_binned_lp nt37290_binned_lp[] = {
 	BINNED_LP_MODE("off", 0, nt37290_lp_off_cmds),
-	/* TODO: specify TE2 timing (default rising = 0, falling = 19) */
-	BINNED_LP_MODE_TIMING("low", 80, nt37290_lp_low_cmds, 0, 19),
-	BINNED_LP_MODE_TIMING("high", 2047, nt37290_lp_high_cmds, 0, 19),
+	/* rising = 0, falling = 48 */
+	BINNED_LP_MODE_TIMING("low", 80, nt37290_lp_low_cmds, 0, 48),
+	BINNED_LP_MODE_TIMING("high", 2047, nt37290_lp_high_cmds, 0, 48),
 };
 
 static const struct exynos_dsi_cmd nt37290_off_cmds[] = {
@@ -158,6 +161,58 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_DELAY(120, 0x11),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_init);
+
+static u8 nt37290_get_te2_option(struct exynos_panel *ctx)
+{
+	struct nt37290_panel *spanel = to_spanel(ctx);
+
+	if (!ctx || !ctx->current_mode)
+		return NT37290_TE2_CHANGEABLE;
+
+	/* AOD mode only supports fixed TE2 */
+	if (ctx->current_mode->exynos_mode.is_lp_mode ||
+	    test_bit(G10_FEAT_EARLY_EXIT, spanel->feat))
+		return NT37290_TE2_FIXED;
+
+	return NT37290_TE2_CHANGEABLE;
+}
+
+static void nt37290_update_te2(struct exynos_panel *ctx)
+{
+	struct exynos_panel_te2_timing timing;
+	/* default timing */
+	u8 rising = 0, falling = 0x30;
+	u8 option = nt37290_get_te2_option(ctx);
+	int ret;
+
+	if (!ctx)
+		return;
+
+	ret = exynos_panel_get_current_mode_te2(ctx, &timing);
+	if (!ret) {
+		rising = timing.rising_edge & 0xFF;
+		falling = timing.falling_edge & 0xFF;
+	} else if (ret == -EAGAIN) {
+		dev_dbg(ctx->dev, "Panel is not ready, use default timing\n");
+	} else {
+		dev_warn(ctx->dev, "Failed to get current timing\n");
+		return;
+	}
+
+	/* option */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x03);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, option);
+	EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x04);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, option);
+	/* timing */
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xC4, 0x00, 0x00, 0x00, 0x00,
+				     0x00, rising, 0x10, falling);
+
+	dev_dbg(ctx->dev,
+		"TE2 updated: option %s, rising 0x%x, falling 0x%x\n",
+		(option == NT37290_TE2_CHANGEABLE) ? "changeable" : "fixed",
+		rising, falling);
+}
 
 static void nt37290_update_panel_feat(struct exynos_panel *ctx,
 	const struct exynos_panel_mode *pmode, bool enforce)
@@ -390,6 +445,10 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
+		.te2_timing = {
+			.rising_edge = 0,
+			.falling_edge = 48,
+		},
 	},
 	{
 		/* 1440x3120 @ 120Hz */
@@ -414,6 +473,10 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.bpc = 8,
 			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
+		},
+		.te2_timing = {
+			.rising_edge = 0,
+			.falling_edge = 48,
 		},
 	},
 };
@@ -482,6 +545,9 @@ static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.mode_set = nt37290_mode_set,
 	.panel_init = nt37290_panel_init,
 	.get_panel_rev = nt37290_get_panel_rev,
+	.get_te2_edges = exynos_panel_get_te2_edges,
+	.configure_te2_edges = exynos_panel_configure_te2_edges,
+	.update_te2 = nt37290_update_te2,
 };
 
 const struct brightness_capability nt37290_brightness_capability = {
