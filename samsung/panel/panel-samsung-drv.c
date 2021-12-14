@@ -1222,13 +1222,12 @@ static int exynos_panel_get_lp_mode(struct exynos_drm_connector *exynos_conn,
 	const struct exynos_panel_mode *cur_mode = READ_ONCE(ctx->current_mode);
 	struct drm_mode_modeinfo umode;
 
-	if (!cur_mode || !ctx->desc->lp_mode)
+	if (unlikely(!ctx->desc->lp_mode))
 		return -EINVAL;
 
 	if (blob) {
-		if (is_umode_lp_compatible(cur_mode, blob->data)) {
-			dev_dbg(ctx->dev, "%s: returning existing lp mode compatible with: %s\n",
-				__func__, cur_mode->mode.name);
+		if (!cur_mode || is_umode_lp_compatible(cur_mode, blob->data)) {
+			dev_dbg(ctx->dev, "%s: returning existing lp mode blob\n", __func__);
 			*val = blob->base.id;
 			return 0;
 		}
@@ -1237,7 +1236,7 @@ static int exynos_panel_get_lp_mode(struct exynos_drm_connector *exynos_conn,
 	}
 
 	/* when mode count is 0, assume driver is only providing single LP mode */
-	if (ctx->desc->lp_mode_count <= 1) {
+	if (ctx->desc->lp_mode_count <= 1 || !cur_mode) {
 		dev_dbg(ctx->dev, "%s: only single LP mode available\n", __func__);
 		drm_mode_convert_to_umode(&umode, &ctx->desc->lp_mode->mode);
 	} else {
