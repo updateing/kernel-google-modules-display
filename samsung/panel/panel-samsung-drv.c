@@ -1268,6 +1268,40 @@ static ssize_t idle_delay_ms_show(struct device *dev, struct device_attribute *a
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->idle_delay_ms);
 }
 
+static ssize_t force_power_on_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	bool force_on;
+	int ret;
+
+	ret = kstrtobool(buf, &force_on);
+	if (ret) {
+		dev_err(dev, "invalid force_power_on value\n");
+		return ret;
+	}
+
+	drm_modeset_lock(&ctx->bridge.base.lock, NULL);
+	if (force_on && ctx->panel_state == PANEL_STATE_OFF) {
+		drm_panel_prepare(&ctx->panel);
+		ctx->panel_state = PANEL_STATE_BLANK;
+	}
+
+	ctx->force_power_on = force_on;
+	drm_modeset_unlock(&ctx->bridge.base.lock);
+
+	return count;
+}
+
+static ssize_t force_power_on_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->force_power_on);
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
@@ -1277,6 +1311,7 @@ static DEVICE_ATTR_RW(te2_lp_timing);
 static DEVICE_ATTR_RW(panel_idle);
 static DEVICE_ATTR_RW(min_vrefresh);
 static DEVICE_ATTR_RW(idle_delay_ms);
+static DEVICE_ATTR_RW(force_power_on);
 
 static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
@@ -1288,6 +1323,7 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_panel_idle.attr,
 	&dev_attr_min_vrefresh.attr,
 	&dev_attr_idle_delay_ms.attr,
+	&dev_attr_force_power_on.attr,
 	NULL
 };
 
@@ -2945,8 +2981,9 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
-		if (crtc_state && crtc_state->mode_changed &&
-		    drm_atomic_crtc_effectively_active(crtc_state))
+		if ((crtc_state && crtc_state->mode_changed &&
+		    drm_atomic_crtc_effectively_active(crtc_state)) ||
+		    ctx->force_power_on)
 			ctx->panel_state = PANEL_STATE_BLANK;
 		else
 			ctx->panel_state = PANEL_STATE_OFF;

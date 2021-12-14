@@ -478,6 +478,8 @@ struct exynos_panel {
 	bool enabled;
 	bool initialized;
 	enum exynos_panel_state panel_state;
+	/* If true, panel won't be powered off */
+	bool force_power_on;
 
 	/* indicates whether panel idle feature is enabled */
 	bool panel_idle_enabled;
