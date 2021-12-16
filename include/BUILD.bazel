@@ -13,5 +13,6 @@ filegroup(
     ]),
     visibility = [
         "//gs/google-modules/display:__subpackages__",
+        "//gs/google-modules/touch:__subpackages__",
     ],
 )
