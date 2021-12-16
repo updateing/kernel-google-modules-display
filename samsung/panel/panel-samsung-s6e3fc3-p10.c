@@ -110,6 +110,28 @@ static const struct exynos_dsi_cmd s6e3fc3_p10_init_cmds[] = {
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_init);
 
+static const struct exynos_dsi_cmd s6e3fc3_p10_evt1_irc_setting_cmds[] = {
+	EXYNOS_DSI_CMD0(test_key_on_f0),
+
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x28, 0xF2),
+	/* 10 bits */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0xCC),
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0x18, 0x68),
+	/* IRC setting */
+	EXYNOS_DSI_CMD_SEQ(0x68, 0xE2, 0x0A, 0x0A, 0x0A, 0x82, 0x0E, 0xCB, 0x80, 0x00,
+			 0x00, 0x00, 0x00, 0xFF, 0x90),
+	/* global para */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x28, 0xF2),
+	/* 8 bits */
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC4),
+	EXYNOS_DSI_CMD0(freq_update),
+
+	EXYNOS_DSI_CMD0(test_key_off_f0)
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_evt1_irc_setting);
+
 static const struct exynos_dsi_cmd s6e3fc3_p10_lhbm_location_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_on_f0),
 	EXYNOS_DSI_CMD0(test_key_on_f1),
@@ -510,6 +532,9 @@ static int s6e3fc3_p10_enable(struct drm_panel *panel)
 	exynos_panel_reset(ctx);
 
 	exynos_panel_send_cmd_set(ctx, &s6e3fc3_p10_init_cmd_set);
+
+	if (ctx->panel_rev == PANEL_REV_EVT1)
+		exynos_panel_send_cmd_set(ctx, &s6e3fc3_p10_evt1_irc_setting_cmd_set);
 
 	s6e3fc3_p10_change_frequency(ctx, drm_mode_vrefresh(mode));
 
