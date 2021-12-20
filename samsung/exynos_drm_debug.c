@@ -144,10 +144,10 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	spin_lock_irqsave(&decon->d.event_lock, flags);
 	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
 	log = &decon->d.event_log[idx];
+	log->type = DPU_EVT_NONE;
 	spin_unlock_irqrestore(&decon->d.event_lock, flags);
 
 	log->time = ktime_get();
-	log->type = type;
 
 	switch (type) {
 	case DPU_EVT_DPP_FRAMEDONE:
@@ -265,6 +265,8 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	default:
 		break;
 	}
+
+	log->type = type;
 }
 
 /*
@@ -294,9 +296,9 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 	spin_lock_irqsave(&decon->d.event_lock, flags);
 	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
 	log = &decon->d.event_log[idx];
+	log->type = DPU_EVT_NONE;
 	spin_unlock_irqrestore(&decon->d.event_lock, flags);
 
-	log->type = DPU_EVT_ATOMIC_COMMIT;
 	log->time = ktime_get();
 
 	decon->d.auto_refresh_frames = 0;
@@ -313,6 +315,8 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 				decon->dpp[dpp_ch]->dbg_dma_addr;
 		}
 	}
+
+	log->type = DPU_EVT_ATOMIC_COMMIT;
 }
 
 extern void *return_address(unsigned int);
@@ -347,9 +351,9 @@ DPU_EVENT_LOG_CMD(struct dsim_device *dsim, u8 type, u8 d0, u16 len)
 	spin_lock_irqsave(&decon->d.event_lock, flags);
 	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
 	log = &decon->d.event_log[idx];
+	log->type = DPU_EVT_NONE;
 	spin_unlock_irqrestore(&decon->d.event_lock, flags);
 
-	log->type = DPU_EVT_DSIM_COMMAND;
 	log->time = ktime_get();
 
 	log->data.cmd.id = type;
@@ -359,6 +363,8 @@ DPU_EVENT_LOG_CMD(struct dsim_device *dsim, u8 type, u8 d0, u16 len)
 	for (i = 0; i < DPU_CALLSTACK_MAX; i++)
 		log->data.cmd.caller[i] =
 			(void *)((size_t)return_address(i + 1));
+
+	log->type = DPU_EVT_DSIM_COMMAND;
 }
 
 static void dpu_print_log_atomic(struct dpu_log_atomic *atomic,
@@ -377,6 +383,12 @@ static void dpu_print_log_atomic(struct dpu_log_atomic *atomic,
 
 		if (win->state == DPU_WIN_STATE_DISABLED)
 			continue;
+
+		if (win->state < DPU_WIN_STATE_DISABLED ||
+				win->state > DPU_WIN_STATE_BUFFER) {
+			pr_warn("%s: invalid win state %d\n", __func__, win->state);
+			continue;
+		}
 
 		fmt = dpu_find_fmt_info(win->format);
 
@@ -597,15 +609,18 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 				size_t max_logs, enum dpu_event_condition condition)
 {
 	int idx = atomic_read(&decon->d.event_log_idx);
-	struct dpu_log *log;
+	struct decon_device *decon_dev = (struct decon_device *)decon;
+	struct dpu_log dump_log;
+	struct dpu_log *log = &dump_log;
 	int latest = idx % dpu_event_log_max;
 	struct timespec64 ts;
 	const char *str_comp;
 	char buf[LOG_BUF_SIZE];
 	const struct dpu_fmt *fmt;
 	int len;
+	unsigned long flags;
 
-	if (IS_ERR_OR_NULL(decon->d.event_log))
+	if (IS_ERR_OR_NULL(decon_dev->d.event_log))
 		return;
 
 	drm_printf(p, "----------------------------------------------------\n");
@@ -625,8 +640,10 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		if (++idx >= dpu_event_log_max)
 			idx = 0;
 
-		/* Seek a index */
-		log = &decon->d.event_log[idx];
+		/* Seek a index and copy log for dump */
+		spin_lock_irqsave(&decon_dev->d.event_lock, flags);
+		memcpy(&dump_log, &decon_dev->d.event_log[idx], sizeof(dump_log));
+		spin_unlock_irqrestore(&decon_dev->d.event_lock, flags);
 
 		if (is_skip_dpu_event_dump(log->type, condition))
 			continue;
