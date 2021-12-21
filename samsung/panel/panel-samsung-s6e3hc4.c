@@ -542,7 +542,7 @@ static void s6e3hc4_write_display_mode(struct exynos_panel *ctx,
 		spanel->hw_irc = *irc;
 		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0x9B, 0x92);
-		EXYNOS_DCS_BUF_ADD(ctx, 0x92, *irc ? 0x25 : 0x05);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x92, *irc ? 0x21 : 0x05);
 		EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
 		EXYNOS_DCS_BUF_ADD_SET(ctx, lock_cmd_f0);
 	}
@@ -738,7 +738,7 @@ static const struct exynos_dsi_cmd s6e3hc4_lhbm_extra_cmds[] = {
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
 
 	/* global para */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x02, 0x1F, 0x92),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x02, 0x1E, 0x92),
 	/* area set */
 	EXYNOS_DSI_CMD_SEQ(0x92, 0x20, 0x88, 0x71, 0x39, 0x8A, 0x01),
 	/* global para */
