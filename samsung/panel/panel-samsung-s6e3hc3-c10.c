@@ -21,6 +21,7 @@
 /**
  * enum s6e3hc3_c10_panel_feature - features supported by this panel
  * @C10_FEAT_HBM: high brightness mode
+ * @C10_FEAT_IRC_OFF: IRC compensation off state
  * @C10_FEAT_EARLY_EXIT: early exit from a long frame
  * @C10_FEAT_OP_NS: normal speed (not high speed)
  * @C10_FEAT_FRAME_AUTO: automatic (not manual) frame control
@@ -31,6 +32,7 @@
  */
 enum s6e3hc3_c10_panel_feature {
 	C10_FEAT_HBM = 0,
+	C10_FEAT_IRC_OFF,
 	C10_FEAT_EARLY_EXIT,
 	C10_FEAT_OP_NS,
 	C10_FEAT_FRAME_AUTO,
@@ -56,8 +58,6 @@ struct s6e3hc3_c10_panel {
 	u32 hw_vrefresh;
 	/** @hw_idle_vrefresh: idle vrefresh rate effective in panel */
 	u32 hw_idle_vrefresh;
-	/** @hw_irc: HBM IRC state effective in panel */
-	bool hw_irc;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct s6e3hc3_c10_panel, base)
@@ -269,10 +269,11 @@ static void s6e3hc3_c10_update_panel_feat(struct exynos_panel *ctx,
 	spanel->hw_idle_vrefresh = idle_vrefresh;
 	bitmap_copy(spanel->hw_feat, spanel->feat, C10_FEAT_MAX);
 	dev_dbg(ctx->dev,
-		"op=%s ee=%s hbm=%s fi=%s vrefresh=%u idle_vrefresh=%u\n",
+		"op=%s ee=%s hbm=%s irc=%s fi=%s fps=%u idle_fps=%u\n",
 		test_bit(C10_FEAT_OP_NS, spanel->feat) ? "ns" : "hs",
 		test_bit(C10_FEAT_EARLY_EXIT, spanel->feat) ? "on" : "off",
 		test_bit(C10_FEAT_HBM, spanel->feat) ? "on" : "off",
+		test_bit(C10_FEAT_IRC_OFF, spanel->feat) ? "off" : "on",
 		test_bit(C10_FEAT_FRAME_AUTO, spanel->feat) ? "auto" : "manual",
 		vrefresh,
 		idle_vrefresh);
@@ -291,6 +292,13 @@ static void s6e3hc3_c10_update_panel_feat(struct exynos_panel *ctx,
 			/* Changeable TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x00);
 		}
+	}
+
+	/* IRC setting */
+	if (test_bit(C10_FEAT_IRC_OFF, changed_feat)) {
+		val = test_bit(C10_FEAT_IRC_OFF, spanel->feat) ? 0x05 : 0x25;
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xB6, 0x1D);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x1D, val);
 	}
 
 	/*
@@ -556,23 +564,9 @@ static int s6e3hc3_c10_atomic_check(struct exynos_panel *ctx, struct drm_atomic_
 }
 
 static void s6e3hc3_c10_write_display_mode(struct exynos_panel *ctx,
-				       const struct drm_display_mode *mode, bool *irc)
+				       const struct drm_display_mode *mode)
 {
-	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	u8 val = S6E3HC3_WRCTRLD_BCTRL_BIT;
-
-	/* b/204940038 keep IRC always-on before EVT */
-	if (irc && (PANEL_REV_LT(PANEL_REV_EVT1) & ctx->panel_rev))
-		*irc = true;
-
-	if (irc && (*irc != spanel->hw_irc)) {
-		spanel->hw_irc = *irc;
-		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xB6, 0x1D);
-		EXYNOS_DCS_BUF_ADD(ctx, 0x1D, *irc ? 0x25 : 0x05);
-		EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
-		EXYNOS_DCS_BUF_ADD_SET(ctx, lock_cmd_f0);
-	}
 
 	if (IS_HBM_ON(ctx->hbm_mode))
 		val |= S6E3HC3_WRCTRLD_HBM_BIT;
@@ -603,7 +597,7 @@ static void s6e3hc3_c10_set_nolp_mode(struct exynos_panel *ctx,
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
 	usleep_range(delay_us, delay_us + 10);
-	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, NULL);
+	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
 	s6e3hc3_c10_change_frequency(ctx, pmode);
 	usleep_range(delay_us, delay_us + 10);
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
@@ -650,7 +644,7 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 	EXYNOS_PPS_LONG_WRITE(ctx); /* PPS_SETTING */
 	exynos_panel_send_cmd_set(ctx, &s6e3hc3_c10_init_cmd_set);
 	s6e3hc3_c10_update_panel_feat(ctx, pmode, true);
-	s6e3hc3_c10_write_display_mode(ctx, mode, NULL); /* dimming and HBM */
+	s6e3hc3_c10_write_display_mode(ctx, mode); /* dimming and HBM */
 	s6e3hc3_c10_change_frequency(ctx, pmode);
 	ctx->enabled = true;
 
@@ -671,7 +665,6 @@ static int s6e3hc3_c10_disable(struct drm_panel *panel)
 	bitmap_clear(spanel->hw_feat, 0, C10_FEAT_MAX);
 	spanel->hw_vrefresh = 60;
 	spanel->hw_idle_vrefresh = 0;
-	spanel->hw_irc = false;
 
 	return exynos_panel_disable(panel);
 }
@@ -730,7 +723,6 @@ static void s6e3hc3_c10_set_hbm_mode(struct exynos_panel *ctx,
 {
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
-	bool irc;
 
 	if (mode == ctx->hbm_mode)
 		return;
@@ -741,14 +733,22 @@ static void s6e3hc3_c10_set_hbm_mode(struct exynos_panel *ctx,
 	ctx->hbm_mode = mode;
 
 	if (mode != HBM_OFF) {
-		irc = mode == HBM_ON_IRC_ON;
 		set_bit(C10_FEAT_HBM, spanel->feat);
+		/* b/202738999 enforce IRC on */
+#ifndef DPU_FACTORY_BUILD
+		/* b/204940038 keep IRC always-on before EVT */
+		if ((PANEL_REV_LT(PANEL_REV_EVT1) & ctx->panel_rev) ||
+			(mode == HBM_ON_IRC_ON))
+			clear_bit(C10_FEAT_IRC_OFF, spanel->feat);
+		else
+			set_bit(C10_FEAT_IRC_OFF, spanel->feat);
+#endif
 		s6e3hc3_c10_update_panel_feat(ctx, NULL, false);
-		s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, &irc);
+		s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
 	} else {
-		irc = false;
 		clear_bit(C10_FEAT_HBM, spanel->feat);
-		s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, &irc);
+		clear_bit(C10_FEAT_IRC_OFF, spanel->feat);
+		s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
 		s6e3hc3_c10_update_panel_feat(ctx, NULL, false);
 	}
 }
@@ -759,7 +759,7 @@ static void s6e3hc3_c10_set_dimming_on(struct exynos_panel *ctx,
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 	ctx->dimming_on = dimming_on;
-	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, NULL);
+	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
 }
 
 static const struct exynos_dsi_cmd s6e3hc3_c10_lhbm_extra_cmds[] = {
@@ -801,7 +801,7 @@ static void s6e3hc3_c10_set_local_hbm_mode(struct exynos_panel *ctx,
 	if (local_hbm_en)
 		exynos_panel_send_cmd_set_flags(ctx,
 			&s6e3hc3_c10_lhbm_extra_cmd_set, flags);
-	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode, NULL);
+	s6e3hc3_c10_write_display_mode(ctx, &pmode->mode);
 }
 
 static void s6e3hc3_c10_mode_set(struct exynos_panel *ctx,
