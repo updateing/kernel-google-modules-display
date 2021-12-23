@@ -380,8 +380,8 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.vsync_end = 3120 + 12 + 4, // add vsa
 			.vtotal = 3120 + 12 + 4 + 14, // add vbp
 			.flags = 0,
-			.width_mm = 76,
-			.height_mm = 160,
+			.width_mm = 71,
+			.height_mm = 155,
 		},
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
@@ -405,8 +405,8 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.vsync_end = 3120 + 12 + 4, // add vsa
 			.vtotal = 3120 + 12 + 4 + 14, // add vbp
 			.flags = 0,
-			.width_mm = 76,
-			.height_mm = 160,
+			.width_mm = 71,
+			.height_mm = 155,
 		},
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
@@ -432,8 +432,8 @@ static const struct exynos_panel_mode nt37290_lp_mode = {
 		.vsync_end = 3120 + 12 + 4, // add vsa
 		.vtotal = 3120 + 12 + 4 + 14, // add vbp
 		.flags = 0,
-		.width_mm = 76,
-		.height_mm = 160,
+		.width_mm = 71,
+		.height_mm = 155,
 	},
 	.exynos_mode = {
 		.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
