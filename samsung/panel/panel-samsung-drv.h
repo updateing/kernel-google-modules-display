@@ -98,6 +98,18 @@ enum exynos_panel_state {
 	PANEL_STATE_BLANK,
 };
 
+/**
+ * enum exynos_panel_idle_mode - type of idle mode supported per mode
+ * @IDLE_MODE_UNSUPPORTED: No idle mode is supported in this mode
+ * @IDLE_MODE_AUTO: In this mode the panel can go into idle automatically after last frame update
+ * @IDLE_MODE_MANUAL: Manually go into lower idle mode when display enters self refresh state
+ */
+enum exynos_panel_idle_mode {
+	IDLE_MODE_UNSUPPORTED,
+	IDLE_MODE_AUTO,
+	IDLE_MODE_MANUAL,
+};
+
 struct exynos_panel;
 
 struct exynos_panel_te2_timing {
@@ -122,6 +134,14 @@ struct exynos_panel_mode {
 
 	/* @te2_timing: TE2 signal timing */
 	struct exynos_panel_te2_timing te2_timing;
+
+	/*
+	 * @idle_mode:
+	 *
+	 * Indicates whether going into lower refresh rate is allowed while in this mode, and what
+	 * type of idle mode is supported, for more info refer to enum exynos_panel_idle_mode.
+	 */
+	enum exynos_panel_idle_mode idle_mode;
 };
 
 struct exynos_panel_funcs {

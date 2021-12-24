@@ -19,18 +19,6 @@
 #include "panel-samsung-drv.h"
 
 /**
- * enum s6e3hc3_idle_mode - type of idle mode supported per mode
- * @IDLE_MODE_UNSUPPORTED: No idle mode is supported in this mode
- * @IDLE_MODE_AUTO: In this mode the panel can go into idle automatically after last frame update
- * @IDLE_MODE_MANUAL: Manually go into lower idle mode when display enters self refresh state
- */
-enum s6e3hc3_idle_mode {
-	IDLE_MODE_UNSUPPORTED,
-	IDLE_MODE_AUTO,
-	IDLE_MODE_MANUAL,
-};
-
-/**
  * struct s6e3hc3_panel - panel specific runtime info
  *
  * This struct maintains s6e3hc3 panel specific runtime info, any fixed details about panel should
@@ -109,14 +97,6 @@ struct s6e3hc3_mode_data {
 	 * optimizations done while entering idle.
 	 */
 	const struct exynos_dsi_cmd_set *wakeup_mode_cmd_set;
-
-	/**
-	 * @idle_mode:
-	 *
-	 * Indicates whether going into lower refresh rate is allowed while in this mode, and what
-	 * type of idle mode is supported, for more info refer to enum s6e3hc3_idle_mode.
-	 */
-	enum s6e3hc3_idle_mode idle_mode;
 };
 
 static const unsigned char PPS_SETTING[] = {
@@ -277,7 +257,6 @@ static DEFINE_EXYNOS_CMD_SET(s6e3hc3_mode_120_ghbm_manual);
 static const struct s6e3hc3_mode_data s6e3hc3_mode_120 = {
 	.manual_mode_cmd_set = &s6e3hc3_mode_120_manual_cmd_set,
 	.manual_mode_ghbm_cmd_set = &s6e3hc3_mode_120_ghbm_manual_cmd_set,
-	.idle_mode = IDLE_MODE_AUTO,
 };
 
 static const struct exynos_dsi_cmd s6e3hc3_mode_60_common_cmds[] = {
@@ -301,7 +280,6 @@ static DEFINE_EXYNOS_CMD_SET(s6e3hc3_mode_60_wakeup);
 static const struct s6e3hc3_mode_data s6e3hc3_mode_60 = {
 	.common_mode_cmd_set = &s6e3hc3_mode_60_common_cmd_set,
 	.wakeup_mode_cmd_set = &s6e3hc3_mode_60_wakeup_cmd_set,
-	.idle_mode = IDLE_MODE_UNSUPPORTED,
 };
 
 static u8 s6e3hc3_get_te2_option(struct exynos_panel *ctx)
@@ -528,13 +506,12 @@ static void s6e3hc3_update_refresh_mode(struct exynos_panel *ctx,
 static void s6e3hc3_change_frequency(struct exynos_panel *ctx,
 				     const struct exynos_panel_mode *pmode)
 {
-	const struct s6e3hc3_mode_data *mdata = pmode->priv_data;
 	u32 idle_vrefresh = 0;
 
-	if (unlikely(!ctx || !mdata))
+	if (unlikely(!ctx))
 		return;
 
-	if (mdata->idle_mode == IDLE_MODE_AUTO)
+	if (pmode->idle_mode == IDLE_MODE_AUTO)
 		idle_vrefresh = s6e3hc3_get_min_idle_vrefresh(ctx, pmode);
 
 	s6e3hc3_update_refresh_mode(ctx, pmode, idle_vrefresh);
@@ -557,18 +534,14 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	if (pmode->exynos_mode.is_lp_mode)
 		return false;
 
-	mdata = pmode->priv_data;
-	if (unlikely(!mdata))
-		return false;
-
 	idle_vrefresh = s6e3hc3_get_min_idle_vrefresh(ctx, pmode);
 
-	if (mdata->idle_mode != IDLE_MODE_MANUAL) {
+	if (pmode->idle_mode != IDLE_MODE_MANUAL) {
 		/*
 		 * if idle mode is auto, may need to update the target fps for auto mode,
 		 * or switch to manual mode if idle should be disabled (idle_vrefresh=0)
 		 */
-		if ((mdata->idle_mode == IDLE_MODE_AUTO) &&
+		if ((pmode->idle_mode == IDLE_MODE_AUTO) &&
 		    (spanel->auto_mode_vrefresh != idle_vrefresh)) {
 			dev_dbg(ctx->dev,
 				"early exit update needed for mode: %s (idle_vrefresh: %d)\n",
@@ -596,6 +569,12 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	if (idle_vrefresh) {
 		s6e3hc3_set_early_exit_auto_mode(ctx, idle_vrefresh);
 	} else {
+		mdata = pmode->priv_data;
+		if (unlikely(!mdata)) {
+			dev_err(ctx->dev, "%s: failed to get mode data\n", __func__);
+			EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
+			return false;
+		}
 		/* disable early exit after coming out of idle */
 		s6e3hc3_update_early_exit(ctx, false);
 		spanel->auto_mode_vrefresh = 0;
@@ -1143,6 +1122,7 @@ static const struct exynos_panel_mode s6e3hc3_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
+		.idle_mode = IDLE_MODE_UNSUPPORTED,
 	},
 	{
 		/* 1440x3120 @ 120Hz */
@@ -1178,6 +1158,7 @@ static const struct exynos_panel_mode s6e3hc3_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
+		.idle_mode = IDLE_MODE_AUTO,
 	},
 };
 
