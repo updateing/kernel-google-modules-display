@@ -58,6 +58,7 @@
 struct dsim_device *dsim_drvdata[MAX_DSI_CNT];
 
 #define PANEL_DRV_LEN 64
+#define RETRY_READ_FIFO_MAX 10
 
 static char panel_name[PANEL_DRV_LEN];
 module_param_string(panel_name, panel_name, sizeof(panel_name), 0644);
@@ -1959,8 +1960,8 @@ dsim_read_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	}
 
 	rx_fifo = dsim_reg_get_rx_fifo(dsim->id);
-	dsim_debug(dsim, "rx fifo:0x%8x, response:0x%x, rx_size:%d\n", rx_fifo,
-		 rx_fifo & 0xff, rx_size);
+	dsim_debug(dsim, "rx fifo:0x%8x, response:0x%x, rx_len:%lu\n", rx_fifo,
+		 rx_fifo & 0xff, msg->rx_len);
 
 	/* Parse the RX packet data types */
 	switch (rx_fifo & 0xff) {
@@ -1976,6 +1977,7 @@ dsim_read_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 		break;
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_2BYTE:
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_2BYTE:
+		WARN_ON(msg->rx_len > 2);
 		rx_buf[1] = (rx_fifo >> 16) & 0xff;
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_1BYTE:
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_1BYTE:
@@ -2006,9 +2008,16 @@ dsim_read_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	}
 
 	if (!dsim_reg_rx_fifo_is_empty(dsim->id)) {
-		dsim_err(dsim, "RX FIFO is not empty\n");
+		u32 retry_cnt = RETRY_READ_FIFO_MAX;
+
+		dsim_warn(dsim, "RX FIFO is not empty: rx_size:%u, rx_len:%lu\n",
+			rx_size, msg->rx_len);
 		dsim_dump(dsim);
-		return -EBUSY;
+		do {
+			rx_fifo = dsim_reg_get_rx_fifo(dsim->id);
+			dsim_info(dsim, "rx fifo:0x%8x, response:0x%x\n",
+				rx_fifo, rx_fifo & 0xff);
+		} while (!dsim_reg_rx_fifo_is_empty(dsim->id) && --retry_cnt);
 	}
 
 	return rx_size;
