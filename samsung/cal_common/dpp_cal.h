@@ -50,7 +50,7 @@ enum dpp_attr {
 	DPP_ATTR_IDMA		= 16,
 	DPP_ATTR_ODMA		= 17,
 	DPP_ATTR_DPP		= 18,
-	DPP_ATTR_WBMUX          = 19,
+	DPP_ATTR_SRAMC		= 19,
 };
 
 enum dpp_csc_defs {
@@ -86,6 +86,7 @@ enum dpp_sbwc_blk_size {
 struct dpp_regs {
 	void __iomem *dpp_base_regs;
 	void __iomem *dma_base_regs;
+	void __iomem *sramc_base_regs;
 	void __iomem *hdr_base_regs;
 };
 
@@ -103,6 +104,8 @@ enum dpp_regs_id {
 enum dpp_regs_type {
 	REGS_DMA = 0,
 	REGS_DPP,
+	REGS_SRAMC,
+	REGS_SCL_COEF,
 	REGS_DPP_TYPE_MAX
 };
 
@@ -170,6 +173,7 @@ struct dpp_params_info {
 	u32 c_hd_stride;    /* Chrominance header stride */
 	u32 c_pl_stride;    /* Chrominance payload stride */
 
+	bool is_scale;
 	bool is_block;
 	u32 format;
 	dma_addr_t addr[MAX_PLANE_ADDR_CNT];

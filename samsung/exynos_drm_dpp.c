@@ -1074,11 +1074,6 @@ static irqreturn_t dma_irq_handler(int irq, void *priv)
 				dpp);
 	}
 
-	if (irqs & IDMA_AFBC_CONFLICT_IRQ) {
-		DPU_EVENT_LOG(DPU_EVT_IDMA_AFBC_CONFLICT, dpp->decon_id, dpp);
-		dump = true;
-	}
-
 	if (irqs & IDMA_FBC_ERR_IRQ) {
 		DPU_EVENT_LOG(DPU_EVT_IDMA_FBC_ERROR, dpp->decon_id, dpp);
 		dump = true;
@@ -1170,6 +1165,21 @@ static int dpp_init_resources(struct dpp_device *dpp)
 		disable_irq(dpp->dpp_irq);
 	}
 
+	if (test_bit(DPP_ATTR_SRAMC, &dpp->attr)) {
+		i = of_property_match_string(np, "reg-names", "sramc");
+		if (of_address_to_resource(np, i, &res)) {
+			dpp_err(dpp, "failed to get sramc resource\n");
+			return -EINVAL;
+		}
+		dpp->regs.sramc_base_regs = of_iomap(np, i);
+		if (!dpp->regs.sramc_base_regs) {
+			dpp_err(dpp, "failed to remap SRAMC SFR region\n");
+			return -EINVAL;
+		}
+		dpp_regs_desc_init(dpp->regs.sramc_base_regs, res.start, "sramc", REGS_SRAMC,
+				dpp->id);
+	}
+
 	if (test_bit(DPP_ATTR_HDR, &dpp->attr) ||
 			test_bit(DPP_ATTR_HDR10_PLUS, &dpp->attr)) {
 		i = of_property_match_string(np, "reg-names", "hdr");
@@ -1247,6 +1257,8 @@ static int dpp_remove(struct platform_device *pdev)
 		iounmap(dpp->regs.hdr_base_regs);
 	if (test_bit(DPP_ATTR_DPP, &dpp->attr))
 		iounmap(dpp->regs.dpp_base_regs);
+	if (test_bit(DPP_ATTR_SRAMC, &dpp->attr))
+		iounmap(dpp->regs.sramc_base_regs);
 	iounmap(dpp->regs.dma_base_regs);
 
 	return 0;
