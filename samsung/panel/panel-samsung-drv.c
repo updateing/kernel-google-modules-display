@@ -2958,11 +2958,17 @@ static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 
-	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_BLANK) ||
-	    (ctx->panel_state == PANEL_STATE_HANDOFF))
+	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_HANDOFF))
 		return;
 
-	drm_panel_prepare(&ctx->panel);
+	if (ctx->panel_state == PANEL_STATE_BLANK) {
+		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+		if (funcs && funcs->panel_reset)
+			funcs->panel_reset(ctx);
+	} else {
+		drm_panel_prepare(&ctx->panel);
+	}
 }
 
 static void exynos_panel_bridge_disable(struct drm_bridge *bridge,

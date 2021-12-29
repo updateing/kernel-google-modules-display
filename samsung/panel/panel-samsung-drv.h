@@ -242,6 +242,15 @@ struct exynos_panel_funcs {
 	void (*panel_init)(struct exynos_panel *exynos_panel);
 
 	/**
+	 * @panel_reset:
+	 *
+	 * This callback is used to allow panel to toggle only reset pin instead of full
+	 * prepare sequence (including power rails) while the device is in BLANK state.
+	 * This is not called in any other state.
+	 */
+	void (*panel_reset)(struct exynos_panel *exynos_panel);
+
+	/**
 	 * @print_gamma:
 	 *
 	 * This callback is used to print the hex dump of gamma address/data
