@@ -12,6 +12,7 @@
 
 #include <drm/drm_print.h>
 #include <uapi/drm/drm_fourcc.h>
+#include <drm/drm_fourcc_gs101.h>
 
 #include <dpp_cal.h>
 #include <regs-dpp.h>

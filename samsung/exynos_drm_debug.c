@@ -20,6 +20,7 @@
 #include <drm/drm_print.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_fourcc_gs101.h>
 
 #include <cal_config.h>
 

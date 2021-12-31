@@ -19,6 +19,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_fourcc_gs101.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <uapi/drm/exynos_drm.h>
 #include <uapi/linux/videodev2_exynos_media.h>
