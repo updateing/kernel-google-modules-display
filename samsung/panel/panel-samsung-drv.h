@@ -526,6 +526,7 @@ struct exynos_panel {
 	struct te2_data te2;
 	ktime_t last_commit_ts;
 	ktime_t last_mode_set_ts;
+	ktime_t last_self_refresh_active_ts;
 	struct delayed_work idle_work;
 
 	struct {
@@ -745,6 +746,7 @@ static inline void backlight_state_changed(struct backlight_device *bl)
 	i > 0;										\
 	i--, data++)									\
 
+unsigned int panel_get_idle_time_delta(struct exynos_panel *ctx);
 int exynos_panel_configure_te2_edges(struct exynos_panel *ctx,
 				     u32 *timings, bool lp_mode);
 ssize_t exynos_panel_get_te2_edges(struct exynos_panel *ctx,

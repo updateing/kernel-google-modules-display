@@ -1098,10 +1098,31 @@ static ssize_t te2_lp_timing_show(struct device *dev,
 	return ret;
 }
 
-static bool panel_idle_queue_delayed_work(struct exynos_panel *ctx)
+unsigned int panel_get_idle_time_delta(struct exynos_panel *ctx)
 {
 	const ktime_t now = ktime_get();
-	const unsigned int delta_ms = ktime_to_ms(ktime_sub(now, ctx->last_mode_set_ts));
+	const enum exynos_panel_idle_mode idle_mode = (ctx->current_mode) ?
+					ctx->current_mode->idle_mode : IDLE_MODE_UNSUPPORTED;
+	unsigned int delta_ms = UINT_MAX;
+
+	if (idle_mode == IDLE_MODE_AUTO) {
+		delta_ms = ktime_ms_delta(now, ctx->last_mode_set_ts);
+	} else if (idle_mode == IDLE_MODE_MANUAL) {
+		const ktime_t ts = max(ctx->last_self_refresh_active_ts,
+					ctx->last_mode_set_ts);
+
+		delta_ms = ktime_ms_delta(now, ts);
+	} else {
+		dev_dbg(ctx->dev, "%s: unsupported idle mode %d", __func__, idle_mode);
+	}
+
+	return delta_ms;
+}
+EXPORT_SYMBOL(panel_get_idle_time_delta);
+
+static bool panel_idle_queue_delayed_work(struct exynos_panel *ctx)
+{
+	const unsigned int delta_ms = panel_get_idle_time_delta(ctx);
 
 	if (delta_ms < ctx->idle_delay_ms) {
 		const unsigned int delay_ms = ctx->idle_delay_ms - delta_ms;
@@ -1137,8 +1158,10 @@ static void panel_update_idle_mode_locked(struct exynos_panel *ctx)
 		cancel_delayed_work(&ctx->idle_work);
 	}
 
-	if (funcs->set_self_refresh(ctx, ctx->self_refresh_active))
+	if (funcs->set_self_refresh(ctx, ctx->self_refresh_active)) {
 		exynos_panel_update_te2(ctx);
+		ctx->last_self_refresh_active_ts = ktime_get();
+	}
 }
 
 static void panel_idle_work(struct work_struct *work)
