@@ -224,6 +224,13 @@ static inline bool is_auto_mode_allowed(struct exynos_panel *ctx)
 	if (IS_HBM_ON(ctx->hbm_mode) || ctx->dimming_on)
 		return false;
 
+	if (ctx->idle_delay_ms) {
+		const unsigned int delta_ms = panel_get_idle_time_delta(ctx);
+
+		if (delta_ms < ctx->idle_delay_ms)
+			return false;
+	}
+
 	return ctx->panel_idle_enabled;
 }
 
@@ -729,12 +736,22 @@ static void s6e3hc3_c10_trigger_early_exit(struct exynos_panel *ctx)
 		return;
 	}
 
-	dev_dbg(ctx->dev, "sending early exit out cmd\n");
+	/* triggering early exit causes a switch to 120hz */
+	ctx->last_mode_set_ts = ktime_get();
 
 	DPU_ATRACE_BEGIN(__func__);
-	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
-	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
-	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+
+	if (ctx->idle_delay_ms) {
+		const struct exynos_panel_mode *pmode = ctx->current_mode;
+
+		dev_dbg(ctx->dev, "%s: disable idle mode for: %s\n", __func__, pmode->mode.name);
+		s6e3hc3_c10_update_refresh_mode(ctx, pmode, 0);
+	} else {
+		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+		EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
+		EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+	}
+
 	DPU_ATRACE_END(__func__);
 }
 
