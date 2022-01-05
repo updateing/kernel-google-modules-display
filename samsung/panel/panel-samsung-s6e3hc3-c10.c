@@ -63,6 +63,8 @@ struct s6e3hc3_c10_panel {
 	 *			if 0 it means that auto mode is not enabled
 	 */
 	u32 auto_mode_vrefresh;
+	/** @force_changeable_te: force changeable TE (instead of fixed) during early exit */
+	bool force_changeable_te;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct s6e3hc3_c10_panel, base)
@@ -301,7 +303,7 @@ static void s6e3hc3_c10_update_panel_feat(struct exynos_panel *ctx,
 
 	/* TE setting */
 	if (test_bit(C10_FEAT_EARLY_EXIT, changed_feat)) {
-		if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat)) {
+		if (test_bit(C10_FEAT_EARLY_EXIT, spanel->feat) && !spanel->force_changeable_te) {
 			/* Fixed TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x41);
 			/* TE width setting for 145 us */
@@ -1023,8 +1025,11 @@ static const struct exynos_panel_mode s6e3hc3_c10_lp_mode = {
 static void s6e3hc3_c10_panel_init(struct exynos_panel *ctx)
 {
 	struct dentry *csroot = ctx->debugfs_cmdset_entry;
+	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &s6e3hc3_c10_init_cmd_set, "init");
+	debugfs_create_bool("force_changeable_te", 0644, ctx->debugfs_entry,
+				&spanel->force_changeable_te);
 }
 
 static int s6e3hc3_c10_panel_probe(struct mipi_dsi_device *dsi)
