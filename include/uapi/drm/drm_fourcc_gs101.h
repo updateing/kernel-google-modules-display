@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  * Copyright 2011 Intel Corporation
  *
@@ -78,7 +79,7 @@ extern "C" {
 #define SBWC_IDENTIFIER				(1 << 4)
 #define SBWC_FORMAT_MOD_BLOCK_SIZE_MASK		(0xfULL << 5)
 #define SBWC_BLOCK_SIZE_SET(blk_size)		\
-		((blk_size << 5) & SBWC_FORMAT_MOD_BLOCK_SIZE_MASK)
+		(((blk_size) << 5) & SBWC_FORMAT_MOD_BLOCK_SIZE_MASK)
 #define SBWC_BLOCK_SIZE_GET(modifier)		\
 		(((modifier) & SBWC_FORMAT_MOD_BLOCK_SIZE_MASK) >> 5)
 #define SBWC_FORMAT_MOD_BLOCK_SIZE_32x2		(2ULL)
