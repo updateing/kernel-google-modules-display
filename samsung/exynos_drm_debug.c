@@ -332,6 +332,31 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 
 extern void *return_address(unsigned int);
 
+static struct dpu_log *dpu_event_get_next(struct decon_device *decon)
+{
+	struct dpu_log *log;
+	unsigned long flags;
+	int idx;
+
+	if (!decon) {
+		pr_err("%s: invalid decon\n", __func__);
+		return NULL;
+	}
+
+	if (IS_ERR_OR_NULL(decon->d.event_log))
+		return NULL;
+
+	spin_lock_irqsave(&decon->d.event_lock, flags);
+	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
+	log = &decon->d.event_log[idx];
+	log->type = DPU_EVT_NONE;
+	spin_unlock_irqrestore(&decon->d.event_lock, flags);
+
+	log->time = ktime_get();
+
+	return log;
+}
+
 /*
  * DPU_EVENT_LOG_CMD() - store DSIM command information
  * @index: event log index
@@ -346,26 +371,12 @@ extern void *return_address(unsigned int);
 void
 DPU_EVENT_LOG_CMD(struct dsim_device *dsim, u8 type, u8 d0, u16 len)
 {
+	int i;
 	struct decon_device *decon = (struct decon_device *)dsim_get_decon(dsim);
-	struct dpu_log *log;
-	unsigned long flags;
-	int idx, i;
+	struct dpu_log *log = dpu_event_get_next(decon);
 
-	if (!decon) {
-		pr_err("%s: invalid decon\n", __func__);
+	if (!log)
 		return;
-	}
-
-	if (IS_ERR_OR_NULL(decon->d.event_log))
-		return;
-
-	spin_lock_irqsave(&decon->d.event_lock, flags);
-	idx = atomic_inc_return(&decon->d.event_log_idx) % dpu_event_log_max;
-	log = &decon->d.event_log[idx];
-	log->type = DPU_EVT_NONE;
-	spin_unlock_irqrestore(&decon->d.event_lock, flags);
-
-	log->time = ktime_get();
 
 	log->data.cmd.id = type;
 	log->data.cmd.d0 = d0;

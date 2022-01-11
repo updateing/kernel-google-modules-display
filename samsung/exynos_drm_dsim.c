@@ -1555,7 +1555,7 @@ static irqreturn_t dsim_irq_handler(int irq, void *dev_id)
 			dsim_underrun_info(dsim, decon->d.underrun_cnt + 1);
 			DPU_EVENT_LOG(DPU_EVT_DSIM_UNDERRUN, decon->id, NULL);
 			if (time_after(jiffies, last_dumptime + msecs_to_jiffies(5000))) {
-				decon_dump_all(decon, DPU_EVT_CONDITION_UNDERRUN, true);
+				decon_dump_event_condition(decon, DPU_EVT_CONDITION_UNDERRUN);
 				last_dumptime = jiffies;
 			}
 		} else {
