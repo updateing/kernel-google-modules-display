@@ -702,7 +702,7 @@ static void decon_wait_earliest_process_time(
 	if (ktime_after(earliest_process_time, now)) {
 		const struct drm_crtc_state *crtc_state = &new_exynos_crtc_state->base;
 		int32_t vrefresh = drm_mode_vrefresh(&crtc_state->mode);
-		int32_t max_delay_us = mult_frac(1000, 1020, vrefresh);
+		int32_t max_delay_us = mult_frac(10000, 1000, vrefresh);  // 10 * vsync period
 		int32_t delay_until_process;
 
 		DPU_ATRACE_BEGIN("wait for earliest present time");
