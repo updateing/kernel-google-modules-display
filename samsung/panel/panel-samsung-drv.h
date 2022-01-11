@@ -404,6 +404,7 @@ struct exynos_binned_lp {
 
 struct exynos_panel_desc {
 	const u8 *dsc_pps;
+	u8 panel_id_reg;
 	u32 dsc_pps_len;
 	u32 data_lane_cnt;
 	u32 hdr_formats; /* supported HDR formats bitmask */

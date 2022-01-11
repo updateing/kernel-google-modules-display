@@ -260,7 +260,8 @@ static int exynos_panel_read_id(struct exynos_panel *ctx)
 	char buf[PANEL_ID_READ_SIZE];
 	int ret;
 
-	ret = mipi_dsi_dcs_read(dsi, PANEL_ID_REG, buf, PANEL_ID_READ_SIZE);
+	ret = mipi_dsi_dcs_read(dsi, ctx->desc->panel_id_reg ? : PANEL_ID_REG,
+				buf, PANEL_ID_READ_SIZE);
 	if (ret != PANEL_ID_READ_SIZE) {
 		dev_warn(ctx->dev, "Unable to read panel id (%d)\n", ret);
 		return ret;

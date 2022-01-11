@@ -582,6 +582,7 @@ const struct brightness_capability nt37290_brightness_capability = {
 };
 
 const struct exynos_panel_desc boe_nt37290 = {
+	.panel_id_reg = 0xAC,
 	.data_lane_cnt = 4,
 	.max_brightness = 4094,
 	.min_brightness = 3,
