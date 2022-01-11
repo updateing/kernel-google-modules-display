@@ -357,10 +357,9 @@ static inline bool is_auto_mode_preferred(struct exynos_panel *ctx)
 		return false;
 
 	if (ctx->idle_delay_ms) {
-		const ktime_t now = ktime_get();
-		const ktime_t delta = ktime_sub(now, ctx->last_mode_set_ts);
+		const unsigned int delta_ms = panel_get_idle_time_delta(ctx);
 
-		if (ktime_to_ms(delta) < ctx->idle_delay_ms)
+		if (delta_ms < ctx->idle_delay_ms)
 			return false;
 	}
 
@@ -497,7 +496,7 @@ static void s6e3hc3_update_refresh_mode(struct exynos_panel *ctx,
 	if (mdata->common_mode_cmd_set)
 		exynos_panel_send_cmd_set_flags(ctx, mdata->common_mode_cmd_set, flags);
 
-	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
+	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
 
 	/* when mode is explicitly set (manual) panel idle effect would be disabled */
 	ctx->panel_idle_vrefresh = 0;
