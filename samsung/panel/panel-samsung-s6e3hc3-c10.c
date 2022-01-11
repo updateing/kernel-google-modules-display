@@ -496,7 +496,7 @@ static void s6e3hc3_c10_change_frequency(struct exynos_panel *ctx,
 		return;
 	}
 
-	if (pmode->idle_mode == IDLE_MODE_AUTO)
+	if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY)
 		idle_vrefresh = s6e3hc3_c10_get_min_idle_vrefresh(ctx, pmode);
 
 	s6e3hc3_c10_update_refresh_mode(ctx, pmode, idle_vrefresh);
@@ -519,12 +519,12 @@ static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
 
 	idle_vrefresh = s6e3hc3_c10_get_min_idle_vrefresh(ctx, pmode);
 
-	if (pmode->idle_mode != IDLE_MODE_MANUAL) {
+	if (pmode->idle_mode != IDLE_MODE_ON_SELF_REFRESH) {
 		/*
-		 * if idle mode is auto, may need to update the target fps for auto mode,
+		 * if idle mode is on inactivity, may need to update the target fps for auto mode,
 		 * or switch to manual mode if idle should be disabled (idle_vrefresh=0)
 		 */
-		if ((pmode->idle_mode == IDLE_MODE_AUTO) &&
+		if ((pmode->idle_mode == IDLE_MODE_ON_INACTIVITY) &&
 			(spanel->auto_mode_vrefresh != idle_vrefresh)) {
 			dev_dbg(ctx->dev,
 				"early exit update needed for mode: %s (idle_vrefresh: %u)\n",
@@ -746,9 +746,11 @@ static void s6e3hc3_c10_trigger_early_exit(struct exynos_panel *ctx)
 	if (ctx->idle_delay_ms) {
 		const struct exynos_panel_mode *pmode = ctx->current_mode;
 
-		dev_dbg(ctx->dev, "%s: disable idle mode for: %s\n", __func__, pmode->mode.name);
+		dev_dbg(ctx->dev, "%s: disable auto idle mode for: %s\n",
+				__func__, pmode->mode.name);
 		s6e3hc3_c10_update_refresh_mode(ctx, pmode, 0);
 	} else {
+		dev_dbg(ctx->dev, "sending early exit out cmd\n");
 		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 		EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
 		EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
@@ -986,7 +988,7 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 			.rising_edge = 16,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_MANUAL,
+		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 };
 

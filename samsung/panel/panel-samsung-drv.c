@@ -1106,9 +1106,9 @@ unsigned int panel_get_idle_time_delta(struct exynos_panel *ctx)
 					ctx->current_mode->idle_mode : IDLE_MODE_UNSUPPORTED;
 	unsigned int delta_ms = UINT_MAX;
 
-	if (idle_mode == IDLE_MODE_AUTO) {
+	if (idle_mode == IDLE_MODE_ON_INACTIVITY) {
 		delta_ms = ktime_ms_delta(now, ctx->last_mode_set_ts);
-	} else if (idle_mode == IDLE_MODE_MANUAL) {
+	} else if (idle_mode == IDLE_MODE_ON_SELF_REFRESH) {
 		const ktime_t ts = max(ctx->last_self_refresh_active_ts,
 					ctx->last_mode_set_ts);
 

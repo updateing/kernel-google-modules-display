@@ -510,7 +510,7 @@ static void s6e3hc3_change_frequency(struct exynos_panel *ctx,
 	if (unlikely(!ctx))
 		return;
 
-	if (pmode->idle_mode == IDLE_MODE_AUTO)
+	if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY)
 		idle_vrefresh = s6e3hc3_get_min_idle_vrefresh(ctx, pmode);
 
 	s6e3hc3_update_refresh_mode(ctx, pmode, idle_vrefresh);
@@ -535,12 +535,12 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 
 	idle_vrefresh = s6e3hc3_get_min_idle_vrefresh(ctx, pmode);
 
-	if (pmode->idle_mode != IDLE_MODE_MANUAL) {
+	if (pmode->idle_mode != IDLE_MODE_ON_SELF_REFRESH) {
 		/*
-		 * if idle mode is auto, may need to update the target fps for auto mode,
+		 * if idle mode is on inactivity, may need to update the target fps for auto mode,
 		 * or switch to manual mode if idle should be disabled (idle_vrefresh=0)
 		 */
-		if ((pmode->idle_mode == IDLE_MODE_AUTO) &&
+		if ((pmode->idle_mode == IDLE_MODE_ON_INACTIVITY) &&
 		    (spanel->auto_mode_vrefresh != idle_vrefresh)) {
 			dev_dbg(ctx->dev,
 				"early exit update needed for mode: %s (idle_vrefresh: %d)\n",
@@ -1157,7 +1157,7 @@ static const struct exynos_panel_mode s6e3hc3_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_AUTO,
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 };
 

@@ -101,13 +101,15 @@ enum exynos_panel_state {
 /**
  * enum exynos_panel_idle_mode - type of idle mode supported per mode
  * @IDLE_MODE_UNSUPPORTED: No idle mode is supported in this mode
- * @IDLE_MODE_AUTO: In this mode the panel can go into idle automatically after last frame update
- * @IDLE_MODE_MANUAL: Manually go into lower idle mode when display enters self refresh state
+ * @IDLE_MODE_ON_INACTIVITY: In this mode the panel can go into idle automatically
+ *                           after last frame update
+ * @IDLE_MODE_ON_SELF_REFRESH: Manually go into lower idle mode when display enters
+ *                             self refresh state
  */
 enum exynos_panel_idle_mode {
 	IDLE_MODE_UNSUPPORTED,
-	IDLE_MODE_AUTO,
-	IDLE_MODE_MANUAL,
+	IDLE_MODE_ON_INACTIVITY,
+	IDLE_MODE_ON_SELF_REFRESH,
 };
 
 struct exynos_panel;
