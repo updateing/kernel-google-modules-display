@@ -50,6 +50,8 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 static ssize_t exynos_panel_parse_byte_buf(char *input_str, size_t input_len,
 					   const char **out_buf);
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len);
+static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
+							     const struct drm_display_mode *mode);
 
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
@@ -1388,10 +1390,17 @@ static int exynos_panel_get_lp_mode(struct exynos_drm_connector *exynos_conn,
 				    const struct exynos_drm_connector_state *exynos_state,
 				    uint64_t *val)
 {
+	const struct drm_connector_state *conn_state = &exynos_state->base;
+	const struct drm_crtc_state *crtc_state = conn_state->crtc ? conn_state->crtc->state : NULL;
 	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_conn);
 	struct drm_property_blob *blob = ctx->lp_mode_blob;
-	const struct exynos_panel_mode *cur_mode = READ_ONCE(ctx->current_mode);
+	const struct exynos_panel_mode *cur_mode;
 	struct drm_mode_modeinfo umode;
+
+	if (crtc_state)
+		cur_mode = exynos_panel_get_mode(ctx, &crtc_state->mode);
+	else
+		cur_mode = READ_ONCE(ctx->current_mode);
 
 	if (unlikely(!ctx->desc->lp_mode))
 		return -EINVAL;
@@ -1709,10 +1718,6 @@ static bool exynos_panel_is_mode_seamless(const struct exynos_panel *ctx,
 					  const struct exynos_panel_mode *mode)
 {
 	const struct exynos_panel_funcs *funcs;
-
-	/* no need to go through seamless mode set if panel is disabled */
-	if (!is_panel_active(ctx))
-		return false;
 
 	funcs = ctx->desc->exynos_panel_func;
 	if (!funcs || !funcs->is_mode_seamless)
