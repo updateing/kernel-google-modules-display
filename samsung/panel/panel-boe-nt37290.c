@@ -17,6 +17,8 @@
 
 #include "panel-samsung-drv.h"
 
+/* when refresh rate can go lower than this value (in auto mode), fixed TE2 should be enabled */
+#define NT37290_TE2_MIN_RATE   30
 #define NT37290_TE2_CHANGEABLE 0x02
 #define NT37290_TE2_FIXED      0x22
 
@@ -339,7 +341,7 @@ static u8 nt37290_get_te2_option(struct exynos_panel *ctx)
 
 	/* AOD mode only supports fixed TE2 */
 	if (ctx->current_mode->exynos_mode.is_lp_mode ||
-	    test_bit(G10_FEAT_EARLY_EXIT, spanel->feat))
+	    (spanel->hw_idle_vrefresh > 0 && spanel->hw_idle_vrefresh < NT37290_TE2_MIN_RATE))
 		return NT37290_TE2_FIXED;
 
 	return NT37290_TE2_CHANGEABLE;
