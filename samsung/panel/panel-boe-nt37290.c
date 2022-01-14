@@ -61,6 +61,11 @@ struct nt37290_panel {
 	 *                      if 0 it means that auto mode is not enabled
 	 */
 	u32 auto_mode_vrefresh;
+	/**
+	 * @delayed_idle: indicates idle mode set is delayed due to idle_delay_ms,
+	 *                we should avoid changing idle_mode when it's true
+	 */
+	bool delayed_idle;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct nt37290_panel, base)
@@ -420,6 +425,14 @@ static void nt37290_update_min_idle_vrefresh(struct exynos_panel *ctx,
 		idle_vrefresh = 0;
 	}
 
+	if (idle_vrefresh && ctx->idle_delay_ms &&
+	    (panel_get_idle_time_delta(ctx) < ctx->idle_delay_ms)) {
+		spanel->delayed_idle = true;
+		idle_vrefresh = 0;
+	} else {
+		spanel->delayed_idle = false;
+	}
+
 	spanel->auto_mode_vrefresh = idle_vrefresh;
 }
 
@@ -591,6 +604,11 @@ static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
  * time to next vblank. Use just over 2 frames time to consider worst case scenario
  */
 #define EARLY_EXIT_THRESHOLD_US 17000
+/**
+ * Use a threshold to avoid disabling idle auto mode too frequently while continuously
+ * updating frames. Considering the hibernation time for this scenario.
+ */
+#define IDLE_DELAY_THRESHOLD_US 50000
 
 /**
  * nt37290_trigger_early_exit - trigger early exit command to panel
@@ -610,9 +628,20 @@ static void nt37290_trigger_early_exit(struct exynos_panel *ctx)
 		return;
 	}
 
+	/* triggering early exit causes a switch to 120hz */
+	ctx->last_mode_set_ts = ktime_get();
+
 	DPU_ATRACE_BEGIN(__func__);
 
-	EXYNOS_DCS_WRITE_TABLE(ctx, stream_2c);
+	if (ctx->idle_delay_ms && delta_us > IDLE_DELAY_THRESHOLD_US) {
+		const struct exynos_panel_mode *pmode = ctx->current_mode;
+
+		dev_dbg(ctx->dev, "%s: disable auto idle mode for %s\n",
+			 __func__, pmode->mode.name);
+		nt37290_change_frequency(ctx, pmode);
+	} else {
+		EXYNOS_DCS_WRITE_TABLE(ctx, stream_2c);
+	}
 
 	DPU_ATRACE_END(__func__);
 }
@@ -627,6 +656,13 @@ static void nt37290_commit_done(struct exynos_panel *ctx)
 
 	if (test_bit(G10_FEAT_EARLY_EXIT, spanel->feat))
 		nt37290_trigger_early_exit(ctx);
+	/**
+	 * For IDLE_MODE_ON_INACTIVITY, we should go back to auto mode again
+	 * after the delay time has elapsed.
+	 */
+	else if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY &&
+		 spanel->delayed_idle)
+		nt37290_change_frequency(ctx, pmode);
 }
 
 static void nt37290_set_nolp_mode(struct exynos_panel *ctx,
@@ -923,6 +959,7 @@ static int nt37290_panel_probe(struct mipi_dsi_device *dsi)
 	spanel->hw_vrefresh = 60;
 	spanel->hw_idle_vrefresh = 0;
 	spanel->auto_mode_vrefresh = 0;
+	spanel->delayed_idle = false;
 
 	return exynos_panel_common_init(dsi, &spanel->base);
 }
