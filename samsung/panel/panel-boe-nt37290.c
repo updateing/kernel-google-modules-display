@@ -12,6 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
+#include <trace/dpu_trace.h>
 #include <video/mipi_display.h>
 
 #include "panel-samsung-drv.h"
@@ -50,7 +51,14 @@ struct nt37290_panel {
 	/** @hw_feat: correlated states effective in panel */
 	DECLARE_BITMAP(hw_feat, G10_FEAT_MAX);
 	/** @hw_vrefresh: vrefresh rate effective in panel */
-	u32 hw_vrefresh;
+	int hw_vrefresh;
+	/** @hw_idle_vrefresh: idle vrefresh rate effective in panel */
+	int hw_idle_vrefresh;
+	/**
+	 * @auto_mode_vrefresh: indicates current minimum refresh rate while in auto mode,
+	 *                      if 0 it means that auto mode is not enabled
+	 */
+	u32 auto_mode_vrefresh;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct nt37290_panel, base)
@@ -339,6 +347,7 @@ static u8 nt37290_get_te2_option(struct exynos_panel *ctx)
 
 static void nt37290_update_te2(struct exynos_panel *ctx)
 {
+	struct nt37290_panel *spanel = to_spanel(ctx);
 	struct exynos_panel_te2_timing timing;
 	/* default timing */
 	u8 rising = 0, falling = 0x30;
@@ -369,16 +378,55 @@ static void nt37290_update_te2(struct exynos_panel *ctx)
 				     0x00, rising, 0x10, falling);
 
 	dev_dbg(ctx->dev,
-		"TE2 updated: option %s, rising 0x%x, falling 0x%x\n",
+		"TE2 updated: option %s, idle mode %s, rising 0x%x, falling 0x%x\n",
 		(option == NT37290_TE2_CHANGEABLE) ? "changeable" : "fixed",
+		spanel->hw_idle_vrefresh ? "enabled" : "disabled",
 		rising, falling);
 }
 
-static void nt37290_update_panel_feat(struct exynos_panel *ctx,
-	const struct exynos_panel_mode *pmode, bool enforce)
+static inline bool is_auto_mode_allowed(struct exynos_panel *ctx)
+{
+	/* don't want to enable auto mode/early exit during hbm or dimming on */
+	if (IS_HBM_ON(ctx->hbm_mode) || ctx->dimming_on)
+		return false;
+
+	return ctx->panel_idle_enabled;
+}
+
+static void nt37290_update_min_idle_vrefresh(struct exynos_panel *ctx,
+					     const struct exynos_panel_mode *pmode)
 {
 	struct nt37290_panel *spanel = to_spanel(ctx);
-	u32 vrefresh;
+	const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+	int idle_vrefresh = ctx->min_vrefresh;
+
+	if (!idle_vrefresh || !is_auto_mode_allowed(ctx) ||
+	    pmode->idle_mode == IDLE_MODE_UNSUPPORTED)
+		idle_vrefresh = 0;
+	else if (idle_vrefresh <= 10)
+		idle_vrefresh = 10;
+	else if (idle_vrefresh <= 30)
+		idle_vrefresh = 30;
+	else if (idle_vrefresh <= 60)
+		idle_vrefresh = 60;
+	else /* 120hz: no idle available */
+		idle_vrefresh = 0;
+
+	if (idle_vrefresh >= vrefresh) {
+		dev_dbg(ctx->dev, "idle vrefresh (%d) higher than target (%d)\n",
+			idle_vrefresh, vrefresh);
+		idle_vrefresh = 0;
+	}
+
+	spanel->auto_mode_vrefresh = idle_vrefresh;
+}
+
+static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
+				      const struct exynos_panel_mode *pmode, bool enforce)
+{
+	struct nt37290_panel *spanel = to_spanel(ctx);
+	int vrefresh;
+	int idle_vrefresh = spanel->auto_mode_vrefresh;
 	DECLARE_BITMAP(changed_feat, G10_FEAT_MAX);
 	bool ee, fi;
 
@@ -387,22 +435,29 @@ static void nt37290_update_panel_feat(struct exynos_panel *ctx,
 	else
 		vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
 
+	/* when panel feat func is called, idle effect should be disabled */
+	ctx->panel_idle_vrefresh = 0;
+
 	if (enforce) {
 		bitmap_fill(changed_feat, G10_FEAT_MAX);
 	} else {
 		bitmap_xor(changed_feat, spanel->feat, spanel->hw_feat, G10_FEAT_MAX);
 		if (bitmap_empty(changed_feat, G10_FEAT_MAX) &&
-			vrefresh == spanel->hw_vrefresh)
-			return;
+		    vrefresh == spanel->hw_vrefresh &&
+		    idle_vrefresh == spanel->hw_idle_vrefresh)
+			return false;
 	}
 
 	spanel->hw_vrefresh = vrefresh;
+	spanel->hw_idle_vrefresh = idle_vrefresh;
 	bitmap_copy(spanel->hw_feat, spanel->feat, G10_FEAT_MAX);
 	ee = test_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
 	fi = test_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
 
-	dev_dbg(ctx->dev, "ee=%s fi=%s vrefresh=%u\n",
-		ee ? "on" : "off", fi ? "auto" : "manual", vrefresh);
+	dev_dbg(ctx->dev, "ee=%s fi=%s vrefresh=%d idle_vrefresh=%d\n",
+		ee ? "on" : "off", fi ? "auto" : "manual", vrefresh, idle_vrefresh);
+
+	DPU_ATRACE_BEGIN(__func__);
 
 	if (vrefresh == 120 && !fi) {
 		/* freq_mode_hs */
@@ -417,36 +472,159 @@ static void nt37290_update_panel_feat(struct exynos_panel *ctx,
 		/* early exit */
 		EXYNOS_DCS_BUF_ADD(ctx, 0x5A, !ee);
 
-		/* TODO: add support of auto frame insertion */
+		/* set auto frame insertion */
+		EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x1C);
 		if (!fi) {
 			/* auto frame insertion off (manual) */
-			EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
-			EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x1C);
 			if (vrefresh == 60)
 				EXYNOS_DCS_BUF_ADD(ctx,
 					0xBA, 0x91, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x00);
+			else
+				dev_warn(ctx->dev,
+					 "Unsupported vrefresh %dHz for manual mode\n", vrefresh);
+		} else {
+			/* auto frame insertion on */
+			if (idle_vrefresh == 10)
+				EXYNOS_DCS_BUF_ADD(ctx,
+					0xBA, 0x93, 0x09, 0x03, 0x00, 0x11, 0x0B, 0x0B,
+					0x00, 0x06);
+			else if (idle_vrefresh == 30)
+				EXYNOS_DCS_BUF_ADD(ctx,
+					0xBA, 0x93, 0x03, 0x02, 0x00, 0x11, 0x03, 0x03,
+					0x00, 0x04);
+			else if (idle_vrefresh == 60)
+				EXYNOS_DCS_BUF_ADD(ctx,
+					0xBA, 0x93, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01,
+					0x00, 0x00);
+			else
+				dev_warn(ctx->dev,
+					 "Unsupported idle_vrefresh %dHz for auto mode\n",
+					 idle_vrefresh);
 		}
 
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2C);
-		/* TE shift 8.2ms */
-		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x01);
+
+		if (vrefresh == 120)
+			/* restore TE timing (no shift) */
+			EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
+		else
+			/* TE shift 8.2ms */
+			EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x01);
 	}
+
+	DPU_ATRACE_END(__func__);
+
+	return true;
 }
 
-static void nt37290_change_frequency(struct exynos_panel *ctx,
+static bool nt37290_change_frequency(struct exynos_panel *ctx,
 				     const struct exynos_panel_mode *pmode)
 {
-	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 	struct nt37290_panel *spanel = to_spanel(ctx);
+	int vrefresh = drm_mode_vrefresh(&pmode->mode);
+	bool idle_active = false;
 	bool was_lp_mode = ctx->current_mode->exynos_mode.is_lp_mode;
+	bool updated;
 
-	clear_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
-	clear_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
+	nt37290_update_min_idle_vrefresh(ctx, pmode);
+
+	if (spanel->auto_mode_vrefresh &&
+	    (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY ||
+	    (pmode->idle_mode == IDLE_MODE_ON_SELF_REFRESH && ctx->self_refresh_active)))
+		idle_active = true;
+
+	if (idle_active) {
+		set_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
+		set_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
+	} else {
+		clear_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
+		clear_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
+	}
 
 	/* need to send 2Fh command while exiting AOD */
-	nt37290_update_panel_feat(ctx, pmode, was_lp_mode);
+	updated = nt37290_update_panel_feat(ctx, pmode, was_lp_mode);
 
-	dev_dbg(ctx->dev, "change to %u hz, was_lp_mode %d\n", vrefresh, was_lp_mode);
+	ctx->panel_idle_vrefresh = ctx->self_refresh_active ? spanel->hw_idle_vrefresh : 0;
+
+	if (updated) {
+		backlight_state_changed(ctx->bl);
+		dev_dbg(ctx->dev, "change to %dHz, idle %s, was_lp_mode %d\n",
+			vrefresh, idle_active ? "active" : "deactive", was_lp_mode);
+	}
+
+	return updated;
+}
+
+static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
+{
+	const struct exynos_panel_mode *pmode = ctx->current_mode;
+	bool updated;
+
+	if (unlikely(!pmode))
+		return false;
+
+	/* self refresh is not supported in lp mode since that always makes use of early exit */
+	if (pmode->exynos_mode.is_lp_mode)
+		return false;
+
+	DPU_ATRACE_BEGIN(__func__);
+
+	updated = nt37290_change_frequency(ctx, pmode);
+
+	if (pmode->idle_mode == IDLE_MODE_ON_SELF_REFRESH) {
+		dev_dbg(ctx->dev, "%s: %s idle (%dHz) for mode %s\n",
+			__func__, enable ? "enter" : "exit",
+			ctx->panel_idle_vrefresh ? : drm_mode_vrefresh(&pmode->mode),
+			pmode->mode.name);
+	}
+
+	DPU_ATRACE_END(__func__);
+
+	return updated;
+}
+
+/**
+ * 120hz auto mode takes at least 2 frames to start lowering refresh rate in addition to
+ * time to next vblank. Use just over 2 frames time to consider worst case scenario
+ */
+#define EARLY_EXIT_THRESHOLD_US 17000
+
+/**
+ * nt37290_trigger_early_exit - trigger early exit command to panel
+ * @ctx: panel struct
+ *
+ * Sends a command to panel to indicate a frame is about to come in case its been a while since
+ * the last frame update and auto mode may have started to take effect and lowering refresh rate
+ */
+static void nt37290_trigger_early_exit(struct exynos_panel *ctx)
+{
+	const ktime_t delta = ktime_sub(ktime_get(), ctx->last_commit_ts);
+	const s64 delta_us = ktime_to_us(delta);
+
+	if (delta_us < EARLY_EXIT_THRESHOLD_US) {
+		dev_dbg(ctx->dev, "skip early exit. %lldus since last commit\n",
+			delta_us);
+		return;
+	}
+
+	DPU_ATRACE_BEGIN(__func__);
+
+	EXYNOS_DCS_WRITE_TABLE(ctx, stream_2c);
+
+	DPU_ATRACE_END(__func__);
+}
+
+static void nt37290_commit_done(struct exynos_panel *ctx)
+{
+	struct nt37290_panel *spanel = to_spanel(ctx);
+	const struct exynos_panel_mode *pmode = ctx->current_mode;
+
+	if (!is_panel_active(ctx) || !pmode)
+		return;
+
+	if (test_bit(G10_FEAT_EARLY_EXIT, spanel->feat))
+		nt37290_trigger_early_exit(ctx);
 }
 
 static void nt37290_set_nolp_mode(struct exynos_panel *ctx,
@@ -471,7 +649,6 @@ static void nt37290_set_nolp_mode(struct exynos_panel *ctx,
 static int nt37290_enable(struct drm_panel *panel)
 {
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
-	struct nt37290_panel *spanel = to_spanel(ctx);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 	if (!pmode) {
@@ -485,9 +662,6 @@ static int nt37290_enable(struct drm_panel *panel)
 	exynos_panel_send_cmd_set(ctx, &nt37290_init_cmd_set);
 	exynos_panel_send_cmd_set(ctx, &nt37290_lhbm_on_setting_cmd_set);
 
-	/* TODO: add support of early exit and auto */
-	clear_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
-	clear_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
 	nt37290_update_panel_feat(ctx, pmode, true);
 
 	if (!pmode->exynos_mode.is_lp_mode)
@@ -506,6 +680,7 @@ static int nt37290_disable(struct drm_panel *panel)
 	/* panel register state gets reset after disabling hardware */
 	bitmap_clear(spanel->hw_feat, 0, G10_FEAT_MAX);
 	spanel->hw_vrefresh = 60;
+	spanel->hw_idle_vrefresh = 0;
 
 	return exynos_panel_disable(panel);
 }
@@ -666,6 +841,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
+		.idle_mode = IDLE_MODE_UNSUPPORTED,
 	},
 	{
 		/* 1440x3120 @ 120Hz */
@@ -695,6 +871,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
+		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 };
 
@@ -742,6 +919,8 @@ static int nt37290_panel_probe(struct mipi_dsi_device *dsi)
 		return -ENOMEM;
 
 	spanel->hw_vrefresh = 60;
+	spanel->hw_idle_vrefresh = 0;
+	spanel->auto_mode_vrefresh = 0;
 
 	return exynos_panel_common_init(dsi, &spanel->base);
 }
@@ -767,6 +946,8 @@ static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.get_te2_edges = exynos_panel_get_te2_edges,
 	.configure_te2_edges = exynos_panel_configure_te2_edges,
 	.update_te2 = nt37290_update_te2,
+	.set_self_refresh = nt37290_set_self_refresh,
+	.commit_done = nt37290_commit_done,
 };
 
 const struct brightness_capability nt37290_brightness_capability = {
