@@ -45,6 +45,7 @@ struct exynos_drm_connector_properties {
 	struct drm_property *brightness_level;
 	struct drm_property *is_partial;
 	struct drm_property *sync_rr_switch;
+	struct drm_property *panel_idle_support;
 };
 
 struct exynos_display_dsc {
@@ -151,6 +152,12 @@ struct exynos_drm_connector_state {
 	 *		    frame scanout should happen in the same vsync period.
 	 */
 	bool sync_rr_switch;
+
+	/*
+	 * @panel_idle_support: Indicating display support panel idle mode. Panel can
+	 *			go into idle after some idle period.
+	 */
+	bool panel_idle_support;
 };
 
 #define to_exynos_connector_state(connector_state) \

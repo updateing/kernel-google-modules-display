@@ -1119,6 +1119,7 @@ const struct exynos_panel_desc samsung_s6e3hc4 = {
 	.lp_cmd_set = &s6e3hc4_lp_cmd_set,
 	.binned_lp = s6e3hc4_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(s6e3hc4_binned_lp),
+	.is_panel_idle_supported = true,
 	.panel_func = &s6e3hc4_drm_funcs,
 	.exynos_panel_func = &s6e3hc4_exynos_funcs,
 };
