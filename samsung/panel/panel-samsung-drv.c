@@ -180,6 +180,9 @@ static void exynos_panel_update_te2(struct exynos_panel *ctx)
 		return;
 
 	funcs->update_te2(ctx);
+
+	if (ctx->bl)
+		te2_state_changed(ctx->bl);
 }
 
 static int exynos_panel_parse_gpios(struct exynos_panel *ctx)
@@ -1009,7 +1012,7 @@ static ssize_t set_te2_timing(struct exynos_panel *ctx, size_t count,
 
 	mutex_lock(&ctx->mode_lock);
 	funcs->configure_te2_edges(ctx, timing, lp_mode);
-	funcs->update_te2(ctx);
+	exynos_panel_update_te2(ctx);
 	mutex_unlock(&ctx->mode_lock);
 
 	kfree(buf_dup);
@@ -2587,6 +2590,32 @@ static ssize_t lp_state_show(struct device *dev,
 
 static DEVICE_ATTR_RO(lp_state);
 
+static ssize_t te2_state_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bl = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bl);
+	const struct exynos_panel_mode *pmode;
+	int rc = 0;
+
+	mutex_lock(&ctx->mode_lock);
+	pmode = ctx->current_mode;
+	mutex_unlock(&ctx->mode_lock);
+	if (pmode) {
+		bool fixed = ctx->te2.option == TE2_OPT_FIXED;
+
+		rc = scnprintf(buf, PAGE_SIZE, "%s-te2@%d\n",
+			       fixed ? "fixed" : "changeable",
+			       fixed ? FIXED_TE2_VREFRESH : exynos_get_actual_vrefresh(ctx));
+	}
+
+	dev_dbg(ctx->dev, "%s: %s\n", __func__, rc > 0 ? buf : "");
+
+	return rc;
+}
+
+static DEVICE_ATTR_RO(te2_state);
+
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len)
 {
 	int rc = 0, cnt = 0;
@@ -2696,6 +2725,7 @@ static struct attribute *bl_device_attrs[] = {
 	&dev_attr_local_hbm_max_timeout.attr,
 	&dev_attr_state.attr,
 	&dev_attr_lp_state.attr,
+	&dev_attr_te2_state.attr,
 	&dev_attr_als_table.attr,
 	NULL,
 };
@@ -3324,6 +3354,8 @@ static void exynos_panel_te2_init(struct exynos_panel *ctx)
 		data->timing.falling_edge =
 				binned_lp->te2_timing.falling_edge;
 	}
+
+	ctx->te2.option = TE2_OPT_CHANGEABLE;
 }
 
 static const struct drm_bridge_funcs exynos_panel_bridge_funcs = {

@@ -213,6 +213,8 @@ static void s6e3hc3_c10_update_te2(struct exynos_panel *ctx)
 		return;
 	}
 
+	ctx->te2.option = (option == S6E3HC3_TE2_FIXED) ? TE2_OPT_FIXED : TE2_OPT_CHANGEABLE;
+
 	dev_dbg(ctx->dev,
 		"TE2 updated: option %s, idle %s, width 0xb9 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
 		(option == S6E3HC3_TE2_CHANGEABLE) ? "changeable" : "fixed",

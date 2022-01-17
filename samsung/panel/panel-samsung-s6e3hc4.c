@@ -233,6 +233,8 @@ static void s6e3hc4_update_te2_internal(struct exynos_panel *ctx, bool lock)
 	if (option == S6E3HC4_TE2_CHANGEABLE &&	test_bit(FEAT_OP_NS, spanel->feat))
 		falling = S6E3HC4_TE2_FALLING_EDGE_OFFSET_NS;
 
+	ctx->te2.option = (option == S6E3HC4_TE2_FIXED) ? TE2_OPT_FIXED : TE2_OPT_CHANGEABLE;
+
 	dev_dbg(ctx->dev,
 		"TE2 updated: option %s, idle %s, rising=0x%X falling=0x%X\n",
 		(option == S6E3HC4_TE2_CHANGEABLE) ? "changeable" : "fixed",

@@ -375,6 +375,8 @@ static void nt37290_update_te2(struct exynos_panel *ctx)
 		return;
 	}
 
+	ctx->te2.option = (option == NT37290_TE2_FIXED) ? TE2_OPT_FIXED : TE2_OPT_CHANGEABLE;
+
 	/* option */
 	EXYNOS_DCS_BUF_ADD(ctx, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x03);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, option);

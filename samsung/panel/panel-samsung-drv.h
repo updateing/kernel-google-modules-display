@@ -32,7 +32,9 @@
 #define MAX_REGULATORS		3
 #define MAX_HDR_FORMATS		4
 #define MAX_BL_RANGES		10
+
 #define MAX_TE2_TYPE		10
+#define FIXED_TE2_VREFRESH	120
 
 #define HDR_DOLBY_VISION	BIT(1)
 #define HDR_HDR10		BIT(2)
@@ -110,6 +112,16 @@ enum exynos_panel_idle_mode {
 	IDLE_MODE_UNSUPPORTED,
 	IDLE_MODE_ON_INACTIVITY,
 	IDLE_MODE_ON_SELF_REFRESH,
+};
+
+/**
+ * enum exynos_panel_te2_opt - option of TE2 frequency
+ * @TE2_OPT_CHANGEABLE: TE2 frequency follows display refresh rate
+ * @TE2_OPT_FIXED: TE2 frequency is fixed at 120Hz. Only supported on specific panels
+ */
+enum exynos_panel_te2_opt {
+	TE2_OPT_CHANGEABLE,
+	TE2_OPT_FIXED,
 };
 
 struct exynos_panel;
@@ -465,6 +477,7 @@ struct te2_mode_data {
 
 struct te2_data {
 	struct te2_mode_data mode_data[MAX_TE2_TYPE];
+	enum exynos_panel_te2_opt option;
 };
 
 struct exynos_panel {
@@ -633,6 +646,11 @@ static inline void exynos_bin2hex(const void *buf, size_t len,
 static inline void backlight_state_changed(struct backlight_device *bl)
 {
 	sysfs_notify(&bl->dev.kobj, NULL, "state");
+}
+
+static inline void te2_state_changed(struct backlight_device *bl)
+{
+	sysfs_notify(&bl->dev.kobj, NULL, "te2_state");
 }
 
 #define EXYNOS_DSI_CMD_REV(cmd, delay, rev) { sizeof(cmd), cmd, delay, (u32)rev }
