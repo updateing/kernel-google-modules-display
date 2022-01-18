@@ -47,6 +47,8 @@ static const u8 test_key_off_f0[] = { 0xF0, 0xA5, 0xA5 };
 static const u8 test_key_on_f1[] = { 0xF1, 0x5A, 0x5A };
 static const u8 test_key_off_f1[] = { 0xF1, 0xA5, 0xA5 };
 static const u8 freq_update[] = { 0xF7, 0x0F };
+static const u8 new_gamma_ip_bypass[] = { 0x91, 0x01 };
+static const u8 new_gamma_ip_enable[] = { 0x91, 0x02 };
 
 static const struct exynos_dsi_cmd s6e3fc3_p10_off_cmds[] = {
 	EXYNOS_DSI_CMD(display_off, 0),
@@ -56,6 +58,9 @@ static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_off);
 
 static const struct exynos_dsi_cmd s6e3fc3_p10_lp_cmds[] = {
 	EXYNOS_DSI_CMD(display_off, 0),
+	EXYNOS_DSI_CMD0_REV(test_key_on_f0, PANEL_REV_GE(PANEL_REV_EVT1)),
+	EXYNOS_DSI_CMD0_REV(new_gamma_ip_bypass, PANEL_REV_GE(PANEL_REV_EVT1)),
+	EXYNOS_DSI_CMD0_REV(test_key_off_f0, PANEL_REV_GE(PANEL_REV_EVT1)),
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_lp);
 
@@ -507,7 +512,13 @@ static void s6e3fc3_p10_set_nolp_mode(struct exynos_panel *ctx,
 		return;
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
+	if (ctx->panel_rev >= PANEL_REV_EVT1) {
+		EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
+		EXYNOS_DCS_WRITE_TABLE(ctx, new_gamma_ip_enable);
+	}
 	s6e3fc3_p10_update_wrctrld(ctx);
+	if (ctx->panel_rev >= PANEL_REV_EVT1)
+		EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
 	s6e3fc3_p10_change_frequency(ctx, vrefresh);
 	usleep_range(delay_us, delay_us + 10);
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
