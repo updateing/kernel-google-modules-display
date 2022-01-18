@@ -762,9 +762,19 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 		if (new_exynos_crtc_state->seamless_mode_changed)
 			decon_seamless_mode_set(exynos_crtc, old_crtc_state);
 
-		/* during skip update, send vblank event on next vsync instead of frame start */
-		if (!new_crtc_state->no_vblank)
+		/*
+		 * during skip update, send vblank event on next vsync instead of frame start
+		 * when it comes to video mode, vblank event is handled at fs_irq_handler.
+		 * If fb handover is enabled, vblank event should be handled once because
+		 * fs irq could be started after decon start by calling decon_reg_start().
+		 */
+		if (!new_crtc_state->no_vblank) {
 			exynos_crtc_handle_event(exynos_crtc);
+			if (decon->fb_handover.rmem) {
+				decon_force_vblank_event(decon);
+				drm_crtc_handle_vblank(&decon->crtc->base);
+			}
+		}
 
 		return;
 	}
