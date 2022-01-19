@@ -752,8 +752,8 @@ static const struct exynos_panel_mode s6e3fc3_p10_lp_mode = {
 		.vtotal = 2400 + 12 + 4 + 26, // add vbp
 		.flags = 0,
 		.type = DRM_MODE_TYPE_DRIVER,
-		.width_mm = 67,
-		.height_mm = 148,
+		.width_mm = 66,
+		.height_mm = 146,
 	},
 	.exynos_mode = {
 		.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
