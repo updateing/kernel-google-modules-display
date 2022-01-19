@@ -863,7 +863,7 @@ static int exynos_update_status(struct backlight_device *bl)
 		brightness);
 
 	mutex_lock(&ctx->mode_lock);
-	if (ctx->panel.backlight) {
+	if (ctx->panel.backlight && !ctx->bl_ctrl_dcs) {
 		backlight_device_set_brightness(ctx->panel.backlight,
 			brightness);
 	} else if (ctx->desc->exynos_panel_func) {
@@ -3394,6 +3394,7 @@ static int exynos_panel_of_backlight(struct exynos_panel *ctx)
 		put_device(&bd->dev);
 		return ret;
 	}
+	ctx->bl_ctrl_dcs = of_property_read_bool(dev->of_node, "bl-ctrl-dcs");
 	dev_info(ctx->dev, "succeed to register devtree backlight phandle\n");
 	return 0;
 }

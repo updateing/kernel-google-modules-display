@@ -523,6 +523,8 @@ struct exynos_panel {
 	bool dimming_on;
 	/* request_dimming_on from drm commit */
 	bool request_dimming_on;
+	/* indicates the LCD backlight is controlled by DCS */
+	bool bl_ctrl_dcs;
 	struct backlight_device *bl;
 	struct mutex mode_lock;
 	struct mutex bl_state_lock;
