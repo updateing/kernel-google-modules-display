@@ -25,7 +25,7 @@ EXTRA_CFLAGS += -DDYNAMIC_DEBUG_MODULE=1
 
 EXTRA_CFLAGS += -Werror
 
-include $(KERNEL_SRC)/../gs/kernel/device-modules/Makefile.include
+include $(KERNEL_SRC)/../gs/google-modules/soc-modules/Makefile.include
 
 modules modules_install headers_install clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) W=1 \
