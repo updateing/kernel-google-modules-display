@@ -538,6 +538,7 @@ static void exynos_panel_handoff(struct exynos_panel *ctx)
 static int exynos_panel_parse_dt(struct exynos_panel *ctx)
 {
 	int ret = 0;
+	u32 orientation = DRM_MODE_PANEL_ORIENTATION_NORMAL;
 
 	if (IS_ERR_OR_NULL(ctx->dev->of_node)) {
 		dev_err(ctx->dev, "no device tree information of exynos panel\n");
@@ -553,6 +554,13 @@ static int exynos_panel_parse_dt(struct exynos_panel *ctx)
 		goto err;
 
 	ctx->touch_dev = of_parse_phandle(ctx->dev->of_node, "touch", 0);
+
+	of_property_read_u32(ctx->dev->of_node, "orientation", &orientation);
+	if (orientation > DRM_MODE_PANEL_ORIENTATION_RIGHT_UP) {
+		dev_warn(ctx->dev, "invalid display orientation %d\n", orientation);
+		orientation = DRM_MODE_PANEL_ORIENTATION_NORMAL;
+	}
+	ctx->orientation = orientation;
 
 err:
 	return ret;
@@ -2828,6 +2836,8 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 		dev_err(ctx->dev, "failed to attach connector properties\n");
 		return ret;
 	}
+	if (drm_connector_set_panel_orientation(connector, ctx->orientation))
+		dev_warn(ctx->dev, "failed to set panel orientation %u\n", ctx->orientation);
 
 	drm_connector_helper_add(connector, &exynos_connector_helper_funcs);
 

@@ -535,6 +535,7 @@ struct exynos_panel {
 	char panel_id[PANEL_ID_MAX];
 	char panel_extinfo[PANEL_EXTINFO_MAX];
 	u32 panel_rev;
+	enum drm_panel_orientation orientation;
 
 	struct device_node *touch_dev;
 
