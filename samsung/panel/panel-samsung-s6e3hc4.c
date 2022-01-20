@@ -98,6 +98,8 @@ static const unsigned char PPS_SETTING[] = {
 
 static const u8 unlock_cmd_f0[] = { 0xF0, 0x5A, 0x5A };
 static const u8 lock_cmd_f0[]   = { 0xF0, 0xA5, 0xA5 };
+static const u8 unlock_cmd_fc[] = { 0xFC, 0x5A, 0x5A };
+static const u8 lock_cmd_fc[]   = { 0xFC, 0xA5, 0xA5 };
 static const u8 display_off[] = { 0x28 };
 static const u8 display_on[] = { 0x29 };
 static const u8 sleep_in[] = { 0x10 };
@@ -105,11 +107,12 @@ static const u8 freq_update[] = { 0xF7, 0x0F };
 
 static const struct exynos_dsi_cmd s6e3hc4_off_cmds[] = {
 	EXYNOS_DSI_CMD(display_off, 20),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xFC, 0x5A, 0x5A),
+	/* SP back failure workaround on EVT */
+	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
 	EXYNOS_DSI_CMD(sleep_in, 100),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x0D, 0xFE),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xFE, 0x02),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xFC, 0xA5, 0xA5),
+	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_off);
 
@@ -363,7 +366,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x01, 0x83, 0x03, 0x03);
 	} else {
 		if (test_bit(FEAT_HBM, spanel->feat))
-			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x80, 0x03, 0x03, 0x01);
+			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x80, 0x83, 0x03, 0x01);
 		else
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x81, 0x83, 0x03, 0x03);
 	}
@@ -377,15 +380,21 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD(ctx, 0xBD, val);
 	if (test_bit(FEAT_HBM, spanel->feat)) {
 		if (test_bit(FEAT_OP_NS, spanel->feat)) {
-			/* suppose that frequency = 60 */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x4E, 0xBD);
-			EXYNOS_DCS_BUF_ADD(ctx,
-				0xBD, 0x00, 0x00, 0x00, 0x04, 0x00, 0x08, 0x00, 0x14);
+			if (vrefresh == 60)
+				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00, 0x00, 0x04,
+					0x00, 0x08, 0x00, 0x14);
+			else
+				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00, 0x00, 0x02,
+					0x00, 0x04, 0x00, 0x0A);
 		} else {
-			/* suppose that frequency = 120 */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x1E, 0xBD);
-			EXYNOS_DCS_BUF_ADD(ctx,
-				0xBD, 0x00, 0x00, 0x00, 0x02, 0x00, 0x06, 0x00, 0x16);
+			if (vrefresh == 120)
+				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00, 0x00, 0x02,
+					0x00, 0x06, 0x00, 0x16);
+			else
+				EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00, 0x00, 0x01,
+					0x00, 0x03, 0x00, 0x0B);
 		}
 	}
 
@@ -400,24 +409,40 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00);
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x12, 0xBD);
 		if (test_bit(FEAT_OP_NS, spanel->feat)) {
-			if (idle_vrefresh == 10)
+			if (idle_vrefresh == 10) {
 				EXYNOS_DCS_BUF_ADD(ctx,
 					0xBD, 0x00, 0x00, 0x12, 0x00, 0x02, 0x01);
-			/* idle_vrefresh == 30 */
-			else
-				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBD, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00);
+			} else {
+				if (test_bit(FEAT_HBM, spanel->feat))
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x02, 0x00, 0x00, 0x00);
+				else
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x03, 0x00, 0x00, 0x00);
+			}
 		} else {
-			if (idle_vrefresh == 10)
-				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBD, 0x00, 0x00, 0x16, 0x00, 0x06, 0x01);
-			else if (idle_vrefresh == 30)
-				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBD, 0x00, 0x00, 0x06, 0x00, 0x02, 0x01);
-			/* idle_vrefresh == 60 */
-			else
-				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBD, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00);
+			if (idle_vrefresh == 10) {
+				if (test_bit(FEAT_HBM, spanel->feat))
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x0B, 0x00, 0x03, 0x01);
+				else
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x16, 0x00, 0x06, 0x01);
+			} else if (idle_vrefresh == 30) {
+				if (test_bit(FEAT_HBM, spanel->feat))
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x03, 0x00, 0x02, 0x01);
+				else
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x06, 0x00, 0x02, 0x01);
+			} else {
+				if (test_bit(FEAT_HBM, spanel->feat))
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x01, 0x00, 0x00, 0x00);
+				else
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
+						0x02, 0x00, 0x00, 0x00);
+			}
 		}
 		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23);
 	} else {
@@ -636,26 +661,33 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x9D, 0x01),			/* PPS_DSC_EN */
 
 	EXYNOS_DSI_CMD_SEQ_DELAY_REV(PANEL_REV_GE(PANEL_REV_DVT1), 120, 0x11),
+	/* SP backup failure workaround on EVT */
 	EXYNOS_DSI_CMD_SEQ_DELAY_REV(PANEL_REV_LT(PANEL_REV_DVT1), 130, 0x11),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xFC, 0x5A, 0x5A),
+	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x0D, 0xFE),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xFE, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xFC, 0xA5, 0xA5),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x01, 0x37, 0x90),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0x90, 0x00),
+	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
 
 	EXYNOS_DSI_CMD_SEQ(0x35),			/* TE on */
 
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
 
+	/* Enable SP */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x58, 0x69),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0x69, 0x01),
 	/* FFC: 165 Mhz, 1% tolerance */
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x36, 0xC5),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xC5, 0x11, 0x10, 0x50, 0x05, 0x4E, 0x74),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x36, 0xC5),
+	EXYNOS_DSI_CMD_SEQ(0xC5, 0x11, 0x10, 0x50, 0x05, 0x4E, 0x74),
 
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x3C, 0xB9),	/* SEQ_GLOBAL_TSP_SYNC */
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x19, 0x09),		/* SEQ_TSP_SYNC_ON */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x40, 0xB9),	/* SEQ_GLOBAL_TSP_SYNC_SETTING */
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x30, 0x03),		/* SEQ_TSP_SYNC_SETTING*/
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),	/* SEQ_GLOBAL_TSP_SYNC_ON */
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC8, 0xC0),		/* SEQ_TSP_SYNC_ON */
+	/* TSP sync auto mode settings*/
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x3C, 0xB9),
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x19, 0x09),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x40, 0xB9),
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x30, 0x03),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),
+	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC8, 0xC0),
 	EXYNOS_DSI_CMD0(freq_update),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 
