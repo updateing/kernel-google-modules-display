@@ -106,6 +106,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	switch (type) {
 	case DPU_EVT_DECON_FRAMESTART:
 		decon->d.auto_refresh_frames++;
+		fallthrough;
 	case DPU_EVT_DECON_FRAMEDONE:
 	case DPU_EVT_DPP_FRAMEDONE:
 	case DPU_EVT_DSIM_FRAMEDONE:
