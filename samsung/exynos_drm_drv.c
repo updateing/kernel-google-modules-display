@@ -1118,4 +1118,5 @@ MODULE_AUTHOR("Inki Dae <inki.dae@samsung.com>");
 MODULE_AUTHOR("Joonyoung Shim <jy0922.shim@samsung.com>");
 MODULE_AUTHOR("Seung-Woo Kim <sw0312.kim@samsung.com>");
 MODULE_DESCRIPTION("Samsung SoC DRM Driver");
+MODULE_IMPORT_NS(DMA_BUF);
 MODULE_LICENSE("GPL");
