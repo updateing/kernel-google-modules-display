@@ -566,6 +566,8 @@ static bool nt37290_change_frequency(struct exynos_panel *ctx,
 
 	if (updated) {
 		backlight_state_changed(ctx->bl);
+		te2_state_changed(ctx->bl);
+
 		dev_dbg(ctx->dev, "change to %dHz, idle %s, was_lp_mode %d\n",
 			vrefresh, idle_active ? "active" : "deactive", was_lp_mode);
 	}
