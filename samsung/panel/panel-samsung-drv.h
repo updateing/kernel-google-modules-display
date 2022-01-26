@@ -384,6 +384,20 @@ struct exynos_panel_funcs {
 	 * Returns 0 if successfully setting operation rate.
 	 */
 	int (*set_op_hz)(struct exynos_panel *exynos_panel, unsigned int hz);
+
+	/**
+	 * @set_osc2_clk_khz
+	 *
+	 * Set specific OSC2 clock for panel.
+	 */
+	void (*set_osc2_clk_khz)(struct exynos_panel *exynos_panel, unsigned int clk_khz);
+
+	/**
+	 * @list_osc2_clk_khz
+	 *
+	 * List supported OSC2 clock for panel.
+	 */
+	ssize_t (*list_osc2_clk_khz)(struct exynos_panel *exynos_panel, char *buf);
 };
 
 /**
@@ -517,6 +531,7 @@ struct exynos_panel {
 	 */
 	unsigned int panel_idle_vrefresh;
 	unsigned int op_hz;
+	unsigned int osc2_clk_khz;
 	/**
 	 * indicates the lower bound of refresh rate
 	 * 0 means there is no lower bound limitation

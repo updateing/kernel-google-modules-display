@@ -1311,6 +1311,64 @@ static ssize_t force_power_on_show(struct device *dev, struct device_attribute *
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->force_power_on);
 }
 
+static ssize_t osc2_clk_khz_store(struct device *dev, struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	unsigned int osc2_clk_khz;
+	int ret;
+
+	if (!is_panel_active(ctx))
+		return -EPERM;
+
+	if (!funcs && !funcs->set_osc2_clk_khz)
+		return -EOPNOTSUPP;
+
+	ret = kstrtou32(buf, 0, &osc2_clk_khz);
+	if (ret) {
+		dev_err(dev, "invalid osc2 clock value\n");
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	if (osc2_clk_khz != ctx->osc2_clk_khz)
+		funcs->set_osc2_clk_khz(ctx, osc2_clk_khz);
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
+static ssize_t osc2_clk_khz_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	if (!is_panel_active(ctx))
+		return -EPERM;
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", ctx->osc2_clk_khz);
+}
+
+static ssize_t available_osc2_clk_khz_show(struct device *dev, struct device_attribute *attr,
+					   char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	ssize_t len;
+
+	if (!funcs || !funcs->list_osc2_clk_khz)
+		return -EPERM;
+
+	len = funcs->list_osc2_clk_khz(ctx, buf);
+	if (len < 0)
+		dev_err(dev, "failed to list OSC2 clocks (%ld)\n", len);
+
+	return len;
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
@@ -1321,6 +1379,8 @@ static DEVICE_ATTR_RW(panel_idle);
 static DEVICE_ATTR_RW(min_vrefresh);
 static DEVICE_ATTR_RW(idle_delay_ms);
 static DEVICE_ATTR_RW(force_power_on);
+static DEVICE_ATTR_RW(osc2_clk_khz);
+static DEVICE_ATTR_RO(available_osc2_clk_khz);
 
 static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
@@ -1333,6 +1393,8 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_min_vrefresh.attr,
 	&dev_attr_idle_delay_ms.attr,
 	&dev_attr_force_power_on.attr,
+	&dev_attr_osc2_clk_khz.attr,
+	&dev_attr_available_osc2_clk_khz.attr,
 	NULL
 };
 
