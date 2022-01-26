@@ -447,7 +447,11 @@ static void exynos_atomic_bts_post_update(struct drm_device *dev,
 	}
 }
 
+#ifdef CONFIG_BOARD_EMULATOR
+#define TIMEOUT	msecs_to_jiffies(100000)
+#else
 #define TIMEOUT	msecs_to_jiffies(100)
+#endif
 
 /* wait at least one frame time on top of common timeout */
 static inline unsigned long fps_timeout(int fps)
