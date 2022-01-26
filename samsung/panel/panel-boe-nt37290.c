@@ -38,6 +38,20 @@ enum nt37290_panel_feature {
 };
 
 /**
+ * enum nt37290_dfc_mode - dynamic frame rate control mode
+ * @DFC_MODE_MANUAL: manual mode, running at based frame rate
+ * @DFC_MODE_PANEL_LP: low power mode, running at lower frame rates
+ *
+ * Select DDIC frame rate control mode. For 120Hz based, MANUAL will use 120Hz, and
+ * PANEL_LP will use 60/30/10Hz. For 30Hz based (AOD), MANUAL will use 30Hz, and
+ * PANEL_LP will use 10Hz.
+ */
+enum nt37290_dfc_mode {
+	DFC_MODE_MANUAL = 0,
+	DFC_MODE_PANEL_LP = 3,
+};
+
+/**
  * struct nt37290_panel - panel specific runtime info
  *
  * This struct maintains nt37290 panel specific runtime info, any fixed details about panel
@@ -66,9 +80,25 @@ struct nt37290_panel {
 	 *                we should avoid changing idle_mode when it's true
 	 */
 	bool delayed_idle;
+	/** @hw_osc2_clk_idx: current index of OSC2 clock table in panel */
+	int hw_osc2_clk_idx;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct nt37290_panel, base)
+
+/**
+ * struct nt37290_osc2_clk_data - OSC2 clock info in panel
+ *
+ * This struct includes the panel OSC2 clock (kHz) and its value (FCON[2:0]) of frame
+ * rate selection command (2Fh). Selecting appropriate clock dynamically in normal and
+ * AOD modes can reduce radio interferences.
+ */
+struct nt37290_osc2_clk_data {
+	/** @clk_khz: the clock in kHz */
+	unsigned int clk_khz;
+	/** @fcon_val: the value of FCON[2:0] in command 2Fh */
+	u8 fcon_val;
+};
 
 static const u8 display_off[] = { 0x28 };
 static const u8 display_on[] = { 0x29 };
@@ -78,8 +108,6 @@ static const u8 stream_2c[] = { 0x2C };
 static const struct exynos_dsi_cmd nt37290_lp_cmds[] = {
 	/* enter AOD */
 	EXYNOS_DSI_CMD_SEQ(0x39),
-	/* manual mode (no frame skip) */
-	EXYNOS_DSI_CMD_SEQ(0x2F, 0x00),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_lp);
 
@@ -438,6 +466,21 @@ static void nt37290_update_min_idle_vrefresh(struct exynos_panel *ctx,
 	spanel->auto_mode_vrefresh = idle_vrefresh;
 }
 
+static const struct nt37290_osc2_clk_data osc2_clk_data[] = {
+	{ .clk_khz = 170500, .fcon_val = 0 },
+	{ .clk_khz = 165400, .fcon_val = 1 },
+};
+
+static inline u8 nt37290_get_frame_rate_ctrl(struct exynos_panel *ctx,
+					     enum nt37290_dfc_mode mode)
+{
+	struct nt37290_panel *spanel = to_spanel(ctx);
+	u8 fcon = osc2_clk_data[spanel->hw_osc2_clk_idx].fcon_val;
+	u8 val = ((mode & 0x7) << 4) | (fcon & 0x7);
+
+	return val;
+}
+
 static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 				      const struct exynos_panel_mode *pmode, bool enforce)
 {
@@ -471,21 +514,22 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 	ee = test_bit(G10_FEAT_EARLY_EXIT, spanel->feat);
 	fi = test_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
 
-	dev_dbg(ctx->dev, "ee=%s fi=%s vrefresh=%d idle_vrefresh=%d\n",
-		ee ? "on" : "off", fi ? "auto" : "manual", vrefresh, idle_vrefresh);
+	dev_dbg(ctx->dev, "ee=%s fi=%s vrefresh=%d idle_vrefresh=%d osc2=%u\n",
+		ee ? "on" : "off", fi ? "auto" : "manual",
+		vrefresh, idle_vrefresh, ctx->osc2_clk_khz);
 
 	DPU_ATRACE_BEGIN(__func__);
 
 	if (vrefresh == 120 && !fi) {
-		/* freq_mode_hs */
-		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x00);
+		/* DFC mode manual */
+		EXYNOS_DCS_BUF_ADD(ctx, 0x2F,
+				   nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_MANUAL));
 		/* restore TE timing (no shift) */
 		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
 	} else {
-		/* freq_mode_hs */
-		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x00);
-		/* freq_ctrl_hs */
-		EXYNOS_DCS_BUF_ADD(ctx, 0x2F, 0x30);
+		/* DFC mode panel low power */
+		EXYNOS_DCS_BUF_ADD(ctx, 0x2F,
+				   nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_PANEL_LP));
 		/* early exit */
 		EXYNOS_DCS_BUF_ADD(ctx, 0x5A, !ee);
 
@@ -521,6 +565,12 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 		}
 
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2C);
+
+		if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
+			EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x03);
+			EXYNOS_DCS_BUF_ADD(ctx, 0xC0,
+					   (spanel->hw_osc2_clk_idx == 1) ? 0x21 : 0x20);
+		}
 
 		if (vrefresh == 120)
 			/* restore TE timing (no shift) */
@@ -559,7 +609,7 @@ static bool nt37290_change_frequency(struct exynos_panel *ctx,
 		clear_bit(G10_FEAT_FRAME_AUTO, spanel->feat);
 	}
 
-	/* need to send 2Fh command while exiting AOD */
+	/* need to update 2Fh command while exiting AOD */
 	updated = nt37290_update_panel_feat(ctx, pmode, was_lp_mode);
 
 	ctx->panel_idle_vrefresh = ctx->self_refresh_active ? spanel->hw_idle_vrefresh : 0;
@@ -669,6 +719,18 @@ static void nt37290_commit_done(struct exynos_panel *ctx)
 		nt37290_change_frequency(ctx, pmode);
 }
 
+static void nt37290_set_lp_mode(struct exynos_panel *ctx,
+				const struct exynos_panel_mode *pmode)
+{
+	exynos_panel_set_lp_mode(ctx, pmode);
+
+	/* DFC mode manual */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0x2F,
+			     nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_MANUAL));
+
+	dev_dbg(ctx->dev, "%s: done\n", __func__);
+}
+
 static void nt37290_set_nolp_mode(struct exynos_panel *ctx,
 				  const struct exynos_panel_mode *pmode)
 {
@@ -709,7 +771,7 @@ static int nt37290_enable(struct drm_panel *panel)
 	if (!pmode->exynos_mode.is_lp_mode)
 		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
 	else
-		exynos_panel_set_lp_mode(ctx, pmode);
+		nt37290_set_lp_mode(ctx, pmode);
 
 	return 0;
 }
@@ -835,6 +897,59 @@ static void nt37290_get_panel_rev(struct exynos_panel *ctx, u32 id)
 	u8 rev = ((build_code & 0xE0) >> 3) | (build_code & 0x03);
 
 	exynos_panel_get_panel_rev(ctx, rev);
+}
+
+static void nt37290_set_osc2_clk_khz(struct exynos_panel *ctx, unsigned int clk_khz)
+{
+	struct nt37290_panel *spanel = to_spanel(ctx);
+	const struct exynos_panel_mode *pmode = ctx->current_mode;
+	int num_clk = ARRAY_SIZE(osc2_clk_data);
+	int idx = 0;
+	int i;
+
+	/* only EVT1.1 and later versions are allowed to change OSC2 clock */
+	if (ctx->panel_rev < PANEL_REV_EVT1_1)
+		return;
+
+	if (!pmode)
+		return;
+
+	/* don't change OSC2 clock in AOD mode */
+	if (pmode->exynos_mode.is_lp_mode)
+		return;
+
+	for (i = 0; i < num_clk; i++) {
+		if (clk_khz == osc2_clk_data[i].clk_khz) {
+			idx = i;
+			break;
+		}
+	}
+
+	if (i == num_clk) {
+		dev_warn(ctx->dev, "Invalid OSC2 clock (%u)\n", clk_khz);
+		return;
+	}
+
+	if (idx != spanel->hw_osc2_clk_idx) {
+		spanel->hw_osc2_clk_idx = idx;
+		ctx->osc2_clk_khz = clk_khz;
+
+		/* trigger update since OSC2 clock is changed */
+		nt37290_update_panel_feat(ctx, pmode, true);
+		dev_dbg(ctx->dev, "OSC2 clock is changed to %u (idx %d)\n", clk_khz, idx);
+	}
+}
+
+static ssize_t nt37290_list_osc2_clk_khz(struct exynos_panel *ctx, char *buf)
+{
+	ssize_t len = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(osc2_clk_data); i++)
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%u\n",
+			osc2_clk_data[i].clk_khz);
+
+	return len;
 }
 
 static const struct exynos_display_underrun_param underrun_param = {
@@ -971,10 +1086,13 @@ static const struct exynos_panel_mode nt37290_lp_mode = {
 
 static void nt37290_panel_init(struct exynos_panel *ctx)
 {
+	struct nt37290_panel *spanel = to_spanel(ctx);
 	struct dentry *csroot = ctx->debugfs_cmdset_entry;
 
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &nt37290_init_cmd_set, "init");
 	exynos_panel_send_cmd_set(ctx, &nt37290_lhbm_on_setting_cmd_set);
+
+	ctx->osc2_clk_khz = osc2_clk_data[spanel->hw_osc2_clk_idx].clk_khz;
 }
 
 static int nt37290_panel_probe(struct mipi_dsi_device *dsi)
@@ -989,6 +1107,7 @@ static int nt37290_panel_probe(struct mipi_dsi_device *dsi)
 	spanel->hw_idle_vrefresh = 0;
 	spanel->auto_mode_vrefresh = 0;
 	spanel->delayed_idle = false;
+	spanel->hw_osc2_clk_idx = 0;
 
 	return exynos_panel_common_init(dsi, &spanel->base);
 }
@@ -1003,7 +1122,7 @@ static const struct drm_panel_funcs nt37290_drm_funcs = {
 
 static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.set_brightness = nt37290_set_brightness,
-	.set_lp_mode = exynos_panel_set_lp_mode,
+	.set_lp_mode = nt37290_set_lp_mode,
 	.set_nolp_mode = nt37290_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
 	.set_hbm_mode = nt37290_set_hbm_mode,
@@ -1017,6 +1136,8 @@ static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.update_te2 = nt37290_update_te2,
 	.set_self_refresh = nt37290_set_self_refresh,
 	.commit_done = nt37290_commit_done,
+	.set_osc2_clk_khz = nt37290_set_osc2_clk_khz,
+	.list_osc2_clk_khz = nt37290_list_osc2_clk_khz,
 };
 
 const struct brightness_capability nt37290_brightness_capability = {
