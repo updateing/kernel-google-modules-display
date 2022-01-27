@@ -675,6 +675,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->self_refresh_active = false;
 	ctx->panel_idle_vrefresh = 0;
 	ctx->current_binned_lp = NULL;
+	ctx->cabc_mode = CABC_OFF;
 
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func) {
@@ -1672,6 +1673,20 @@ static void exynos_panel_set_dimming(struct exynos_panel *ctx, bool dimming_on)
 	mutex_unlock(&ctx->mode_lock);
 }
 
+static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mode cabc_mode)
+{
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+	if (!funcs || !funcs->set_cabc_mode)
+		return;
+
+	mutex_lock(&ctx->mode_lock);
+	if (cabc_mode != ctx->cabc_mode)
+		funcs->set_cabc_mode(ctx, cabc_mode);
+
+	mutex_unlock(&ctx->mode_lock);
+}
+
 static void exynos_panel_pre_commit_properties(
 				struct exynos_panel *ctx,
 				const struct exynos_drm_connector_state *conn_state)
@@ -2506,6 +2521,59 @@ static ssize_t hbm_mode_show(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(hbm_mode);
+
+static ssize_t cabc_mode_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+	u32 cabc_mode;
+	int ret;
+
+	if (!is_panel_active(ctx)) {
+		dev_err(ctx->dev, "panel is not enabled\n");
+		return -EPERM;
+	}
+
+	ret = kstrtouint(buf, 0, &cabc_mode);
+	if (ret || (cabc_mode > CABC_MOVIE_MODE)) {
+		dev_err(ctx->dev, "invalid cabc_mode value");
+		return -EINVAL;
+	}
+
+	exynos_panel_set_cabc(ctx, cabc_mode);
+
+	return count;
+}
+
+static ssize_t cabc_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+	const char *mode;
+
+	switch (ctx->cabc_mode) {
+	case CABC_OFF:
+		mode = "OFF";
+		break;
+	case CABC_UI_MODE:
+		mode = "UI";
+		break;
+	case CABC_STILL_MODE:
+		mode = "STILL";
+		break;
+	case CABC_MOVIE_MODE:
+		mode = "MOVIE";
+		break;
+	default:
+		dev_err(ctx->dev, "unknown CABC mode : %d\n", ctx->cabc_mode);
+		return -EINVAL;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", mode);
+}
+
+static DEVICE_ATTR_RW(cabc_mode);
 
 static ssize_t dimming_on_store(struct device *dev,
 			       struct device_attribute *attr,
@@ -3661,6 +3729,11 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	if (ret)
 		dev_err(ctx->dev, "unable to create bl_device_groups groups\n");
 
+	if (exynos_panel_func && exynos_panel_func->set_cabc_mode) {
+		ret = sysfs_create_file(&ctx->bl->dev.kobj, &dev_attr_cabc_mode.attr);
+		if (ret)
+			dev_err(ctx->dev, "unable to create cabc_mode\n");
+	}
 	exynos_panel_handoff(ctx);
 
 	ret = mipi_dsi_attach(dsi);
@@ -3700,6 +3773,7 @@ int exynos_panel_remove(struct mipi_dsi_device *dsi)
 	drm_bridge_remove(&ctx->bridge);
 
 	sysfs_remove_groups(&ctx->bl->dev.kobj, bl_device_groups);
+	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_cabc_mode.attr);
 	devm_backlight_device_unregister(ctx->dev, ctx->bl);
 
 	return 0;

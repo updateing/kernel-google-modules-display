@@ -130,6 +130,13 @@ enum exynos_panel_te2_opt {
 	TE2_OPT_FIXED,
 };
 
+enum exynos_cabc_mode {
+	CABC_OFF = 0,
+	CABC_UI_MODE,
+	CABC_STILL_MODE,
+	CABC_MOVIE_MODE,
+};
+
 struct exynos_panel;
 
 struct exynos_panel_te2_timing {
@@ -217,6 +224,15 @@ struct exynos_panel_funcs {
 	 */
 	void (*set_dimming_on)(struct exynos_panel *exynos_panel,
 				 bool dimming_on);
+
+	/**
+	 * @set_cabc_mode:
+	 *
+	 * This callback is used to implement panel specific logic for cabc mode
+	 * enablement. If this is not defined, it means that panel does not
+	 * support cabc.
+	 */
+	void (*set_cabc_mode)(struct exynos_panel *exynos_panel, enum exynos_cabc_mode mode);
 
 	/**
 	 * @set_local_hbm_mode:
@@ -559,6 +575,7 @@ struct exynos_panel {
 	bool dimming_on;
 	/* indicates the LCD backlight is controlled by DCS */
 	bool bl_ctrl_dcs;
+	enum exynos_cabc_mode cabc_mode;
 	struct backlight_device *bl;
 	struct mutex mode_lock;
 	struct mutex bl_state_lock;
