@@ -417,6 +417,11 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 		config->v_ratio = mult_frac(1 << 20, config->src.h, config->dst.h);
 	}
 
+	if ((config->h_ratio != (1 << 20)) || (config->v_ratio != (1 << 20)))
+		config->is_scale = true;
+	else
+		config->is_scale = false;
+
 	config->is_block = false;
 	config->rcv_num = exynos_devfreq_get_domain_freq(DEVFREQ_DISP) ? : 0x7FFFFFFF;
 }
@@ -1165,6 +1170,19 @@ static int dpp_init_resources(struct dpp_device *dpp)
 		}
 		disable_irq(dpp->dpp_irq);
 	}
+
+	i = of_property_match_string(np, "reg-names", "scl_coef");
+	if (of_address_to_resource(np, i, &res)) {
+		dpp_err(dpp, "failed to get scl_coef resource\n");
+		return -EINVAL;
+	}
+	dpp->regs.scl_coef_base_regs = of_iomap(np, i);
+	if (!dpp->regs.scl_coef_base_regs) {
+		dpp_err(dpp, "failed to remap SCL COEF SFR region\n");
+		return -EINVAL;
+	}
+	dpp_regs_desc_init(dpp->regs.scl_coef_base_regs, res.start, "scl_coef", REGS_SCL_COEF,
+			dpp->id);
 
 	if (test_bit(DPP_ATTR_SRAMC, &dpp->attr)) {
 		i = of_property_match_string(np, "reg-names", "sramc");

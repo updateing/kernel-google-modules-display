@@ -830,6 +830,15 @@ static void dma_reg_set_base_addr(u32 id, struct dpp_params_info *p,
 			p->c_pl_stride);
 }
 
+static void dpp_reg_set_scl_pos(u32 id)
+{
+        /* Initialize setting of initial phase */
+        dpp_write_mask(id, DPP_COM_SCL_HPOSITION, DPP_SCL_HPOS(0),
+                        DPP_SCL_HPOS_MASK);
+        dpp_write_mask(id, DPP_COM_SCL_VPOSITION, DPP_SCL_VPOS(0),
+                        DPP_SCL_VPOS_MASK);
+}
+
 /********** IDMA, ODMA, DPP and WB MUX combination CAL functions **********/
 static void dma_dpp_reg_set_coordinates(u32 id, struct dpp_params_info *p,
 		const unsigned long attr)
@@ -844,8 +853,10 @@ static void dma_dpp_reg_set_coordinates(u32 id, struct dpp_params_info *p,
 				dpp_reg_set_img_size(id, p->src.w, p->src.h);
 		}
 
-		if (test_bit(DPP_ATTR_SCALE, &attr))
+		if (test_bit(DPP_ATTR_SCALE, &attr)) {
+			dpp_reg_set_scl_pos(id);
 			dpp_reg_set_scaled_img_size(id, p->dst.w, p->dst.h);
+		}
 	} else if (test_bit(DPP_ATTR_ODMA, &attr)) {
 		odma_reg_set_coordinates(id, &p->src);
 		if (test_bit(DPP_ATTR_DPP, &attr))

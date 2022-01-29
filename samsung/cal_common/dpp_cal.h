@@ -86,6 +86,7 @@ enum dpp_sbwc_blk_size {
 struct dpp_regs {
 	void __iomem *dpp_base_regs;
 	void __iomem *dma_base_regs;
+	void __iomem *scl_coef_base_regs;
 	void __iomem *sramc_base_regs;
 	void __iomem *hdr_base_regs;
 };
