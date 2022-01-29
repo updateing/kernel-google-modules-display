@@ -682,8 +682,8 @@ static const struct exynos_panel_mode s6e3fc3_p10_modes[] = {
 			.vsync_end = 2400 + 12 + 4, // add vsa
 			.vtotal = 2400 + 12 + 4 + 26, // add vbp
 			.flags = 0,
-			.width_mm = 67,
-			.height_mm = 148,
+			.width_mm = 66,
+			.height_mm = 146,
 		},
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
@@ -715,8 +715,8 @@ static const struct exynos_panel_mode s6e3fc3_p10_modes[] = {
 			.vsync_end = 2400 + 12 + 4, // add vsa
 			.vtotal = 2400 + 12 + 4 + 26, // add vbp
 			.flags = 0,
-			.width_mm = 67,
-			.height_mm = 148,
+			.width_mm = 66,
+			.height_mm = 146,
 		},
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
