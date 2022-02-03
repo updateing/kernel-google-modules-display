@@ -1546,9 +1546,11 @@ static int dsim_init_resources(struct dsim_device *dsim)
 	if (ret)
 		goto err;
 
-	ret = dsim_get_phys(dsim);
-	if (ret)
-		goto err;
+	if (!IS_ENABLED(CONFIG_BOARD_EMULATOR)) {
+		ret = dsim_get_phys(dsim);
+		if (ret)
+			goto err;
+	}
 
 err:
 	return ret;
@@ -2352,9 +2354,11 @@ static int dsim_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	ret = dsim_get_pinctrl(dsim);
-	if (ret)
-		goto err;
+	if (!IS_ENABLED(CONFIG_BOARD_EMULATOR)) {
+		ret = dsim_get_pinctrl(dsim);
+		if (ret)
+			goto err;
+	}
 
 	ret = device_create_file(dsim->dev, &dev_attr_bist_mode);
 	if (ret < 0)
@@ -2506,7 +2510,9 @@ struct platform_driver dsim_driver = {
 	},
 };
 
+#ifndef CONFIG_BOARD_EMULATOR
 MODULE_SOFTDEP("pre: phy-exynos-mipi");
+#endif
 MODULE_AUTHOR("Donghwa Lee <dh09.lee@samsung.com>");
 MODULE_DESCRIPTION("Samsung SoC MIPI DSI Master");
 MODULE_LICENSE("GPL v2");
