@@ -845,6 +845,9 @@ void decon_mode_bts_pre_update(struct decon_device *decon,
 	decon->bts.ops->calc_bw(decon);
 	decon->bts.ops->update_bw(decon, false);
 }
+#else
+void decon_mode_bts_pre_update(struct decon_device *decon,
+				const struct drm_crtc_state *crtc_state) { }
 #endif
 
 static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
