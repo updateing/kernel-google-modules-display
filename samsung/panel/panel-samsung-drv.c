@@ -1766,20 +1766,6 @@ static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 	return 0;
 }
 
-static int exynos_drm_connector_check_state(struct exynos_panel *ctx,
-					   struct drm_connector_state *connector_state)
-{
-	struct exynos_drm_connector_state *exynos_connector_state =
-		to_exynos_connector_state(connector_state);
-
-	if (exynos_connector_state->global_hbm_mode && exynos_connector_state->local_hbm_on) {
-		dev_err(ctx->dev, "invalid state - both LHBM and GHBM on");
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 /*
  * this atomic check is called before adjusted mode is populated, this can be used to check only
  * connector state (without adjusted mode), or to decide if modeset may be required
@@ -1804,10 +1790,7 @@ static int exynos_drm_connector_atomic_check(struct drm_connector *connector,
 	if (ctx->touch_dev)
 		exynos_drm_connector_attach_touch(ctx, conn_state);
 
-	if (!new_conn_state->crtc)
-		return 0; /* nothing to do if disabled */
-
-	return exynos_drm_connector_check_state(ctx, new_conn_state);
+	return 0;
 }
 
 static const struct drm_connector_helper_funcs exynos_connector_helper_funcs = {
