@@ -3003,11 +3003,9 @@ static void exynos_panel_bridge_post_disable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 
-	/* no need for full power off if state is not in full off mode */
-	if (ctx->panel_state != PANEL_STATE_OFF)
-		return;
-
-	drm_panel_unprepare(&ctx->panel);
+	/* fully power off only if panel is in full off mode */
+	if (ctx->panel_state == PANEL_STATE_OFF)
+		drm_panel_unprepare(&ctx->panel);
 
 	exynos_panel_set_backlight_state(ctx, ctx->panel_state);
 }
