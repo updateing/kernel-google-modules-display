@@ -738,6 +738,21 @@ static int nt37290_set_brightness(struct exynos_panel *ctx, u16 br)
 	return exynos_panel_set_brightness(ctx, br);
 }
 
+static void nt37290_set_hbm_mode(struct exynos_panel *ctx,
+				 enum exynos_hbm_mode mode)
+{
+	if (ctx->hbm_mode == mode)
+		return;
+
+	ctx->hbm_mode = mode;
+
+	EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
+	EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x11);
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB2, mode ? 0x00 : 0x01);
+
+	dev_info(ctx->dev, "%s: %s\n", __func__, ctx->hbm_mode ? "on" : "off");
+}
+
 static void nt37290_set_local_hbm_mode(struct exynos_panel *ctx,
 				       bool local_hbm_en)
 {
@@ -977,6 +992,7 @@ static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.set_lp_mode = exynos_panel_set_lp_mode,
 	.set_nolp_mode = nt37290_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
+	.set_hbm_mode = nt37290_set_hbm_mode,
 	.set_local_hbm_mode = nt37290_set_local_hbm_mode,
 	.is_mode_seamless = nt37290_is_mode_seamless,
 	.mode_set = nt37290_mode_set,
@@ -1006,7 +1022,7 @@ const struct brightness_capability nt37290_brightness_capability = {
 	},
 	.hbm = {
 		.nits = {
-			.min = 550,
+			.min = 500,
 			.max = 1000,
 		},
 		.level = {
