@@ -1554,13 +1554,14 @@ static void exynos_panel_commit_properties(
 	if (!conn_state->pending_update_flags)
 		return;
 
-
-	cancel_work_sync(&ctx->hbm.hbm_work);
-	mutex_lock(&ctx->hbm.hbm_work_lock);
-	update_flags = ctx->hbm.update_flags;
-	ctx->hbm.update_flags = 0;
-	mutex_unlock(&ctx->hbm.hbm_work_lock);
-
+	if (exynos_panel_func->set_hbm_mode ||
+		exynos_panel_func->set_local_hbm_mode) {
+		cancel_work_sync(&ctx->hbm.hbm_work);
+		mutex_lock(&ctx->hbm.hbm_work_lock);
+		update_flags = ctx->hbm.update_flags;
+		ctx->hbm.update_flags = 0;
+		mutex_unlock(&ctx->hbm.hbm_work_lock);
+	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_GHBM_UPDATE) &&
 		exynos_panel_func->set_hbm_mode &&
