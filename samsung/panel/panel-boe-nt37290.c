@@ -744,13 +744,23 @@ static void nt37290_set_hbm_mode(struct exynos_panel *ctx,
 	if (ctx->hbm_mode == mode)
 		return;
 
+	if (IS_HBM_ON(ctx->hbm_mode) != IS_HBM_ON(mode)) {
+		EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x11);
+		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB2, mode ? 0x00 : 0x01);
+	}
+
+	if (IS_HBM_ON_IRC_OFF(ctx->hbm_mode) != IS_HBM_ON_IRC_OFF(mode)) {
+		EXYNOS_DCS_BUF_ADD(ctx, 0xFF, 0xAA, 0x55, 0xA5, 0x84);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x02);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xF5, 0x01);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08);
+		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB9, IS_HBM_ON_IRC_OFF(mode) ? 0x00 : 0x01);
+	}
+
 	ctx->hbm_mode = mode;
-
-	EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
-	EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x11);
-	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB2, mode ? 0x00 : 0x01);
-
-	dev_info(ctx->dev, "%s: %s\n", __func__, ctx->hbm_mode ? "on" : "off");
+	dev_info(ctx->dev, "hbm_on=%d hbm_ircoff=%d\n", IS_HBM_ON(ctx->hbm_mode),
+		 IS_HBM_ON_IRC_OFF(ctx->hbm_mode));
 }
 
 static void nt37290_set_local_hbm_mode(struct exynos_panel *ctx,
