@@ -78,6 +78,17 @@ static struct cal_regs_desc regs_dpp[REGS_DPP_TYPE_MAX][REGS_DPP_ID_MAX];
 #define coef_write(id, offset, val)             \
         cal_write(coef_regs_desc(id), offset, val)
 
+/* HDR_COMM_COEF */
+#define hdr_comm_regs_desc(id)                      (&regs_dpp[REGS_HDR_COMM][id])
+#define hdr_comm_read(id, offset)                   \
+	cal_read(hdr_comm_regs_desc(id), offset)
+#define hdr_comm_write(id, offset, val)             \
+	cal_write(hdr_comm_regs_desc(id), offset, val)
+#define hdr_comm_read_mask(id, offset, mask)        \
+	cal_read_mask(hdr_comm_regs_desc(id), offset, mask)
+#define hdr_comm_write_mask(id, offset, val, mask)  \
+	cal_write_mask(hdr_comm_regs_desc(id), offset, val, mask)
+
 void dpp_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 		enum dpp_regs_type type, unsigned int id)
 {
@@ -833,10 +844,29 @@ static void dma_reg_set_base_addr(u32 id, struct dpp_params_info *p,
 static void dpp_reg_set_scl_pos(u32 id)
 {
         /* Initialize setting of initial phase */
-        dpp_write_mask(id, DPP_COM_SCL_HPOSITION, DPP_SCL_HPOS(0),
-                        DPP_SCL_HPOS_MASK);
-        dpp_write_mask(id, DPP_COM_SCL_VPOSITION, DPP_SCL_VPOS(0),
-                        DPP_SCL_VPOS_MASK);
+	dpp_write_mask(id, DPP_COM_SCL_HPOSITION, DPP_SCL_HPOS(0),
+		       DPP_SCL_HPOS_MASK);
+	dpp_write_mask(id, DPP_COM_SCL_VPOSITION, DPP_SCL_VPOS(0),
+		       DPP_SCL_VPOS_MASK);
+}
+
+/****************** HDR COMMON CAL functions ******************/
+static void hdrc_reg_set_bpc_mode(u32 id, u32 bpc)
+{
+	hdr_comm_write_mask(id, LSI_COMM_IO_CON, COMM_BPC_MODE(bpc),
+			    COMM_BPC_MODE_MASK);
+}
+
+static void hdrc_reg_set_format(u32 id, u32 fmt)
+{
+	hdr_comm_write_mask(id, LSI_COMM_IO_CON, COMM_IMG_FORMAT(fmt),
+			    COMM_IMG_FORMAT_MASK);
+}
+
+static void hdrc_reg_set_img_size(u32 id, u32 w, u32 h)
+{
+	hdr_comm_write(id, LSI_COMM_SIZE,
+		       COMM_SFR_VSIZE(h) | COMM_SFR_HSIZE(w));
 }
 
 /********** IDMA, ODMA, DPP and WB MUX combination CAL functions **********/
@@ -857,6 +887,9 @@ static void dma_dpp_reg_set_coordinates(u32 id, struct dpp_params_info *p,
 			dpp_reg_set_scl_pos(id);
 			dpp_reg_set_scaled_img_size(id, p->dst.w, p->dst.h);
 		}
+
+		if (test_bit(DPP_ATTR_HDR_COMM, &attr))
+			hdrc_reg_set_img_size(id, p->dst.w, p->dst.h);
 	} else if (test_bit(DPP_ATTR_ODMA, &attr)) {
 		odma_reg_set_coordinates(id, &p->src);
 		if (test_bit(DPP_ATTR_DPP, &attr))
@@ -879,6 +912,11 @@ static int dma_dpp_reg_set_format(u32 id, struct dpp_params_info *p,
 			dpp_reg_set_bpc(id, p->in_bpc);
 			dpp_reg_set_alpha_type(id, alpha_type);
 			dpp_reg_set_format(id, fmt_info->dpp_fmt);
+		}
+
+		if (test_bit(DPP_ATTR_HDR_COMM, &attr)) {
+			hdrc_reg_set_bpc_mode(id, p->in_bpc);
+			hdrc_reg_set_format(id, fmt_info->dpp_fmt);
 		}
 	} else if (test_bit(DPP_ATTR_ODMA, &attr)) {
 		odma_reg_set_format(id, fmt_info->dma_fmt);

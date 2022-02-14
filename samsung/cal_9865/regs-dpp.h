@@ -889,4 +889,69 @@
 #define SRAMC_DST_TOP(_v)                       ((_v) << 0)
 #define SRAMC_DST_TOP_MASK                      (0x3FFF << 0)
 
+/*
+ *-------------------------------------------------------------------
+ * HDR_COMM(L0~L7) SFR list
+ * base address : 0x19D6_0000(DPUF0_HDR_COMM), 0x1AF6_0000(DPUF1_HDR_COMM)
+ * < Layer.offset >
+ *  L0      L1      L2      L3      L4      L5      L6      L7
+ *  0x0000  0x1000  0x2000  0x3000  0x4000  0x5000  0x6000  0x7000
+ *-------------------------------------------------------------------
+ */
+#define LSI_COMM_SHD_OFFSET			0x0800
+
+#define LSI_COMM_LC_CON				0x0000
+#define COMM_LC_CAPTURE_MASK			(1 << 2)
+#define COMM_LC_MODE(_v)			((_v) << 1)
+#define COMM_LC_MODE_MASK			(1 << 1)
+#define COMM_LC_EN(_v)				((_v) << 0)
+#define COMM_LC_EN_MASK				(1 << 0)
+
+#define LSI_COMM_DBG_CON			0x0004
+#define COMM_DBG_EN(_v)				((_v) << 0)
+#define COMM_DBG_EN_MASK			(1 << 0)
+
+#define LSI_COMM_IO_CON				0x000c
+#define COMM_BPC_MODE(_v)			((_v) << 6)
+#define COMM_BPC_MODE_MASK			(1 << 6)
+#define COMM_IMG_FORMAT(_v)			((_v) << 0)
+#define COMM_IMG_FORMAT_MASK			(0x7 << 0)
+#define COMM_IMG_FORMAT_ARGB8888		(0 << 0)
+#define COMM_IMG_FORMAT_ARGB8101010		(1 << 0)
+#define COMM_IMG_FORMAT_YUV420_8P		(2 << 0)
+#define COMM_IMG_FORMAT_YUV420_P010		(3 << 0)
+#define COMM_IMG_FORMAT_YUV422_8P		(5 << 0)
+#define COMM_IMG_FORMAT_YUV422_P210		(6 << 0)
+
+#define LSI_COMM_HDR_CON			0x0010
+#define COMM_MULT_EN(_v)			((_v) << 0)
+#define COMM_MULT_EN_MASK			(1 << 0)
+
+#define LSI_COMM_DITH_CON			0x0014
+#define COMM_DITH_EN(_v)			((_v) << 4)
+#define COMM_DITH_EN_MASK			(0x3 << 4)
+#define COMM_DITH_MASK_SEL(_v)			((_v) << 1)
+#define COMM_DITH_MASK_SEL_MASK			(0x7 << 1)
+#define COMM_DITH_MASK_SPIN(_v)			((_v) << 0)
+#define COMM_DITH_MASK_SPIN_MASK		(0x1 << 0)
+
+#define LSI_COMM_PSLVERR_CON			0x0018
+#define COMM_PSLVERR_EN				(1 << 0)
+
+#define LSI_COMM_SIZE				0x0020
+#define COMM_SFR_VSIZE(_v)			((_v) << 16)
+#define COMM_SFR_VSIZE_MASK			(0x1FFF << 16)
+#define COMM_SFR_HSIZE(_v)			((_v) << 0)
+#define COMM_SFR_HSIZE_MASK			(0x1FFF << 0)
+
+#define LSI_COMM_DITH_LINE_CNT			0x0054
+#define COMM_SFR_LINE_CNT			(0x1FFF << 0)
+#define COMM_SFR_LINE_CNT_GET(_v)		(((_v) >> 0) & 0x1FFF)
+
+#define LSI_COMM_DITH_DBG_DATA			0x0058
+
+#define LSI_COMM_MCD_BYPASS			0x005C
+#define COMM_MCD_BYPASS(_v)			((_v) << 0)
+#define COMM_MCD_BYPASS_MASK			(1 << 0)
+
 #endif

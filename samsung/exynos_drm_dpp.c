@@ -1216,6 +1216,20 @@ static int dpp_init_resources(struct dpp_device *dpp)
 		hdr_regs_desc_init(dpp->regs.hdr_base_regs, res.start, "hdr", dpp->id);
 	}
 
+	if (test_bit(DPP_ATTR_HDR_COMM, &dpp->attr)) {
+		i = of_property_match_string(np, "reg-names", "hdr_comm");
+		if (of_address_to_resource(np, i, &res)) {
+			dpp_err(dpp, "failed to get hdr comm resource\n");
+			return -EINVAL;
+		}
+		dpp->regs.hdr_comm_base_regs = of_iomap(np, i);
+		if (!dpp->regs.hdr_comm_base_regs) {
+			dpp_err(dpp, "failed to remap HDR COMM SFR region\n");
+			return -EINVAL;
+		}
+		dpp_regs_desc_init(dpp->regs.hdr_comm_base_regs, res.start, "hdr_comm",
+				   REGS_HDR_COMM, dpp->id);
+	}
 	ret = __dpp_init_resources(dpp);
 
 	return ret;
@@ -1280,6 +1294,8 @@ static int dpp_remove(struct platform_device *pdev)
 		iounmap(dpp->regs.dpp_base_regs);
 	if (test_bit(DPP_ATTR_SRAMC, &dpp->attr))
 		iounmap(dpp->regs.sramc_base_regs);
+	if (test_bit(DPP_ATTR_HDR_COMM, &dpp->attr))
+		iounmap(dpp->regs.hdr_comm_base_regs);
 	iounmap(dpp->regs.dma_base_regs);
 
 	return 0;
