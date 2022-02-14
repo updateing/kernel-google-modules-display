@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
+obj-$(CONFIG_DRM_PANEL_SAMSUNG_ANA6707)		+= panel-samsung-ana6707.o
 obj-$(CONFIG_DRM_PANEL_SAMSUNG_COMMON)		+= panel-samsung-drv.o
 obj-$(CONFIG_DRM_PANEL_SAMSUNG_EMUL)		+= panel-samsung-emul.o
 obj-$(CONFIG_DRM_PANEL_SAMSUNG_S6E3HC2)		+= panel-samsung-s6e3hc2.o
