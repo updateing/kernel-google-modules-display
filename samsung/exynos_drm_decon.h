@@ -457,6 +457,7 @@ struct decon_device {
 	struct kthread_work		buf_dump_work;
 	struct exynos_recovery		recovery;
 	struct exynos_dma		*cgc_dma;
+	struct exynos_fb_handover	fb_handover;
 
 	u32				irq_fs;	/* frame start irq number*/
 	u32				irq_fd;	/* frame done irq number*/

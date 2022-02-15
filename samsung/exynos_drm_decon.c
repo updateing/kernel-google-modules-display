@@ -2049,6 +2049,7 @@ static int decon_probe(struct platform_device *pdev)
 	decon->dqe = exynos_dqe_register(decon);
 
 	decon->cgc_dma = exynos_cgc_dma_register(decon);
+	exynos_rmem_register(decon);
 
 	ret = component_add(dev, &decon_component_ops);
 	if (ret)
