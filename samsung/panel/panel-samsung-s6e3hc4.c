@@ -103,8 +103,11 @@ static const unsigned char FHD_PPS_SETTING[DSC_PPS_SIZE] = {
 #define S6E3HC4_WRCTRLD_HBM_BIT        0xC0
 #define S6E3HC4_WRCTRLD_LOCAL_HBM_BIT  0x10
 
-#define S6E3HC4_TE2_CHANGEABLE 0x03
-#define S6E3HC4_TE2_FIXED      0x21
+#define S6E3HC4_TE2_CHANGEABLE 0x04
+#define S6E3HC4_TE2_FIXED      0x51
+#define S6E3HC4_TE2_RISING_EDGE_OFFSET 0x1B
+#define S6E3HC4_TE2_FALLING_EDGE_OFFSET 0x2E
+#define S6E3HC4_TE2_FALLING_EDGE_OFFSET_NS 0x25
 
 static const u8 unlock_cmd_f0[] = { 0xF0, 0x5A, 0x5A };
 static const u8 lock_cmd_f0[]   = { 0xF0, 0xA5, 0xA5 };
@@ -192,10 +195,14 @@ static u8 s6e3hc4_get_te2_option(struct exynos_panel *ctx)
 	return S6E3HC4_TE2_CHANGEABLE;
 }
 
-static void s6e3hc4_update_te2(struct exynos_panel *ctx)
+static void s6e3hc4_update_te2_internal(struct exynos_panel *ctx, bool lock)
 {
-	struct exynos_panel_te2_timing timing;
+	struct exynos_panel_te2_timing timing = {
+		.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
+		.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
+	};
 	u32 rising, falling;
+	struct s6e3hc4_panel *spanel = to_spanel(ctx);
 	u8 option = s6e3hc4_get_te2_option(ctx);
 	int ret;
 
@@ -203,34 +210,32 @@ static void s6e3hc4_update_te2(struct exynos_panel *ctx)
 		return;
 
 	ret = exynos_panel_get_current_mode_te2(ctx, &timing);
-	if (!ret) {
-		rising = timing.rising_edge;
-		falling = timing.falling_edge;
-		if (option == S6E3HC4_TE2_FIXED) {
-			/* fixed TE2 has 2H shift */
-			rising += 2;
-			falling += 2;
-		}
-	} else if (ret == -EAGAIN) {
-		dev_dbg(ctx->dev, "Panel is not ready, use default setting\n");
-	} else {
+	if (ret) {
+		dev_dbg(ctx->dev, "failed to get TE2 timng\n");
 		return;
 	}
+	rising = timing.rising_edge;
+	falling = timing.falling_edge;
+
+	if (option == S6E3HC4_TE2_CHANGEABLE &&	test_bit(FEAT_OP_NS, spanel->feat))
+		falling = S6E3HC4_TE2_FALLING_EDGE_OFFSET_NS;
 
 	dev_dbg(ctx->dev,
-		"TE2 updated: option %s, idle %s, rising=0x%x falling=0x%x\n",
+		"TE2 updated: option %s, idle %s, rising=0x%X falling=0x%X\n",
 		(option == S6E3HC4_TE2_CHANGEABLE) ? "changeable" : "fixed",
 		ctx->panel_idle_vrefresh ? "active" : "inactive",
 		rising, falling);
 
-	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	if (lock)
+		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x42, 0xF2);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xF2, 0x0D);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x01, 0xB9);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB9, option);
 	if (option == S6E3HC4_TE2_FIXED) {
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x2E, 0xB9);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x22, 0xB9);
 		EXYNOS_DCS_BUF_ADD(ctx, (rising >> 8) & 0xF, rising & 0xFF,
+			(falling >> 8) & 0xF, falling & 0xFF,
 			(rising >> 8) & 0xF, rising & 0xFF,
 			(falling >> 8) & 0xF, falling & 0xFF);
 	} else {
@@ -238,8 +243,13 @@ static void s6e3hc4_update_te2(struct exynos_panel *ctx)
 		EXYNOS_DCS_BUF_ADD(ctx, (rising >> 8) & 0xF, rising & 0xFF,
 			(falling >> 8) & 0xF, falling & 0xFF);
 	}
+	if (lock)
+		EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+}
 
-	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+static void s6e3hc4_update_te2(struct exynos_panel *ctx)
+{
+	s6e3hc4_update_te2_internal(ctx, true);
 }
 
 static inline bool is_auto_mode_allowed(struct exynos_panel *ctx)
@@ -324,19 +334,26 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 
 	/* TE setting */
-	if (test_bit(FEAT_EARLY_EXIT, changed_feat)) {
+	if (test_bit(FEAT_EARLY_EXIT, changed_feat) ||
+		test_bit(FEAT_OP_NS, changed_feat)) {
 		if (test_bit(FEAT_EARLY_EXIT, spanel->feat) && !spanel->force_changeable_te) {
 			/* Fixed TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x51);
 			/* TE width setting */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x08, 0xB9);
-			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x07, 0xBA, 0x07, 0xBC,
-				0x07, 0xBA, 0x07, 0xBC);
+			val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x5E : 0x42;
+			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x0C, val, 0x00, 0x1B,
+				0x0C, val, 0x00, 0x1B);
 		} else {
 			/* Changeable TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x00);
 		}
 	}
+
+	/* TE2 setting */
+	if (test_bit(FEAT_OP_NS, changed_feat) ||
+		test_bit(FEAT_EARLY_EXIT, changed_feat))
+		s6e3hc4_update_te2_internal(ctx, false);
 
 	/* IRC setting */
 	if (test_bit(FEAT_IRC_OFF, changed_feat)) {
@@ -990,8 +1007,8 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
-			.rising_edge = 16,
-			.falling_edge = 48,
+			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
 		},
 		.idle_mode = IDLE_MODE_UNSUPPORTED,
 	},
@@ -1025,8 +1042,8 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
-			.rising_edge = 16,
-			.falling_edge = 48,
+			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
 		},
 		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
@@ -1060,8 +1077,8 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
-			.rising_edge = 16,
-			.falling_edge = 48,
+			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
 		},
 		.idle_mode = IDLE_MODE_UNSUPPORTED,
 	},
@@ -1095,8 +1112,8 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
-			.rising_edge = 16,
-			.falling_edge = 48,
+			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
 		},
 		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
@@ -1132,7 +1149,11 @@ static const struct exynos_panel_mode s6e3hc4_lp_modes[] = {
 			},
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
-		}
+		},
+		.te2_timing = {
+			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
+		},
 	},
 	{
 		.mode = {
@@ -1163,7 +1184,11 @@ static const struct exynos_panel_mode s6e3hc4_lp_modes[] = {
 			},
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
-		}
+		},
+		.te2_timing = {
+			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
+		},
 	},
 };
 
