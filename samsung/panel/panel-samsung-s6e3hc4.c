@@ -176,9 +176,10 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_high_cmds[] = {
 
 static const struct exynos_binned_lp s6e3hc4_binned_lp[] = {
 	BINNED_LP_MODE("off", 0, s6e3hc4_lp_off_cmds),
-	/* rising time = 16, falling time = 48 */
-	BINNED_LP_MODE_TIMING("low", 80, s6e3hc4_lp_low_cmds, 16, 48),
-	BINNED_LP_MODE_TIMING("high", 2047, s6e3hc4_lp_high_cmds, 16, 48)
+	BINNED_LP_MODE_TIMING("low", 80, s6e3hc4_lp_low_cmds,
+			      S6E3HC4_TE2_RISING_EDGE_OFFSET, S6E3HC4_TE2_FALLING_EDGE_OFFSET),
+	BINNED_LP_MODE_TIMING("high", 2047, s6e3hc4_lp_high_cmds,
+			      S6E3HC4_TE2_RISING_EDGE_OFFSET, S6E3HC4_TE2_FALLING_EDGE_OFFSET)
 };
 
 static u8 s6e3hc4_get_te2_option(struct exynos_panel *ctx)
@@ -1150,10 +1151,6 @@ static const struct exynos_panel_mode s6e3hc4_lp_modes[] = {
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
 		},
-		.te2_timing = {
-			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
-			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
-		},
 	},
 	{
 		.mode = {
@@ -1184,10 +1181,6 @@ static const struct exynos_panel_mode s6e3hc4_lp_modes[] = {
 			},
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
-		},
-		.te2_timing = {
-			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
-			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
 		},
 	},
 };
