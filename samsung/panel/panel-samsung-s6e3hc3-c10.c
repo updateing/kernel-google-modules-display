@@ -518,6 +518,22 @@ static void s6e3hc3_c10_change_frequency(struct exynos_panel *ctx,
 	dev_dbg(ctx->dev, "change to %u hz\n", vrefresh);
 }
 
+static void s6e3hc3_c10_panel_idle_notification(struct exynos_panel *ctx,
+		u32 display_id, u32 vrefresh, u32 idle_te_vrefresh)
+{
+	char event_string[64];
+	char *envp[] = { event_string, NULL };
+	struct drm_device *dev = ctx->bridge.dev;
+
+	if (!dev) {
+		dev_warn(ctx->dev, "%s: drm_device is null\n", __func__);
+	} else {
+		snprintf(event_string, sizeof(event_string),
+			"PANEL_IDLE_ENTER=%u,%u,%u", display_id, vrefresh, idle_te_vrefresh);
+		kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+	}
+}
+
 static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
 {
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
@@ -555,6 +571,40 @@ static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
 
 	DPU_ATRACE_BEGIN(__func__);
 	s6e3hc3_c10_update_refresh_mode(ctx, pmode, idle_vrefresh);
+
+	if (idle_vrefresh) {
+		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+
+		s6e3hc3_c10_panel_idle_notification(ctx, 0, vrefresh, 120);
+	} else if (ctx->panel_need_handle_idle_exit) {
+		struct drm_crtc *crtc = NULL;
+
+		if (ctx->exynos_connector.base.state)
+			crtc = ctx->exynos_connector.base.state->crtc;
+
+		/*
+		 * after exit idle mode with fixed TE at non-120hz, TE may still keep at 120hz.
+		 * If any layer that already be assigned to DPU that can't be handled at 120hz,
+		 * panel_need_handle_idle_exit will be set then we need to wait one vblank to
+		 * avoid underrun issue.
+		 */
+		dev_dbg(ctx->dev, "wait one vblank after exit idle\n");
+		DPU_ATRACE_BEGIN("wait_one_vblank");
+		if (crtc) {
+			int ret = drm_crtc_vblank_get(crtc);
+
+			if (!ret) {
+				drm_crtc_wait_one_vblank(crtc);
+				drm_crtc_vblank_put(crtc);
+			} else {
+				usleep_range(8350, 8500);
+			}
+		} else {
+			usleep_range(8350, 8500);
+		}
+		DPU_ATRACE_END("wait_one_vblank");
+	}
+
 	DPU_ATRACE_END(__func__);
 
 	return true;
@@ -744,7 +794,7 @@ static int s6e3hc3_c10_disable(struct drm_panel *panel)
  * s6e3hc3_c10_update_idle_state - update panel auto frame insertion state
  * @ctx: panel struct
  *
- * - update timestamp of switching to 120 Hz mode in case its been a while since the
+ * - update timestamp of switching to manual mode in case its been a while since the
  *   last frame update and auto mode may have started to lower refresh rate.
  * - disable auto refresh mode if there is switching delay requirement
  * - trigger early exit by command if it's changeable TE, which could result in
@@ -756,8 +806,7 @@ static void s6e3hc3_c10_update_idle_state(struct exynos_panel *ctx)
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 
 	ctx->panel_idle_vrefresh = 0;
-	if (drm_mode_vrefresh(&ctx->current_mode->mode) != 120 ||
-		!test_bit(C10_FEAT_FRAME_AUTO, spanel->feat))
+	if (!test_bit(C10_FEAT_FRAME_AUTO, spanel->feat))
 		return;
 
 	delta_us = ktime_us_delta(ktime_get(), ctx->last_commit_ts);
@@ -984,7 +1033,7 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 			.rising_edge = 16,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_UNSUPPORTED,
+		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
 		/* 1440x3120 @ 120Hz */
@@ -1054,7 +1103,7 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 			.rising_edge = 16,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_UNSUPPORTED,
+		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
 		/* 1080x2340 @ 120Hz */
