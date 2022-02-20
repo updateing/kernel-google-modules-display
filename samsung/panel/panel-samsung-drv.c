@@ -1228,6 +1228,36 @@ static ssize_t panel_idle_show(struct device *dev, struct device_attribute *attr
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->panel_idle_enabled);
 }
 
+static ssize_t panel_need_handle_idle_exit_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	bool idle_handle_exit;
+	int ret;
+
+	ret = kstrtobool(buf, &idle_handle_exit);
+	if (ret) {
+		dev_err(dev, "invalid panel idle handle exit value\n");
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	ctx->panel_need_handle_idle_exit = idle_handle_exit;
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
+static ssize_t panel_need_handle_idle_exit_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->panel_need_handle_idle_exit);
+}
+
 static ssize_t min_vrefresh_store(struct device *dev, struct device_attribute *attr,
 				const char *buf, size_t count)
 {
@@ -1387,6 +1417,7 @@ static DEVICE_ATTR_WO(gamma);
 static DEVICE_ATTR_RW(te2_timing);
 static DEVICE_ATTR_RW(te2_lp_timing);
 static DEVICE_ATTR_RW(panel_idle);
+static DEVICE_ATTR_RW(panel_need_handle_idle_exit);
 static DEVICE_ATTR_RW(min_vrefresh);
 static DEVICE_ATTR_RW(idle_delay_ms);
 static DEVICE_ATTR_RW(force_power_on);
@@ -1401,6 +1432,7 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_te2_timing.attr,
 	&dev_attr_te2_lp_timing.attr,
 	&dev_attr_panel_idle.attr,
+	&dev_attr_panel_need_handle_idle_exit.attr,
 	&dev_attr_min_vrefresh.attr,
 	&dev_attr_idle_delay_ms.attr,
 	&dev_attr_force_power_on.attr,

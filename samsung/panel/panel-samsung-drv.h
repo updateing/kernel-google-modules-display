@@ -522,6 +522,8 @@ struct exynos_panel {
 
 	/* indicates whether panel idle feature is enabled */
 	bool panel_idle_enabled;
+	/* indicates need to do specific handle when exiting idle on self refresh */
+	bool panel_need_handle_idle_exit;
 	/* indicates self refresh is active */
 	bool self_refresh_active;
 	/**
