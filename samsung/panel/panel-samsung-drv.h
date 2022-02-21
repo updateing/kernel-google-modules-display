@@ -643,6 +643,12 @@ static inline void exynos_bin2hex(const void *buf, size_t len,
 	*end = '\0';
 }
 
+static inline ssize_t exynos_get_te2_type_len(struct exynos_panel *ctx, bool lp_mode)
+{
+	return (lp_mode ? (ctx->desc->lp_mode_count ? : 1) * (ctx->desc->num_binned_lp - 1) :
+		ctx->desc->num_modes);
+}
+
 static inline void backlight_state_changed(struct backlight_device *bl)
 {
 	sysfs_notify(&bl->dev.kobj, NULL, "state");
@@ -775,7 +781,7 @@ static inline void te2_state_changed(struct backlight_device *bl)
 
 #define for_each_te2_timing(ctx, lp_mode, data, i)					\
 	for (data = ctx->te2.mode_data + (!(lp_mode) ? 0 : (ctx)->desc->num_modes),	\
-	i = !(lp_mode) ? (ctx)->desc->num_modes : (ctx)->desc->num_binned_lp - 1;	\
+	i = exynos_get_te2_type_len((ctx), (lp_mode));					\
 	i > 0;										\
 	i--, data++)									\
 

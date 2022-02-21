@@ -998,8 +998,7 @@ static ssize_t set_te2_timing(struct exynos_panel *ctx, size_t count,
 	if (!buf_dup)
 		return -ENOMEM;
 
-	type_len = lp_mode ? (ctx->desc->num_binned_lp - 1) :
-			     ctx->desc->num_modes;
+	type_len = exynos_get_te2_type_len(ctx, lp_mode);
 	data_len = parse_u32_buf(buf_dup, count + 1, timing, type_len * 2);
 	if (data_len != type_len * 2) {
 		dev_warn(ctx->dev,
@@ -3329,8 +3328,10 @@ static void exynos_panel_te2_init(struct exynos_panel *ctx)
 {
 	struct te2_mode_data *data;
 	const struct exynos_binned_lp *binned_lp;
-	int i;
+	int i, j;
 	int lp_idx = ctx->desc->num_modes;
+	int lp_mode_count = ctx->desc->lp_mode_count ? : 1;
+	int mode_count = ctx->desc->num_modes + lp_mode_count * (ctx->desc->num_binned_lp - 1);
 
 	for (i = 0; i < ctx->desc->num_modes; i++) {
 		const struct exynos_panel_mode *pmode = &ctx->desc->modes[i];
@@ -3341,18 +3342,31 @@ static void exynos_panel_te2_init(struct exynos_panel *ctx)
 		data->timing.falling_edge = pmode->te2_timing.falling_edge;
 	}
 
-	for_each_exynos_binned_lp(i, binned_lp, ctx) {
-		/* ignore the first binned entry (off) */
-		if (i == 0)
-			continue;
+	for (i = 0; i < lp_mode_count; i++) {
+		int lp_mode_offset = lp_idx + i * (ctx->desc->num_binned_lp - 1);
 
-		data = &ctx->te2.mode_data[i - 1 + lp_idx];
-		data->mode = &ctx->desc->lp_mode->mode;
-		data->binned_lp = binned_lp;
-		data->timing.rising_edge =
-				binned_lp->te2_timing.rising_edge;
-		data->timing.falling_edge =
-				binned_lp->te2_timing.falling_edge;
+		for_each_exynos_binned_lp(j, binned_lp, ctx) {
+			int idx;
+
+			/* ignore the first binned entry (off) */
+			if (j == 0)
+				continue;
+
+			idx = lp_mode_offset + j - 1;
+			if (idx >= mode_count) {
+				dev_warn(ctx->dev,
+					 "idx %d exceeds mode size %d\n", idx, mode_count);
+				return;
+			}
+
+			data = &ctx->te2.mode_data[idx];
+			data->mode = &ctx->desc->lp_mode[i].mode;
+			data->binned_lp = binned_lp;
+			data->timing.rising_edge =
+					binned_lp->te2_timing.rising_edge;
+			data->timing.falling_edge =
+					binned_lp->te2_timing.falling_edge;
+		}
 	}
 
 	ctx->te2.option = TE2_OPT_CHANGEABLE;
