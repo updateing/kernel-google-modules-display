@@ -724,9 +724,13 @@ static void nt37290_set_lp_mode(struct exynos_panel *ctx,
 {
 	exynos_panel_set_lp_mode(ctx, pmode);
 
-	/* DFC mode manual */
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0x2F,
-			     nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_MANUAL));
+	/* enable early exit and auto frame insertion (10Hz) */
+	EXYNOS_DCS_BUF_ADD(ctx, 0x2F,
+			   nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_PANEL_LP));
+	EXYNOS_DCS_BUF_ADD(ctx, 0x5A, 0x00);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
+	EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x1C);
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xBA, 0x95, 0x02, 0x02, 0x00, 0x11, 0x02, 0x02, 0x00);
 
 	dev_dbg(ctx->dev, "%s: done\n", __func__);
 }
