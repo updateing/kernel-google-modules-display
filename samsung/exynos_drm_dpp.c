@@ -434,7 +434,16 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 		config->v_ratio = mult_frac(1 << 20, config->src.h, config->dst.h);
 	}
 
-	config->is_block = false;
+	if (state->block) {
+		struct decon_win_rect *block = (struct decon_win_rect *)state->block->data;
+		config->block.x = block->x;
+		config->block.y = block->y;
+		config->block.w = block->w;
+		config->block.h = block->h;
+		config->is_block = config->block.w > 0 && config->block.h > 0;
+	} else {
+		config->is_block = false;
+	}
 	config->rcv_num = exynos_devfreq_get_domain_freq(DEVFREQ_DISP) ? : 0x7FFFFFFF;
 }
 

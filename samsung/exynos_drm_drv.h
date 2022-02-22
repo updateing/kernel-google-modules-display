@@ -120,6 +120,7 @@ struct exynos_drm_plane_state {
 	struct drm_property_blob *oetf_lut;
 	struct drm_property_blob *gm;
 	struct drm_property_blob *tm;
+	struct drm_property_blob *block;
 };
 
 static inline struct exynos_drm_plane_state *
@@ -155,6 +156,7 @@ struct exynos_drm_plane {
 		struct drm_property *gm;
 		struct drm_property *tm;
 		struct drm_property *colormap;
+		struct drm_property *block;
 	} props;
 };
 
