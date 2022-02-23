@@ -327,6 +327,9 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 		}
 	}
 
+	memcpy(&log->data.atomic.rcd_config, &decon->bts.rcd_config,
+		sizeof(struct dpu_bts_win_config));
+
 	log->type = DPU_EVT_ATOMIC_COMMIT;
 }
 
@@ -429,6 +432,22 @@ static void dpu_print_log_atomic(struct dpu_log_atomic *atomic,
 			len += scnprintf(buf + len, sizeof(buf) - len, "CH%d ",
 					win->dpp_ch);
 
+		str_comp = get_comp_src_name(win->comp_src);
+		drm_printf(p, "%s %s %s\n", buf, fmt ? fmt->name : "Unknown", str_comp);
+	}
+
+	win = &atomic->rcd_config;
+	if (win->state == DPU_WIN_STATE_BUFFER) {
+		fmt = dpu_find_fmt_info(win->format);
+
+		len = scnprintf(buf, sizeof(buf),
+				"\t\t\t\t\t RCD: SRC[%d %d %d %d] ",
+				win->src_x, win->src_y, win->src_w, win->src_h);
+		len += scnprintf(buf + len, sizeof(buf) - len,
+				"DST[%d %d %d %d] ",
+				win->dst_x, win->dst_y, win->dst_w, win->dst_h);
+		len += scnprintf(buf + len, sizeof(buf) - len, "CH%d ",
+				win->dpp_ch);
 		str_comp = get_comp_src_name(win->comp_src);
 		drm_printf(p, "%s %s %s\n", buf, fmt ? fmt->name : "Unknown", str_comp);
 	}

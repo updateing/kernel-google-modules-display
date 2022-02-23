@@ -114,6 +114,7 @@ struct bts_dpp_info {
 struct bts_decon_info {
 	struct bts_dpp_info rdma[MAX_WIN_PER_DECON];
 	struct bts_dpp_info odma;
+	struct bts_dpp_info rcddma;
 	u32 vclk; /* Khz */
 	u32 lcd_w;
 	u32 lcd_h;
@@ -168,6 +169,7 @@ struct dpu_bts {
 
 	struct dpu_bts_win_config win_config[MAX_WIN_PER_DECON];
 	struct dpu_bts_win_config wb_config;
+	struct dpu_bts_win_config rcd_config;
 	atomic_t delayed_update;
 };
 
@@ -299,6 +301,7 @@ struct decon_win_config {
 
 struct dpu_log_atomic {
 	struct decon_win_config win_config[MAX_WIN_PER_DECON];
+	struct dpu_bts_win_config rcd_config;
 };
 
 /* Event log structure for DPU power domain status */

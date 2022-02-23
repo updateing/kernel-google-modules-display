@@ -1013,6 +1013,8 @@ static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
 		decon_reg_set_win_enable(decon->id, i, 0);
 	}
 
+	decon->bts.rcd_config.state = DPU_WIN_STATE_DISABLED;
+
 	for (i = 0; i < decon->dpp_cnt; ++i) {
 		struct dpp_device *dpp = decon->dpp[i];
 

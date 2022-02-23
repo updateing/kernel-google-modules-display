@@ -339,9 +339,14 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 	for_each_oldnew_plane_in_state(old_state, plane, old_plane_state,
 				       new_plane_state, i) {
 		dpp = plane_to_dpp(to_exynos_plane(plane));
-		if (test_bit(DPP_ATTR_RCD, &dpp->attr))
+		if (test_bit(DPP_ATTR_RCD, &dpp->attr)) {
+			if (new_plane_state->crtc) {
+				decon = crtc_to_decon(new_plane_state->crtc);
+				win_config = &decon->bts.rcd_config;
+				plane_state_to_win_config(win_config, new_plane_state);
+			}
 			continue;
-
+		}
 		if (new_plane_state->crtc) {
 			const int zpos = new_plane_state->normalized_zpos;
 
@@ -400,6 +405,11 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 
 			for (j = num_planes; j < MAX_WIN_PER_DECON; j++) {
 				win_config = &decon->bts.win_config[j];
+				win_config->state = DPU_WIN_STATE_DISABLED;
+			}
+
+			if (exynos_crtc->rcd_plane_mask == 0) {
+				win_config = &decon->bts.rcd_config;
 				win_config->state = DPU_WIN_STATE_DISABLED;
 			}
 		}
