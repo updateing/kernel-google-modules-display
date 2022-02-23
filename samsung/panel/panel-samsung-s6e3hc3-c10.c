@@ -489,6 +489,7 @@ static void s6e3hc3_c10_update_refresh_mode(struct exynos_panel *ctx,
 	/* when mode is explicitly set (manual) panel idle effect would be disabled */
 	ctx->panel_idle_vrefresh = 0;
 	s6e3hc3_c10_update_panel_feat(ctx, pmode, false);
+	te2_state_changed(ctx->bl);
 }
 
 static void s6e3hc3_c10_change_frequency(struct exynos_panel *ctx,
@@ -575,6 +576,7 @@ static bool s6e3hc3_c10_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	s6e3hc3_c10_update_panel_feat(ctx, pmode, false);
 
 	backlight_state_changed(ctx->bl);
+	te2_state_changed(ctx->bl);
 	DPU_ATRACE_END(__func__);
 
 	return true;
