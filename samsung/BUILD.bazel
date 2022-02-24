@@ -30,7 +30,6 @@ kernel_module(
     ],
     outs = [
         "exynos-drm.ko",
-        "panel/panel-samsung-ana6707.o",
         "panel/panel-samsung-drv.ko",
         "panel/panel-samsung-emul.ko",
         "panel/panel-samsung-s6e3fc3.ko",
