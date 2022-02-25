@@ -257,6 +257,26 @@ static int exynos_drm_connector_create_luminance_properties(struct drm_device *d
 	return 0;
 }
 
+static int exynos_drm_connector_create_orientation_property(struct drm_device *dev)
+{
+	struct exynos_drm_connector_properties *p = dev_get_exynos_connector_properties(dev);
+	static const struct drm_prop_enum_list drm_panel_orientation_enum_list[] = {
+		{ DRM_MODE_PANEL_ORIENTATION_NORMAL,	"Normal"	},
+		{ DRM_MODE_PANEL_ORIENTATION_BOTTOM_UP,	"Upside Down"	},
+		{ DRM_MODE_PANEL_ORIENTATION_LEFT_UP,	"Left Side Up"	},
+		{ DRM_MODE_PANEL_ORIENTATION_RIGHT_UP,	"Right Side Up"	},
+	};
+
+	p->panel_orientation = drm_property_create_enum(dev, DRM_MODE_PROP_IMMUTABLE,
+						"panel orientation",
+						drm_panel_orientation_enum_list,
+						ARRAY_SIZE(drm_panel_orientation_enum_list));
+	if (!p->panel_orientation)
+		return -ENOMEM;
+
+	return 0;
+}
+
 int exynos_drm_connector_create_properties(struct drm_device *dev)
 {
 	struct exynos_drm_connector_properties *p = dev_get_exynos_connector_properties(dev);
@@ -281,6 +301,10 @@ int exynos_drm_connector_create_properties(struct drm_device *dev)
 		return ret;
 
 	ret = exynos_drm_connector_create_brightness_properties(dev);
+	if (ret)
+		return ret;
+
+	ret = exynos_drm_connector_create_orientation_property(dev);
 	if (ret)
 		return ret;
 

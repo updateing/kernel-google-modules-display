@@ -2875,7 +2875,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->mipi_sync, 0);
 	drm_object_attach_property(obj, p->is_partial, desc->is_partial);
 	drm_object_attach_property(obj, p->panel_idle_support, desc->is_panel_idle_supported);
-
+	drm_object_attach_property(obj, p->panel_orientation, ctx->orientation);
 
 	if (desc->brt_capability) {
 		ret = exynos_panel_attach_brightness_capability(&ctx->exynos_connector,
@@ -2927,8 +2927,6 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 		dev_err(ctx->dev, "failed to attach connector properties\n");
 		return ret;
 	}
-	if (drm_connector_set_panel_orientation(connector, ctx->orientation))
-		dev_warn(ctx->dev, "failed to set panel orientation %u\n", ctx->orientation);
 
 	drm_connector_helper_add(connector, &exynos_connector_helper_funcs);
 

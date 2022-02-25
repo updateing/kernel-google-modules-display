@@ -59,6 +59,7 @@ struct exynos_drm_connector_properties {
 	struct drm_property *is_partial;
 	struct drm_property *panel_idle_support;
 	struct drm_property *mipi_sync;
+	struct drm_property *panel_orientation;
 };
 
 struct exynos_display_dsc {
