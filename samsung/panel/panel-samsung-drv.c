@@ -3042,6 +3042,9 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 	u64 left, right;
 	bool vblank_taken = false;
 
+	if (WARN_ON(!current_mode))
+		return;
+
 	DPU_ATRACE_BEGIN("mipi_time_window");
 	te_period_us = USEC_PER_SEC / drm_mode_vrefresh(&current_mode->mode);
 	pr_debug("%s: check mode_set timing enter. te %d\n", __func__, te_period_us);
@@ -3229,7 +3232,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 			}
 		} else if (funcs->mode_set) {
 			if ((MIPI_CMD_SYNC_REFRESH_RATE & exynos_connector_state->mipi_sync) &&
-					is_active)
+					is_active && old_mode)
 				exynos_panel_check_mipi_sync_timing(crtc, old_mode, ctx);
 			funcs->mode_set(ctx, pmode);
 			state_changed = is_active;
@@ -3251,7 +3254,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 		ctx->current_mode = pmode;
 	}
 
-	if (drm_mode_vrefresh(&pmode->mode) != drm_mode_vrefresh(&old_mode->mode)) {
+	if (old_mode && drm_mode_vrefresh(&pmode->mode) != drm_mode_vrefresh(&old_mode->mode)) {
 		ctx->last_rr_switch_ts = ktime_get();
 		ctx->last_rr = drm_mode_vrefresh(&old_mode->mode);
 	}
