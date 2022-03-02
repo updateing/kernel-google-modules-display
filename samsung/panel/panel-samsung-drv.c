@@ -407,6 +407,16 @@ void exynos_panel_reset(struct exynos_panel *ctx)
 }
 EXPORT_SYMBOL(exynos_panel_reset);
 
+static void _exynos_panel_set_vddd_voltage(struct exynos_panel *ctx, bool is_lp)
+{
+	u32 uv = is_lp ? ctx->vddd_lp_uV : ctx->vddd_normal_uV;
+
+	if (!uv || !ctx->vddd)
+		return;
+	if (regulator_set_voltage(ctx->vddd, uv, uv))
+		dev_err(ctx->dev, "failed to set vddd at %u uV\n", uv);
+}
+
 static int _exynos_panel_set_power(struct exynos_panel *ctx, bool on)
 {
 	int ret;
@@ -534,6 +544,7 @@ EXPORT_SYMBOL(exynos_panel_set_power);
 static void exynos_panel_handoff(struct exynos_panel *ctx)
 {
 	ctx->enabled = gpiod_get_raw_value(ctx->reset_gpio) > 0;
+	_exynos_panel_set_vddd_voltage(ctx, false);
 	if (ctx->enabled) {
 		dev_info(ctx->dev, "panel enabled at boot\n");
 		ctx->panel_state = PANEL_STATE_HANDOFF;
@@ -3308,12 +3319,9 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				funcs->set_lp_mode(ctx, pmode);
 				need_update_backlight = true;
 			}
-			if (ctx->vddd && ctx->vddd_lp_uV)
-				regulator_set_voltage(ctx->vddd, ctx->vddd_lp_uV, ctx->vddd_lp_uV);
+			_exynos_panel_set_vddd_voltage(ctx, true);
 		} else if (was_lp_mode && !is_lp_mode && funcs->set_nolp_mode) {
-			if (ctx->vddd && ctx->vddd_normal_uV)
-				regulator_set_voltage(ctx->vddd, ctx->vddd_normal_uV,
-						      ctx->vddd_normal_uV);
+			_exynos_panel_set_vddd_voltage(ctx, false);
 			if (is_active) {
 				funcs->set_nolp_mode(ctx, pmode);
 				need_update_backlight = true;
