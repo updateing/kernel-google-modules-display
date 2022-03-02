@@ -197,7 +197,10 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 			10 : 8;
 	}
 
-	if (old_exynos_state->in_bpc != new_exynos_state->in_bpc)
+        /* do this only if we have plane to update, this is to avoid skip_update
+         * always be ignored on the first commit(from continuous splash)
+         */
+	if (crtc_state->plane_mask && (old_exynos_state->in_bpc != new_exynos_state->in_bpc))
 		crtc_state->color_mgmt_changed = true;
 
 	/*
