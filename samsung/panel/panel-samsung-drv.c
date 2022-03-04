@@ -1627,7 +1627,7 @@ static void exynos_panel_pre_commit_properties(
 	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_GHBM_UPDATE) &&
-		exynos_panel_func->set_hbm_mode &&
+		exynos_panel_func && exynos_panel_func->set_hbm_mode &&
 		(ctx->hbm_mode != conn_state->global_hbm_mode)) {
 		DPU_ATRACE_BEGIN("set_hbm");
 		mutex_lock(&ctx->mode_lock);
@@ -1647,7 +1647,7 @@ static void exynos_panel_pre_commit_properties(
 	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_LHBM_UPDATE) &&
-		exynos_panel_func->set_local_hbm_mode &&
+		exynos_panel_func && exynos_panel_func->set_local_hbm_mode &&
 		(ctx->hbm.local_hbm.enabled != conn_state->local_hbm_on)) {
 		DPU_ATRACE_BEGIN("set_lhbm");
 		dev_info(ctx->dev, "%s: set LHBM to %d\n", __func__,
@@ -1659,7 +1659,7 @@ static void exynos_panel_pre_commit_properties(
 	}
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_DIMMING_UPDATE) &&
-		exynos_panel_func->set_dimming_on &&
+		exynos_panel_func && exynos_panel_func->set_dimming_on &&
 		(ctx->dimming_on != conn_state->dimming_on)) {
 		DPU_ATRACE_BEGIN("set_dimming");
 		exynos_panel_set_dimming(ctx, conn_state->dimming_on);
