@@ -1301,6 +1301,12 @@ static int dpu_sysmmu_fault_handler(struct iommu_fault *fault, void *data)
 	return 0;
 }
 
+static ssize_t early_wakeup_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
 static ssize_t early_wakeup_store(struct device *dev,
 			struct device_attribute *attr, const char *buf, size_t len)
 {
@@ -1323,7 +1329,7 @@ static ssize_t early_wakeup_store(struct device *dev,
 
 	return len;
 }
-static DEVICE_ATTR_WO(early_wakeup);
+static DEVICE_ATTR_RW(early_wakeup);
 
 static int decon_bind(struct device *dev, struct device *master, void *data)
 {
