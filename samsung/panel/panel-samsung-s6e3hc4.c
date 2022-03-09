@@ -671,6 +671,31 @@ static void s6e3hc4_write_display_mode(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
 }
 
+#define MAX_BR_HBM_EVT1 3949
+static int s6e3hc4_set_brightness(struct exynos_panel *ctx, u16 br)
+{
+	u16 brightness;
+
+	if (ctx->current_mode->exynos_mode.is_lp_mode) {
+		const struct exynos_panel_funcs *funcs;
+
+		funcs = ctx->desc->exynos_panel_func;
+		if (funcs && funcs->set_binned_lp)
+			funcs->set_binned_lp(ctx, br);
+		return 0;
+	}
+
+	if (ctx->panel_rev <= PANEL_REV_EVT1 && br >= MAX_BR_HBM_EVT1) {
+		br = MAX_BR_HBM_EVT1;
+		dev_dbg(ctx->dev, "%s: capped to dbv(%d) for EVT1 and before\n",
+			__func__, MAX_BR_HBM_EVT1);
+	}
+
+	brightness = (br & 0xff) << 8 | br >> 8;
+
+	return exynos_dcs_set_brightness(ctx, brightness);
+}
+
 static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 				  const struct exynos_panel_mode *pmode)
 {
@@ -1259,7 +1284,7 @@ static const struct drm_panel_funcs s6e3hc4_drm_funcs = {
 };
 
 static const struct exynos_panel_funcs s6e3hc4_exynos_funcs = {
-	.set_brightness = exynos_panel_set_brightness,
+	.set_brightness = s6e3hc4_set_brightness,
 	.set_lp_mode = exynos_panel_set_lp_mode,
 	.set_nolp_mode = s6e3hc4_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
@@ -1283,7 +1308,7 @@ const struct brightness_capability s6e3hc4_brightness_capability = {
 	.normal = {
 		.nits = {
 			.min = 2,
-			.max = 500,
+			.max = 600,
 		},
 		.level = {
 			.min = 4,
@@ -1291,20 +1316,20 @@ const struct brightness_capability s6e3hc4_brightness_capability = {
 		},
 		.percentage = {
 			.min = 0,
-			.max = 50,
+			.max = 60,
 		},
 	},
 	.hbm = {
 		.nits = {
-			.min = 550,
+			.min = 600,
 			.max = 1000,
 		},
 		.level = {
-			.min = 2238,
-			.max = 3949,
+			.min = 2252,
+			.max = 4095,
 		},
 		.percentage = {
-			.min = 50,
+			.min = 60,
 			.max = 100,
 		},
 	},

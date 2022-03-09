@@ -70,6 +70,8 @@ struct nt37290_panel {
 	int hw_vrefresh;
 	/** @hw_idle_vrefresh: idle vrefresh rate effective in panel */
 	int hw_idle_vrefresh;
+	/** @hw_dbv: hw brightness value sent to panel */
+	u16 hw_dbv;
 	/**
 	 * @auto_mode_vrefresh: indicates current minimum refresh rate while in auto mode,
 	 *                      if 0 it means that auto mode is not enabled
@@ -137,7 +139,7 @@ static const struct exynos_binned_lp nt37290_binned_lp[] = {
 	BINNED_LP_MODE("off", 0, nt37290_lp_off_cmds),
 	/* rising = 0, falling = 48 */
 	BINNED_LP_MODE_TIMING("low", 80, nt37290_lp_low_cmds, 0, 48),
-	BINNED_LP_MODE_TIMING("high", 2047, nt37290_lp_high_cmds, 0, 48),
+	BINNED_LP_MODE_TIMING("high", 3584, nt37290_lp_high_cmds, 0, 48),
 };
 
 static const struct exynos_dsi_cmd nt37290_off_cmds[] = {
@@ -803,10 +805,178 @@ static int nt37290_disable(struct drm_panel *panel)
 	return exynos_panel_disable(panel);
 }
 
+/**
+ * struct brightness_data - nits and DBV in each brightness band
+ *
+ * @nits: brightness in nits.
+ * @level: brightness in DBV.
+ */
+struct brightness_data {
+	u16 nits;
+	u16 level;
+};
+
+/**
+ * struct brightness_settings - brightness data of all bands in hbm and normal mode.
+ *
+ * @hbm_band_data: pointer to brightness data in hbm bands.
+ * @num_of_hbm_bands: number of brightness bands in hbm.
+ * @normal_band_data: pointer to brightness data in normal bands.
+ * @num_of_normal_bands: number of brightness bands in normal mode.
+ */
+struct brightness_settings {
+	const struct brightness_data * const hbm_band_data;
+	const unsigned int num_of_hbm_bands;
+	const struct brightness_data * const normal_band_data;
+	const unsigned int num_of_normal_bands;
+};
+
+static const struct brightness_data evt1_1_hbm_band_data[] = {
+	{ .nits = 1000, .level = 4094 }, /* band 0 */
+	{ .nits = 600, .level = 3585 },  /* band 1 */
+};
+
+static const struct brightness_data evt1_1_normal_band_data[] = {
+	{ .nits = 600, .level = 3584 }, /* band 0 */
+	{ .nits = 300, .level = 3072 }, /* band 1 */
+	{ .nits = 200, .level = 2560 }, /* band 2 */
+	{ .nits = 120, .level = 2048 }, /* band 3 */
+	{ .nits = 80, .level = 1536 },  /* band 4 */
+	{ .nits = 50, .level = 1024 },  /* band 5 */
+	{ .nits = 25, .level = 512 },   /* band 6 */
+	{ .nits = 5, .level = 256 },    /* band 7 */
+	{ .nits = 2, .level = 3 },      /* band 8 */
+};
+
+static const struct brightness_settings evt1_1_br_settings = {
+	.hbm_band_data = evt1_1_hbm_band_data,
+	.num_of_hbm_bands = ARRAY_SIZE(evt1_1_hbm_band_data),
+	.normal_band_data = evt1_1_normal_band_data,
+	.num_of_normal_bands = ARRAY_SIZE(evt1_1_normal_band_data),
+};
+
+static const struct brightness_data evt1_hbm_band_data[] = {
+	{ .nits = 1000, .level = 4094 }, /* band 0 */
+	{ .nits = 500, .level = 2048 },  /* band 1 */
+};
+
+static const struct brightness_data evt1_normal_band_data[] = {
+	{ .nits = 500, .level = 2047 }, /* band 0 */
+	/* skip band 1 to 7 due to linear brightness in evt1 normal mode */
+	{ .nits = 2, .level = 3 },      /* band 8 */
+};
+
+static const struct brightness_settings evt1_br_settings = {
+	.hbm_band_data = evt1_hbm_band_data,
+	.num_of_hbm_bands = ARRAY_SIZE(evt1_hbm_band_data),
+	.normal_band_data = evt1_normal_band_data,
+	.num_of_normal_bands = ARRAY_SIZE(evt1_normal_band_data),
+};
+
+/**
+ * linear_interpolation - linear interpolation for given x
+ * @x1: x coordinate
+ * @x2: x coordinate, greater than x1
+ * @y1: y coordinate
+ * @y2: y coordinate, greater than y1
+ * @x: x coordinate, in the interval (x1, x2)
+ *
+ * Given x, do linear interpolation according to x1, x2, y1, and y2.
+ * Return a new value after calculation. Return negative if the inputs are invalid.
+ */
+
+static inline u16 linear_interpolation(x1, x2, y1, y2, x)
+{
+	if (x == x1)
+		return y1;
+	else if (x == x2)
+		return y2;
+	else
+		return (y1 + DIV_ROUND_CLOSEST((x - x1) * (y2 - y1), x2 - x1));
+}
+
+static u16 nt37290_convert_to_evt1_1_nonlinear_br(struct exynos_panel *ctx, u16 br)
+{
+	u16 i = 0, nits = 0, level = 0, band = 0;
+	u16 num_band = evt1_1_br_settings.num_of_normal_bands;
+
+	nits = linear_interpolation(evt1_1_br_settings.normal_band_data[num_band - 1].level,
+					 evt1_1_br_settings.normal_band_data[0].level,
+					 evt1_1_br_settings.normal_band_data[num_band - 1].nits,
+					 evt1_1_br_settings.normal_band_data[0].nits,
+					 br);
+	for (i = 1; i < num_band; i++) {
+		if (nits >= evt1_1_br_settings.normal_band_data[i].nits) {
+			band = i;
+			break;
+		}
+	}
+	level = linear_interpolation(evt1_1_br_settings.normal_band_data[band].nits,
+				     evt1_1_br_settings.normal_band_data[band - 1].nits,
+				     evt1_1_br_settings.normal_band_data[band].level,
+				     evt1_1_br_settings.normal_band_data[band - 1].level,
+				     nits);
+
+	dev_dbg(ctx->dev, "%s: nits %u, band %u, level %u->%u\n",
+		__func__, nits, band, br, level);
+
+	return level;
+}
+
+static u16 nt37290_convert_to_evt1_br(struct exynos_panel *ctx, u16 br)
+{
+	u16 x1, x2, y1, y2, num_band, level;
+
+	if (br <= evt1_1_br_settings.normal_band_data[0].level) {
+		num_band = evt1_1_br_settings.num_of_normal_bands;
+		x1 = evt1_1_br_settings.normal_band_data[num_band - 1].level;
+		x2 = evt1_1_br_settings.normal_band_data[0].level;
+		num_band = evt1_br_settings.num_of_normal_bands;
+		y1 = evt1_br_settings.normal_band_data[num_band - 1].level;
+		y2 = evt1_br_settings.normal_band_data[0].level;
+	} else {
+		num_band = evt1_1_br_settings.num_of_hbm_bands;
+		x1 = evt1_1_br_settings.hbm_band_data[num_band - 1].level;
+		x2 = evt1_1_br_settings.hbm_band_data[0].level;
+		num_band = evt1_br_settings.num_of_hbm_bands;
+		y1 = evt1_br_settings.hbm_band_data[num_band - 1].level;
+		y2 = evt1_br_settings.hbm_band_data[0].level;
+	}
+
+	level = linear_interpolation(x1, x2, y1, y2, br);
+	dev_dbg(ctx->dev, "%s: level %u->%u\n",	__func__, br, level);
+	return level;
+}
+
 static int nt37290_set_brightness(struct exynos_panel *ctx, u16 br)
 {
-	if ((ctx->panel_rev >= PANEL_REV_EVT1) && ctx->hbm.local_hbm.enabled) {
-		u16 level = br * 4;
+	u16 brightness;
+	struct nt37290_panel *spanel = to_spanel(ctx);
+
+	if (ctx->current_mode->exynos_mode.is_lp_mode) {
+		const struct exynos_panel_funcs *funcs;
+
+		funcs = ctx->desc->exynos_panel_func;
+		if (funcs && funcs->set_binned_lp)
+			funcs->set_binned_lp(ctx, br);
+		return 0;
+	}
+
+	spanel->hw_dbv = br;
+	if (spanel->hw_dbv == 0) {
+		// turn off panel and set brightness directly.
+		return exynos_dcs_set_brightness(ctx, 0);
+	}
+
+	if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
+		if (br <= evt1_1_br_settings.normal_band_data[0].level)
+			spanel->hw_dbv = nt37290_convert_to_evt1_1_nonlinear_br(ctx, br);
+	} else {
+		spanel->hw_dbv = nt37290_convert_to_evt1_br(ctx, br);
+	}
+
+	if (ctx->panel_rev >= PANEL_REV_EVT1 && ctx->hbm.local_hbm.enabled) {
+		u16 level = spanel->hw_dbv * 4;
 		u8 val1 = level >> 8;
 		u8 val2 = level & 0xff;
 
@@ -815,7 +985,10 @@ static int nt37290_set_brightness(struct exynos_panel *ctx, u16 br)
 		EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x4C);
 		EXYNOS_DCS_BUF_ADD(ctx, 0xDF, val1, val2, val1, val2, val1, val2);
 	}
-	return exynos_panel_set_brightness(ctx, br);
+
+	brightness = (spanel->hw_dbv & 0xff) << 8 | spanel->hw_dbv >> 8;
+
+	return exynos_dcs_set_brightness(ctx, brightness);
 }
 
 static void nt37290_set_hbm_mode(struct exynos_panel *ctx,
@@ -853,7 +1026,8 @@ static void nt37290_set_local_hbm_mode(struct exynos_panel *ctx,
 
 	if (local_hbm_en) {
 		if (ctx->panel_rev >= PANEL_REV_EVT1) {
-			u16 level = ctx->bl->props.brightness * 4;
+			struct nt37290_panel *spanel = to_spanel(ctx);
+			u16 level = spanel->hw_dbv * 4;
 			u8 val1 = level >> 8;
 			u8 val2 = level & 0xff;
 
@@ -980,7 +1154,7 @@ static const struct exynos_display_underrun_param underrun_param = {
 };
 
 static const u32 nt37290_bl_range[] = {
-	94, 180, 270, 360, 2047
+	94, 180, 270, 360, 3584
 };
 
 /* Truncate 8-bit signed value to 6-bit signed value */
@@ -1166,28 +1340,28 @@ const struct brightness_capability nt37290_brightness_capability = {
 	.normal = {
 		.nits = {
 			.min = 2,
-			.max = 500,
+			.max = 600,
 		},
 		.level = {
 			.min = 3,
-			.max = 2047,
+			.max = 3584,
 		},
 		.percentage = {
 			.min = 0,
-			.max = 50,
+			.max = 60,
 		},
 	},
 	.hbm = {
 		.nits = {
-			.min = 500,
+			.min = 600,
 			.max = 1000,
 		},
 		.level = {
-			.min = 2048,
+			.min = 3585,
 			.max = 4094,
 		},
 		.percentage = {
-			.min = 50,
+			.min = 60,
 			.max = 100,
 		},
 	},
