@@ -650,6 +650,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->dimming_on = false;
 	ctx->self_refresh_active = false;
 	ctx->panel_idle_vrefresh = 0;
+	ctx->current_binned_lp = NULL;
 
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func) {
@@ -3361,13 +3362,14 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				need_update_backlight = true;
 			}
 			_exynos_panel_set_vddd_voltage(ctx, true);
-		} else if (was_lp_mode && !is_lp_mode && funcs->set_nolp_mode) {
+		} else if (was_lp_mode && !is_lp_mode) {
 			_exynos_panel_set_vddd_voltage(ctx, false);
-			if (is_active) {
+			if (is_active && funcs->set_nolp_mode) {
 				funcs->set_nolp_mode(ctx, pmode);
 				need_update_backlight = true;
 				state_changed = true;
 			}
+			ctx->current_binned_lp = NULL;
 		} else if (funcs->mode_set) {
 			if ((MIPI_CMD_SYNC_REFRESH_RATE & exynos_connector_state->mipi_sync) &&
 					is_active && old_mode)
