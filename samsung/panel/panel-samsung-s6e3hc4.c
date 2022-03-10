@@ -203,7 +203,8 @@ static u8 s6e3hc4_get_te2_option(struct exynos_panel *ctx)
 		return S6E3HC4_TE2_CHANGEABLE;
 
 	if (ctx->current_mode->exynos_mode.is_lp_mode ||
-	    (test_bit(FEAT_EARLY_EXIT, spanel->feat)))
+	    (test_bit(FEAT_EARLY_EXIT, spanel->feat) &&
+		spanel->auto_mode_vrefresh < 30))
 		return S6E3HC4_TE2_FIXED;
 
 	return S6E3HC4_TE2_CHANGEABLE;
@@ -368,8 +369,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	}
 
 	/* TE2 setting */
-	if (test_bit(FEAT_OP_NS, changed_feat) ||
-		test_bit(FEAT_EARLY_EXIT, changed_feat))
+	if (test_bit(FEAT_OP_NS, changed_feat))
 		s6e3hc4_update_te2_internal(ctx, false);
 
 	/* HBM IRC setting */
@@ -425,9 +425,6 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 		else
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x81, 0x83, 0x03, 0x03);
 	}
-	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x10, 0xBD);
-	val = test_bit(FEAT_EARLY_EXIT, spanel->feat) ? 0x10 : 0x00;
-	EXYNOS_DCS_BUF_ADD(ctx, 0xBD, val);
 	val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x4E : 0x1E;
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, val, 0xBD);
 	if (test_bit(FEAT_HBM, spanel->feat)) {
@@ -521,23 +518,33 @@ static void s6e3hc4_update_refresh_mode(struct exynos_panel *ctx,
 					const u32 idle_vrefresh)
 {
 	struct s6e3hc4_panel *spanel = to_spanel(ctx);
+	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 
 	dev_dbg(ctx->dev, "%s: mode: %s set idle_vrefresh: %u\n", __func__,
 		pmode->mode.name, idle_vrefresh);
 
-	if (idle_vrefresh) {
-		set_bit(FEAT_EARLY_EXIT, spanel->feat);
+	if (idle_vrefresh)
 		set_bit(FEAT_FRAME_AUTO, spanel->feat);
-	} else {
-		clear_bit(FEAT_EARLY_EXIT, spanel->feat);
+	else
 		clear_bit(FEAT_FRAME_AUTO, spanel->feat);
-	}
+
+	if (vrefresh == 120 || idle_vrefresh)
+		set_bit(FEAT_EARLY_EXIT, spanel->feat);
+	else
+		clear_bit(FEAT_EARLY_EXIT, spanel->feat);
 
 	spanel->auto_mode_vrefresh = idle_vrefresh;
-	/* when mode is explicitly set (manual) panel idle effect would be disabled */
-	ctx->panel_idle_vrefresh = 0;
+	/*
+	 * Note: when mode is explicitly set, panel performs early exit to get out
+	 * of idle at next vsync, and will not back to idle until not seeing new
+	 * frame traffic for a while. If idle_vrefresh != 0, try best to guess what
+	 * panel_idle_vrefresh will be soon, and s6e3hc3_c10_update_idle_state() in
+	 * new frame commit will correct it if the guess is wrong.
+	 */
+	ctx->panel_idle_vrefresh = idle_vrefresh;
 	s6e3hc4_update_panel_feat(ctx, pmode, false);
 	te2_state_changed(ctx->bl);
+	backlight_state_changed(ctx->bl);
 }
 
 static void s6e3hc4_change_frequency(struct exynos_panel *ctx,
@@ -583,9 +590,6 @@ static bool s6e3hc4_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		 */
 		if ((pmode->idle_mode == IDLE_MODE_ON_INACTIVITY) &&
 			(spanel->auto_mode_vrefresh != idle_vrefresh)) {
-			dev_dbg(ctx->dev,
-				"early exit update needed for mode: %s (idle_vrefresh: %u)\n",
-				pmode->mode.name, idle_vrefresh);
 			s6e3hc4_update_refresh_mode(ctx, pmode, idle_vrefresh);
 			return true;
 		}
@@ -600,26 +604,7 @@ static bool s6e3hc4_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		return false;
 
 	DPU_ATRACE_BEGIN(__func__);
-	dev_dbg(ctx->dev, "set idle vrefresh: %u for mode %s\n",
-		idle_vrefresh, pmode->mode.name);
-	if (idle_vrefresh) {
-		/* enable early exit while going into idle */
-		set_bit(FEAT_EARLY_EXIT, spanel->feat);
-		/* enable auto mode */
-		set_bit(FEAT_FRAME_AUTO, spanel->feat);
-	} else {
-		/* disable early exit after coming out of idle */
-		clear_bit(FEAT_EARLY_EXIT, spanel->feat);
-		/* disable auto mode */
-		clear_bit(FEAT_FRAME_AUTO, spanel->feat);
-	}
-
-	spanel->auto_mode_vrefresh = idle_vrefresh;
-	ctx->panel_idle_vrefresh = idle_vrefresh;
-	s6e3hc4_update_panel_feat(ctx, pmode, false);
-
-	backlight_state_changed(ctx->bl);
-	te2_state_changed(ctx->bl);
+	s6e3hc4_update_refresh_mode(ctx, pmode, idle_vrefresh);
 	DPU_ATRACE_END(__func__);
 
 	return true;
@@ -743,6 +728,10 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC8, 0xC0),
 
+	/* Set frame insertion count */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x10, 0xBD),
+	EXYNOS_DSI_CMD_SEQ(0xBD, 0x00),
+
 	EXYNOS_DSI_CMD0(freq_update),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 
@@ -811,17 +800,26 @@ static int s6e3hc4_disable(struct drm_panel *panel)
 #define EARLY_EXIT_THRESHOLD_US 17000
 
 /**
- * s6e3hc4_trigger_early_exit - trigger early exit command to panel
+ * s6e3hc4_update_idle_state - update panel auto frame insertion state
  * @ctx: panel struct
  *
- * Sends a command to panel to indicate a frame is about to come in case its been a while since the
- * last frame update and auto mode may have started to take effect and lowering refresh rate
+ * - update timestamp of switching to 120 Hz mode in case its been a while since the
+ *   last frame update and auto mode may have started to lower refresh rate.
+ * - disable auto refresh mode if there is switching delay requirement
+ * - trigger early exit by command if it's changeable TE, which could result in
+ *   fast 120 Hz boost and seeing 120 Hz TE earlier
  */
-static void s6e3hc4_trigger_early_exit(struct exynos_panel *ctx)
+static void s6e3hc4_update_idle_state(struct exynos_panel *ctx)
 {
-	const ktime_t delta = ktime_sub(ktime_get(), ctx->last_commit_ts);
-	const s64 delta_us = ktime_to_us(delta);
+	s64 delta_us;
+	struct s6e3hc4_panel *spanel = to_spanel(ctx);
 
+	ctx->panel_idle_vrefresh = 0;
+	if (drm_mode_vrefresh(&ctx->current_mode->mode) != 120 ||
+		!test_bit(FEAT_FRAME_AUTO, spanel->feat))
+		return;
+
+	delta_us = ktime_us_delta(ktime_get(), ctx->last_commit_ts);
 	if (delta_us < EARLY_EXIT_THRESHOLD_US) {
 		dev_dbg(ctx->dev, "skip early exit. %lldus since last commit\n",
 			delta_us);
@@ -832,14 +830,14 @@ static void s6e3hc4_trigger_early_exit(struct exynos_panel *ctx)
 	ctx->last_mode_set_ts = ktime_get();
 
 	DPU_ATRACE_BEGIN(__func__);
-
+	/*
+	 * If there is delay limitation requirement, turn off auto mode to prevent panel
+	 * from lowering frequency too fast if not seeing new frame.
+	 */
 	if (ctx->idle_delay_ms) {
 		const struct exynos_panel_mode *pmode = ctx->current_mode;
-
-		dev_dbg(ctx->dev, "%s: disable auto idle mode for: %s\n",
-				__func__, pmode->mode.name);
 		s6e3hc4_update_refresh_mode(ctx, pmode, 0);
-	} else {
+	} else if (spanel->force_changeable_te) {
 		dev_dbg(ctx->dev, "sending early exit out cmd\n");
 		EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 		EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
@@ -851,13 +849,10 @@ static void s6e3hc4_trigger_early_exit(struct exynos_panel *ctx)
 
 static void s6e3hc4_commit_done(struct exynos_panel *ctx)
 {
-	struct s6e3hc4_panel *spanel = to_spanel(ctx);
-
 	if (!ctx->current_mode)
 		return;
 
-	if (test_bit(FEAT_EARLY_EXIT, spanel->feat))
-		s6e3hc4_trigger_early_exit(ctx);
+	s6e3hc4_update_idle_state(ctx);
 }
 
 static void s6e3hc4_set_hbm_mode(struct exynos_panel *ctx,
@@ -1075,7 +1070,7 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
 			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
 		},
-		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 	{
 		/* 1080x2340 @ 60Hz */
@@ -1145,7 +1140,7 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 			.rising_edge = S6E3HC4_TE2_RISING_EDGE_OFFSET,
 			.falling_edge = S6E3HC4_TE2_FALLING_EDGE_OFFSET,
 		},
-		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 };
 
