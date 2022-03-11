@@ -524,6 +524,9 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 		/* DFC mode manual */
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2F,
 				   nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_MANUAL));
+		/* 120Hz gamma band */
+		if (ctx->panel_rev >= PANEL_REV_EVT1_1)
+			EXYNOS_DCS_BUF_ADD(ctx, 0x26, 0x00);
 		/* restore TE timing (no shift) */
 		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
 	} else {
@@ -536,23 +539,26 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 		/* set auto frame insertion */
 		EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
 		EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x1C);
+		/* auto frame insertion off (manual) */
 		if (!fi) {
-			/* auto frame insertion off (manual) */
 			if (vrefresh == 60)
 				EXYNOS_DCS_BUF_ADD(ctx,
 					0xBA, 0x91, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01, 0x00);
 			else
 				dev_warn(ctx->dev,
 					 "Unsupported vrefresh %dHz for manual mode\n", vrefresh);
+		/* auto frame insertion on */
 		} else {
-			/* auto frame insertion on */
+			/* two 120Hz frames are removed after EVT1.1 */
+			u8 val = (ctx->panel_rev >= PANEL_REV_EVT1_1) ? 0x91 : 0x93;
+
 			if (idle_vrefresh == 10)
 				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBA, 0x93, 0x09, 0x03, 0x00, 0x11, 0x0B, 0x0B,
+					0xBA, val, 0x09, 0x03, 0x00, 0x11, 0x0B, 0x0B,
 					0x00, 0x06);
 			else if (idle_vrefresh == 30)
 				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBA, 0x93, 0x03, 0x02, 0x00, 0x11, 0x03, 0x03,
+					0xBA, val, 0x03, 0x02, 0x00, 0x11, 0x03, 0x03,
 					0x00, 0x04);
 			else if (idle_vrefresh == 60)
 				EXYNOS_DCS_BUF_ADD(ctx,
@@ -571,6 +577,10 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 			EXYNOS_DCS_BUF_ADD(ctx, 0xC0,
 					   (spanel->hw_osc2_clk_idx == 1) ? 0x21 : 0x20);
 		}
+
+		/* VRR gamma band (60~10Hz) */
+		if (ctx->panel_rev >= PANEL_REV_EVT1_1)
+			EXYNOS_DCS_BUF_ADD(ctx, 0x26, 0x01);
 
 		if (vrefresh == 120)
 			/* restore TE timing (no shift) */
