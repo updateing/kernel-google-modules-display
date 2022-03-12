@@ -14,7 +14,7 @@ filegroup(
         "samsung/**/*.h",
     ]),
     visibility = [
-        "//gs/google-modules/touch:__subpackages__",
+        "//private/google-modules/touch:__subpackages__",
     ],
 )
 
@@ -27,8 +27,8 @@ kernel_module(
         "samsung/Kbuild",
         "samsung/panel/Kbuild",
     ]) + [
-        "//gs/google-modules/display/include:headers",
-        "//gs/google-modules/soc-modules:gs101_soc_headers",
+        "//private/google-modules/display/include:headers",
+        "//private/google-modules/soc-modules:gs101_soc_headers",
     ],
     outs = [
         "samsung/exynos-drm.ko",
@@ -39,11 +39,11 @@ kernel_module(
         "samsung/panel/panel-samsung-s6e3hc3.ko",
         "samsung/panel/panel-samsung-sofef01.ko",
     ],
-    kernel_build = "//gs/google-modules/soc-modules:slider",
+    kernel_build = "//private/google-modules/soc-modules:slider",
     kernel_module_deps = [
-        "//gs/google-modules/soc-modules:gs101_soc",
+        "//private/google-modules/soc-modules:gs101_soc",
     ],
     visibility = [
-        "//gs/google-modules/soc-modules:__pkg__",
+        "//private/google-modules/soc-modules:__pkg__",
     ],
 )
