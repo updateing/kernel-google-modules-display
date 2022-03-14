@@ -894,9 +894,17 @@ static void nt37290_get_panel_rev(struct exynos_panel *ctx, u32 id)
 {
 	/* extract command 0xDB */
 	u8 build_code = (id & 0xFF00) >> 8;
-	u8 rev = ((build_code & 0xE0) >> 3) | (build_code & 0x03);
+	u8 main = (build_code & 0xE0) >> 3;
+	u8 sub = 0;
 
-	exynos_panel_get_panel_rev(ctx, rev);
+	if ((build_code & 0x03) == 0 && (build_code & 0x0C) != 0)
+		/* bit[3:2] */
+		sub = (build_code & 0x0C) >> 2;
+	else if ((build_code & 0x03) != 0 && (build_code & 0x0C) == 0)
+		/* bit[1:0] */
+		sub = build_code & 0x03;
+
+	exynos_panel_get_panel_rev(ctx, main | sub);
 }
 
 static void nt37290_set_osc2_clk_khz(struct exynos_panel *ctx, unsigned int clk_khz)
