@@ -565,8 +565,10 @@ static int s6e3hc3_c10_atomic_check(struct exynos_panel *ctx, struct drm_atomic_
 	struct drm_connector *conn = &ctx->exynos_connector.base;
 	struct drm_connector_state *new_conn_state = drm_atomic_get_new_connector_state(state, conn);
 	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 
-	if (!new_conn_state || !new_conn_state->crtc)
+	if (drm_mode_vrefresh(&ctx->current_mode->mode) == 120 ||
+	    !new_conn_state || !new_conn_state->crtc)
 		return 0;
 
 	new_crtc_state = drm_atomic_get_new_crtc_state(state, new_conn_state->crtc);
@@ -574,7 +576,7 @@ static int s6e3hc3_c10_atomic_check(struct exynos_panel *ctx, struct drm_atomic_
 	if (!old_crtc_state || !new_crtc_state || !new_crtc_state->active)
 		return 0;
 
-	if ((ctx->panel_idle_enabled && old_crtc_state->self_refresh_active) ||
+	if ((spanel->auto_mode_vrefresh && old_crtc_state->self_refresh_active) ||
 	    !drm_atomic_crtc_effectively_active(old_crtc_state)) {
 		struct drm_display_mode *mode = &new_crtc_state->adjusted_mode;
 
