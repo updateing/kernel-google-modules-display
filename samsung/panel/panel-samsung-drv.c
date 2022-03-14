@@ -2702,15 +2702,24 @@ static ssize_t te2_state_show(struct device *dev,
 	const struct exynos_panel_mode *pmode;
 	int rc = 0;
 
+	if (!is_panel_active(ctx))
+		return -EPERM;
+
 	mutex_lock(&ctx->mode_lock);
 	pmode = ctx->current_mode;
 	mutex_unlock(&ctx->mode_lock);
 	if (pmode) {
 		bool fixed = ctx->te2.option == TE2_OPT_FIXED;
+		bool lp_mode = pmode->exynos_mode.is_lp_mode;
+		int vrefresh;
+
+		if (fixed)
+			vrefresh = lp_mode ? FIXED_TE2_VREFRESH_LP : FIXED_TE2_VREFRESH_NORMAL;
+		else
+			vrefresh = exynos_get_actual_vrefresh(ctx);
 
 		rc = scnprintf(buf, PAGE_SIZE, "%s-te2@%d\n",
-			       fixed ? "fixed" : "changeable",
-			       fixed ? FIXED_TE2_VREFRESH : exynos_get_actual_vrefresh(ctx));
+			       fixed ? "fixed" : "changeable", vrefresh);
 	}
 
 	dev_dbg(ctx->dev, "%s: %s\n", __func__, rc > 0 ? buf : "");
