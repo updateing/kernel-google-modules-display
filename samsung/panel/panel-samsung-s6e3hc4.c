@@ -148,7 +148,9 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x41, 0xF6),
 	EXYNOS_DSI_CMD_SEQ(0xF6, 0xB3),
 	EXYNOS_DSI_CMD0(freq_update),
-
+	/* AOD low mode setting */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0x7D, 0x94),
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x1C),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_lp);
@@ -693,6 +695,11 @@ static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
 	usleep_range(delay_us, delay_us + 10);
+	/* AOD low mode setting off */
+	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x52, 0x94);
+	EXYNOS_DCS_BUF_ADD(ctx, 0x94, 0x00);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 	s6e3hc4_write_display_mode(ctx, &pmode->mode);
 	s6e3hc4_change_frequency(ctx, pmode);
 	usleep_range(delay_us, delay_us + 10);
