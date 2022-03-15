@@ -133,8 +133,8 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
 	EXYNOS_DSI_CMD(display_off, 17),
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
 
-	/* Fixed TE */
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x51),
+	/* changeable TE: sync on*/
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x00),
 	/* Set freq at 30 Hz */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x01, 0x60),
 	EXYNOS_DSI_CMD_SEQ(0x60, 0x00),
@@ -349,16 +349,16 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 
 	/* TE setting */
-	if (test_bit(FEAT_OP_NS, changed_feat)) {
-		/* Fixed TE width */
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x08, 0xB9);
-		val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x5E : 0x42;
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x0C, val, 0x00, 0x1B, 0x0C, val, 0x00, 0x1B);
-	}
-	if (test_bit(FEAT_EARLY_EXIT, changed_feat)) {
+	if (test_bit(FEAT_EARLY_EXIT, changed_feat) ||
+		test_bit(FEAT_OP_NS, changed_feat)) {
 		if (test_bit(FEAT_EARLY_EXIT, spanel->feat) && !spanel->force_changeable_te) {
 			/* Fixed TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x51);
+			/* TE width setting */
+			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x08, 0xB9);
+			val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x5E : 0x42;
+			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x0C, val, 0x00, 0x1B,
+				0x0C, val, 0x00, 0x1B);
 		} else {
 			/* Changeable TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x00);
