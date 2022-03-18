@@ -942,6 +942,8 @@ static void s6e3hc4_set_local_hbm_mode(struct exynos_panel *ctx,
 static void s6e3hc4_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
+	if (!is_panel_active(ctx))
+		return;
 
 	if (ctx->hbm.local_hbm.enabled == true)
 		dev_warn(ctx->dev, "do mode change (`%s`) unexpectedly when LHBM is ON\n",
