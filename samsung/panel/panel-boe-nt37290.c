@@ -331,6 +331,12 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	/* change refresh frame to 1 after 2Ch command in skip mode */
 	EXYNOS_DSI_CMD0(cmd2_page0),
 	EXYNOS_DSI_CMD_SEQ(0xBA, 0x00),
+	/* dimming config: 32 frame */
+	EXYNOS_DSI_CMD_SEQ(0xB2, 0x19),
+	EXYNOS_DSI_CMD_SEQ(0x6F, 0x05),
+	EXYNOS_DSI_CMD_SEQ(0xB2, 0x20),
+	EXYNOS_DSI_CMD_SEQ(0x6F, 0x06),
+	EXYNOS_DSI_CMD_SEQ(0xB2, 0x20),
 
 	/* CMD2 Page 1 */
 	EXYNOS_DSI_CMD_SEQ(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x01),
@@ -1148,6 +1154,14 @@ static ssize_t nt37290_list_osc2_clk_khz(struct exynos_panel *ctx, char *buf)
 	return len;
 }
 
+static void nt37290_set_dimming_on(struct exynos_panel *ctx,
+				 bool dimming_on)
+{
+	ctx->dimming_on = dimming_on;
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0x53, ctx->dimming_on ? 0x28 : 0x20);
+	dev_dbg(ctx->dev, "%s dimming_on=%d \n", __func__, dimming_on);
+}
+
 static const struct exynos_display_underrun_param underrun_param = {
 	.te_idle_us = 350,
 	.te_var = 1,
@@ -1322,6 +1336,7 @@ static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.set_nolp_mode = nt37290_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
 	.set_hbm_mode = nt37290_set_hbm_mode,
+	.set_dimming_on = nt37290_set_dimming_on,
 	.set_local_hbm_mode = nt37290_set_local_hbm_mode,
 	.is_mode_seamless = nt37290_is_mode_seamless,
 	.mode_set = nt37290_mode_set,
