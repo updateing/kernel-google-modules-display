@@ -129,11 +129,11 @@ static const struct exynos_dsi_cmd s6e3hc4_sleepin_cmds[] = {
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_sleepin);
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
-	EXYNOS_DSI_CMD(display_off, 17),
+	EXYNOS_DSI_CMD0(display_off),
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
 
-	/* changeable TE: sync on*/
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x04),
+	/* Fixed TE: sync on */
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x51),
 	/* Set freq at 30 Hz */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x01, 0x60),
 	EXYNOS_DSI_CMD_SEQ(0x60, 0x00),
@@ -171,8 +171,8 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_low_cmds[] = {
 	/* AOD low Mode, 10 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
 	EXYNOS_DSI_CMD_SEQ(0x94, 0x01, 0x07, 0x98, 0x02),
-	EXYNOS_DSI_CMD0(lock_cmd_f0),
-	EXYNOS_DSI_CMD0(display_on)
+	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
+	EXYNOS_DSI_CMD0(display_on),
 };
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_high_cmds[] = {
@@ -182,8 +182,8 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_high_cmds[] = {
 	/* AOD high Mode, 50 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
 	EXYNOS_DSI_CMD_SEQ(0x94, 0x00, 0x07, 0x98, 0x02),
-	EXYNOS_DSI_CMD0(lock_cmd_f0),
-	EXYNOS_DSI_CMD0(display_on)
+	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
+	EXYNOS_DSI_CMD0(display_on),
 };
 
 static const struct exynos_binned_lp s6e3hc4_binned_lp[] = {
@@ -759,12 +759,12 @@ static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 	u32 delay_us = mult_frac(1000, 1020, vrefresh);
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
-	usleep_range(delay_us, delay_us + 10);
 	/* AOD low mode setting off */
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x52, 0x94);
 	EXYNOS_DCS_BUF_ADD(ctx, 0x94, 0x00);
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+	s6e3hc4_update_panel_feat(ctx, pmode, true);
 	/* backlight control and dimming */
 	s6e3hc4_write_display_mode(ctx, &pmode->mode);
 	s6e3hc4_change_frequency(ctx, pmode);
