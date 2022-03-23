@@ -109,7 +109,8 @@ static int exynos_atomic_check_windows(struct drm_device *dev, struct drm_atomic
 		to_exynos_crtc_state(old_crtc_state);
 		new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
 
-		if (!new_crtc_state->active_changed && !new_crtc_state->zpos_changed)
+		if (!new_crtc_state->active_changed && !new_crtc_state->zpos_changed &&
+		    (old_crtc_state->plane_mask == new_crtc_state->plane_mask))
 			continue;
 
 		old_win_cnt = exynos_drm_crtc_get_win_cnt(old_crtc_state);
