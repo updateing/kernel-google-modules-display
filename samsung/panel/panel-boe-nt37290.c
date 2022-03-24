@@ -22,6 +22,8 @@
 #define NT37290_TE2_CHANGEABLE 0x02
 #define NT37290_TE2_FIXED      0x22
 
+#define NT37290_DDIC_ID_LEN 8
+
 /**
  * enum nt37290_panel_feature - features supported by this panel
  * @G10_FEAT_EARLY_EXIT: early exit from a long frame
@@ -1162,6 +1164,28 @@ static void nt37290_set_dimming_on(struct exynos_panel *ctx,
 	dev_dbg(ctx->dev, "%s dimming_on=%d \n", __func__, dimming_on);
 }
 
+static int nt37290_read_id(struct exynos_panel *ctx)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+	char buf[NT37290_DDIC_ID_LEN] = {0};
+	int ret;
+
+	if (ctx->panel_rev < PANEL_REV_DVT1)
+		return exynos_panel_read_id(ctx);
+
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx,
+		0xFF, 0xAA, 0x55, 0xA5, 0x81);
+	ret = mipi_dsi_dcs_read(dsi, 0xF2, buf, NT37290_DDIC_ID_LEN);
+	if (ret != NT37290_DDIC_ID_LEN) {
+		dev_warn(ctx->dev, "Unable to read DDIC id (%d)\n", ret);
+		return ret;
+	}
+
+	exynos_bin2hex(buf, NT37290_DDIC_ID_LEN,
+		ctx->panel_id, sizeof(ctx->panel_id));
+	return 0;
+}
+
 static const struct exynos_display_underrun_param underrun_param = {
 	.te_idle_us = 350,
 	.te_var = 1,
@@ -1349,6 +1373,7 @@ static const struct exynos_panel_funcs nt37290_exynos_funcs = {
 	.commit_done = nt37290_commit_done,
 	.set_osc2_clk_khz = nt37290_set_osc2_clk_khz,
 	.list_osc2_clk_khz = nt37290_list_osc2_clk_khz,
+	.read_id = nt37290_read_id,
 };
 
 const struct brightness_capability nt37290_brightness_capability = {

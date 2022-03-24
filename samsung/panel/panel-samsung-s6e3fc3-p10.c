@@ -637,6 +637,13 @@ static void s6e3fc3_p10_panel_init(struct exynos_panel *ctx)
 	s6e3fc3_p10_lhbm_gamma_write(ctx);
 }
 
+static int s6e3fc3_p10_read_id(struct exynos_panel *ctx)
+{
+	if (ctx->panel_rev < PANEL_REV_DVT1)
+		return exynos_panel_read_id(ctx);
+	return exynos_panel_read_ddic_id(ctx);
+}
+
 static void s6e3fc3_p10_get_panel_rev(struct exynos_panel *ctx, u32 id)
 {
 	/* extract command 0xDB */
@@ -794,6 +801,7 @@ static const struct exynos_panel_funcs s6e3fc3_p10_exynos_funcs = {
 	.configure_te2_edges = exynos_panel_configure_te2_edges,
 	.update_te2 = s6e3fc3_p10_update_te2,
 	.set_op_hz = s6e3fc3_p10_set_op_hz,
+	.read_id = s6e3fc3_p10_read_id,
 };
 
 const struct brightness_capability s6e3fc3_p10_brightness_capability = {

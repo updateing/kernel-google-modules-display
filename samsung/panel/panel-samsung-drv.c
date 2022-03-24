@@ -35,6 +35,8 @@
 #define PANEL_ID_LEN		7
 #define PANEL_ID_OFFSET		6
 #define PANEL_ID_READ_SIZE	(PANEL_ID_LEN + PANEL_ID_OFFSET)
+#define PANEL_SLSI_DDIC_ID_REG	0xD6
+#define PANEL_SLSI_DDIC_ID_LEN	5
 
 static const char ext_info_regs[] = { 0xDA, 0xDB, 0xDC };
 #define EXT_INFO_SIZE ARRAY_SIZE(ext_info_regs)
@@ -263,7 +265,7 @@ static int exynos_panel_parse_regulators(struct exynos_panel *ctx)
 	return 0;
 }
 
-static int exynos_panel_read_id(struct exynos_panel *ctx)
+int exynos_panel_read_id(struct exynos_panel *ctx)
 {
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 	char buf[PANEL_ID_READ_SIZE];
@@ -281,6 +283,28 @@ static int exynos_panel_read_id(struct exynos_panel *ctx)
 
 	return 0;
 }
+EXPORT_SYMBOL(exynos_panel_read_id);
+
+int exynos_panel_read_ddic_id(struct exynos_panel *ctx)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+	char buf[PANEL_SLSI_DDIC_ID_LEN] = {0};
+	int ret;
+
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xF0, 0x5A, 0x5A);
+	ret = mipi_dsi_dcs_read(dsi, PANEL_SLSI_DDIC_ID_REG,
+				buf, PANEL_SLSI_DDIC_ID_LEN);
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xF0, 0xA5, 0xA5);
+	if (ret != PANEL_SLSI_DDIC_ID_LEN) {
+		dev_warn(ctx->dev, "Unable to read DDIC id (%d)\n", ret);
+		return ret;
+	}
+
+	exynos_bin2hex(buf, PANEL_SLSI_DDIC_ID_LEN,
+				ctx->panel_id, sizeof(ctx->panel_id));
+	return 0;
+}
+EXPORT_SYMBOL(exynos_panel_read_ddic_id);
 
 static int exynos_panel_read_extinfo(struct exynos_panel *ctx)
 {
@@ -353,13 +377,6 @@ int exynos_panel_init(struct exynos_panel *ctx)
 	if (ctx->initialized)
 		return 0;
 
-	if (funcs && funcs->read_id)
-		ret = funcs->read_id(ctx);
-	else
-		ret = exynos_panel_read_id(ctx);
-	if (ret)
-		return ret;
-
 	ret = exynos_panel_read_extinfo(ctx);
 	if (!ret)
 		ctx->initialized = true;
@@ -379,6 +396,13 @@ int exynos_panel_init(struct exynos_panel *ctx)
 			 "unable to get panel rev, default to latest\n");
 		ctx->panel_rev = PANEL_REV_LATEST;
 	}
+
+	if (funcs && funcs->read_id)
+		ret = funcs->read_id(ctx);
+	else
+		ret = exynos_panel_read_id(ctx);
+	if (ret)
+		return ret;
 
 	if (funcs && funcs->panel_init)
 		funcs->panel_init(ctx);

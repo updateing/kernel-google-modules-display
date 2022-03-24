@@ -1025,6 +1025,13 @@ static int s6e3hc4_set_op_hz(struct exynos_panel *ctx, unsigned int hz)
 	return 0;
 }
 
+static int s6e3hc4_read_id(struct exynos_panel *ctx)
+{
+	if (ctx->panel_rev < PANEL_REV_DVT1)
+		return exynos_panel_read_id(ctx);
+	return exynos_panel_read_ddic_id(ctx);
+}
+
 static void s6e3hc4_get_panel_rev(struct exynos_panel *ctx, u32 id)
 {
 	/* extract command 0xDB */
@@ -1302,6 +1309,7 @@ static const struct exynos_panel_funcs s6e3hc4_exynos_funcs = {
 	.atomic_check = s6e3hc4_atomic_check,
 	.set_self_refresh = s6e3hc4_set_self_refresh,
 	.set_op_hz = s6e3hc4_set_op_hz,
+	.read_id = s6e3hc4_read_id,
 };
 
 const struct brightness_capability s6e3hc4_brightness_capability = {

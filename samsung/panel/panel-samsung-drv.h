@@ -816,6 +816,8 @@ int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connec
 int exynos_panel_disable(struct drm_panel *panel);
 int exynos_panel_unprepare(struct drm_panel *panel);
 int exynos_panel_prepare(struct drm_panel *panel);
+int exynos_panel_read_id(struct exynos_panel *ctx);
+int exynos_panel_read_ddic_id(struct exynos_panel *ctx);
 void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev);
 int exynos_panel_init(struct exynos_panel *ctx);
 void exynos_panel_reset(struct exynos_panel *ctx);
