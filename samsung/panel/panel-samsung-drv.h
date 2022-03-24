@@ -87,6 +87,8 @@
  *			       panel serial and revision has not been read yet
  * @PANEL_STATE_HANDOFF: Panel looked active when driver was loaded. The panel is uninitialized
  *			in this state and will switch to PANEL_STATE_ON once it gets initialized
+ * @PANEL_STATE_HANDOFF_MODESET: Similar to HANDOFF state, in this case a modeset was called with
+ *			unpreferred mode, so display must be blanked before enabling.
  * @PANEL_STATE_OFF: Panel is fully disabled and powered off
  * @PANEL_STATE_NORMAL: Panel is ON in Normal operating mode
  * @PANEL_STATE_LP: Panel is ON in Low Power mode
@@ -95,6 +97,7 @@
 enum exynos_panel_state {
 	PANEL_STATE_UNINITIALIZED,
 	PANEL_STATE_HANDOFF,
+	PANEL_STATE_HANDOFF_MODESET,
 	PANEL_STATE_OFF,
 	PANEL_STATE_NORMAL,
 	PANEL_STATE_LP,
@@ -607,6 +610,7 @@ static inline bool is_panel_active(const struct exynos_panel *ctx)
 		return true;
 	case PANEL_STATE_UNINITIALIZED:
 	case PANEL_STATE_HANDOFF:
+	case PANEL_STATE_HANDOFF_MODESET:
 	case PANEL_STATE_BLANK:
 	case PANEL_STATE_OFF:
 	default:
@@ -617,7 +621,8 @@ static inline bool is_panel_active(const struct exynos_panel *ctx)
 static inline bool is_panel_initialized(const struct exynos_panel *ctx)
 {
 	return ctx->panel_state != PANEL_STATE_UNINITIALIZED &&
-	       ctx->panel_state != PANEL_STATE_HANDOFF;
+	       ctx->panel_state != PANEL_STATE_HANDOFF &&
+	       ctx->panel_state != PANEL_STATE_HANDOFF_MODESET;
 }
 
 static inline int exynos_dcs_write(struct exynos_panel *ctx, const void *data,

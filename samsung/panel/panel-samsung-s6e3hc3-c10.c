@@ -939,7 +939,7 @@ static void s6e3hc3_c10_set_local_hbm_mode(struct exynos_panel *ctx,
 static void s6e3hc3_c10_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
-	if (!ctx->enabled)
+	if (!is_panel_active(ctx))
 		return;
 
 	if (ctx->hbm.local_hbm.enabled == true)

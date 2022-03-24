@@ -1889,18 +1889,24 @@ static void exynos_panel_set_partial(struct exynos_display_partial *partial,
 
 static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 					   struct drm_connector_state *connector_state,
-					   const struct drm_display_mode *mode)
+					   struct drm_crtc_state *crtc_state)
 {
 	struct exynos_drm_connector_state *exynos_connector_state =
 		to_exynos_connector_state(connector_state);
-	const struct exynos_panel_mode *pmode = exynos_panel_get_mode(ctx, mode);
+	const struct exynos_panel_mode *pmode =
+		exynos_panel_get_mode(ctx, &crtc_state->adjusted_mode);
 
 	if (!pmode) {
-		dev_warn(ctx->dev, "invalid mode %s\n", mode->name);
+		dev_warn(ctx->dev, "invalid mode %s\n", pmode->mode.name);
 		return -EINVAL;
 	}
 
-	exynos_connector_state->seamless_possible = exynos_panel_is_mode_seamless(ctx, pmode);
+	if (crtc_state->connectors_changed || !is_panel_active(ctx))
+		exynos_connector_state->seamless_possible = false;
+	else
+		exynos_connector_state->seamless_possible =
+			exynos_panel_is_mode_seamless(ctx, pmode);
+
 	exynos_connector_state->exynos_mode = pmode->exynos_mode;
 	exynos_panel_set_partial(&exynos_connector_state->partial, pmode,
 			ctx->desc->is_partial);
@@ -3061,10 +3067,19 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 				ctx->current_mode->exynos_mode.is_lp_mode;
 
 	mutex_lock(&ctx->mode_lock);
-	if (ctx->panel_state == PANEL_STATE_HANDOFF)
+	if (ctx->panel_state == PANEL_STATE_HANDOFF) {
 		is_active = !exynos_panel_init(ctx);
-	else
+	} else if (ctx->panel_state == PANEL_STATE_HANDOFF_MODESET) {
+		if (!exynos_panel_init(ctx)) {
+			ctx->panel_state = PANEL_STATE_BLANK;
+			mutex_unlock(&ctx->mode_lock);
+			drm_panel_disable(&ctx->panel);
+			mutex_lock(&ctx->mode_lock);
+		}
+		is_active = false;
+	} else {
 		is_active = is_panel_active(ctx);
+	}
 
 	/* avoid turning on panel again if already enabled (ex. while booting or self refresh) */
 	if (!is_active) {
@@ -3125,7 +3140,7 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 			old_crtc_state->self_refresh_active = true;
 	}
 
-	return exynos_drm_connector_check_mode(ctx, conn_state, &new_crtc_state->mode);
+	return exynos_drm_connector_check_mode(ctx, conn_state, new_crtc_state);
 }
 
 static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
@@ -3133,7 +3148,8 @@ static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 
-	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_HANDOFF))
+	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_HANDOFF) ||
+	    (ctx->panel_state == PANEL_STATE_HANDOFF_MODESET))
 		return;
 
 	if (ctx->panel_state == PANEL_STATE_BLANK) {
@@ -3347,15 +3363,8 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	}
 
 	if (ctx->panel_state == PANEL_STATE_HANDOFF) {
-		WARN(1, "mode change at boot to %s\n", adjusted_mode->name);
-
-		/*
-		 * This is unexpected, but the best we can do is to set as disable which will
-		 * force panel reset on next enable. That way it will go into new mode
-		 */
-		ctx->enabled = false;
-		ctx->panel_state = PANEL_STATE_UNINITIALIZED;
-		exynos_panel_set_power(ctx, false);
+		dev_warn(ctx->dev, "mode change at boot to %s\n", adjusted_mode->name);
+		ctx->panel_state = PANEL_STATE_HANDOFF_MODESET;
 	}
 
 	dev_dbg(ctx->dev, "changing display mode to %dx%d@%d\n",
