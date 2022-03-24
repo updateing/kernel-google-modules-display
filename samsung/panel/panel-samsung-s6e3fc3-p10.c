@@ -516,6 +516,7 @@ static void s6e3fc3_p10_set_nolp_mode(struct exynos_panel *ctx,
 		EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
 		EXYNOS_DCS_WRITE_TABLE(ctx, new_gamma_ip_enable);
 	}
+	/* backlight control and dimming */
 	s6e3fc3_p10_update_wrctrld(ctx);
 	if (ctx->panel_rev >= PANEL_REV_EVT1)
 		EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
@@ -596,8 +597,13 @@ static void s6e3fc3_p10_set_hbm_mode(struct exynos_panel *exynos_panel,
 static void s6e3fc3_p10_set_dimming_on(struct exynos_panel *exynos_panel,
 				 bool dimming_on)
 {
-	exynos_panel->dimming_on = dimming_on;
+	const struct exynos_panel_mode *pmode = exynos_panel->current_mode;
 
+	exynos_panel->dimming_on = dimming_on;
+	if (pmode->exynos_mode.is_lp_mode) {
+		dev_info(exynos_panel->dev,"in lp mode, skip to update");
+		return;
+	}
 	s6e3fc3_p10_update_wrctrld(exynos_panel);
 }
 

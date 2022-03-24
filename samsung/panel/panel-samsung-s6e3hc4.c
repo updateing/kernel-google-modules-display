@@ -709,6 +709,7 @@ static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x52, 0x94);
 	EXYNOS_DCS_BUF_ADD(ctx, 0x94, 0x00);
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+	/* backlight control and dimming */
 	s6e3hc4_write_display_mode(ctx, &pmode->mode);
 	s6e3hc4_change_frequency(ctx, pmode);
 	usleep_range(delay_us, delay_us + 10);
@@ -935,6 +936,10 @@ static void s6e3hc4_set_dimming_on(struct exynos_panel *ctx,
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 	ctx->dimming_on = dimming_on;
+	if (pmode->exynos_mode.is_lp_mode) {
+		dev_info(ctx->dev,"in lp mode, skip to update");
+		return;
+	}
 	s6e3hc4_write_display_mode(ctx, &pmode->mode);
 }
 

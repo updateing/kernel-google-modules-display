@@ -663,6 +663,7 @@ static void s6e3hc3_set_nolp_mode(struct exynos_panel *ctx,
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF0, 0x5A, 0x5A);
+	/* backlight control and dimming */
 	s6e3hc3_write_display_mode(ctx, &pmode->mode);
 	if (ctx->panel_rev == PANEL_REV_PROTO1)
 		EXYNOS_DCS_WRITE_SEQ(ctx, 0x49, 0x02);	/* normal gamma */
@@ -1008,6 +1009,10 @@ static void s6e3hc3_set_dimming_on(struct exynos_panel *ctx,
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 	ctx->dimming_on = dimming_on;
+	if (pmode->exynos_mode.is_lp_mode) {
+		dev_info(ctx->dev,"in lp mode, skip to update");
+		return;
+	}
 	s6e3hc3_write_display_mode(ctx, &pmode->mode);
 }
 
