@@ -310,14 +310,45 @@ static const struct exynos_dsi_cmd nt37290_lhbm_on_setting_cmds[] = {
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_lhbm_on_setting);
 
+static const struct exynos_dsi_cmd nt37290_dsc_wqhd_cmds[] = {
+	/* scaling off (1440x3120) */
+	EXYNOS_DSI_CMD_SEQ(0x8F, 0x00),
+
+	/* row address */
+	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x0C, 0x2F),
+	/* slice 24, 2 decoder */
+	EXYNOS_DSI_CMD_SEQ(0x90, 0x03, 0x03),
+	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x18, 0xD2, 0x00, 0x02,
+			   0x86, 0x02, 0x83, 0x00, 0x0A, 0x04, 0x86, 0x03,
+			   0x2E, 0x10, 0xF0),
+};
+static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_wqhd);
+
+static const struct exynos_dsi_cmd nt37290_dsc_fhd_cmds[] = {
+	/* scaling up 1.33x (1080x2340) */
+	EXYNOS_DSI_CMD_SEQ(0x8F, 0x01),
+	EXYNOS_DSI_CMD0(cmd2_page0),
+	/* horizontal display resolution selection */
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x00, 0x05, 0xA0),
+	/* set the display vertical scan line */
+	EXYNOS_DSI_CMD_SEQ(0xBD, 0x0C, 0x30),
+
+	/* row address */
+	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x09, 0x23),
+	/* slice 30, 2 decoder */
+	EXYNOS_DSI_CMD_SEQ(0x90, 0x03, 0x03),
+	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x1E, 0xD2, 0x00, 0x02,
+			   0x25, 0x02, 0xC5, 0x00, 0x07, 0x03, 0x97, 0x03,
+			   0x64, 0x10, 0xF0),
+};
+static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_fhd);
+
 static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	/* CMD1 */
 	/* set for higher MIPI speed: 1346Mbps */
 	EXYNOS_DSI_CMD_SEQ(0x1F, 0xF0),
 	/* gamma curve */
 	EXYNOS_DSI_CMD_SEQ(0x26, 0x00),
-	/* row address */
-	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x0C, 0x2F),
 	/* TE output line */
 	EXYNOS_DSI_CMD_SEQ(0x35),
 	/* select brightness value */
@@ -325,11 +356,6 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	/* control brightness */
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x20),
 	EXYNOS_DSI_CMD_SEQ(0x5A, 0x01),
-	/* DSC: slice 24, 2 decoder */
-	EXYNOS_DSI_CMD_SEQ(0x90, 0x03, 0x03),
-	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x18, 0xD2, 0x00, 0x02,
-			   0x86, 0x02, 0x83, 0x00, 0x0A, 0x04, 0x86, 0x03,
-			   0x2E, 0x10, 0xF0),
 	/* change refresh frame to 1 after 2Ch command in skip mode */
 	EXYNOS_DSI_CMD0(cmd2_page0),
 	EXYNOS_DSI_CMD_SEQ(0xBA, 0x00),
@@ -778,16 +804,23 @@ static int nt37290_enable(struct drm_panel *panel)
 {
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
+	const struct drm_display_mode *mode;
+	bool is_fhd;
 
 	if (!pmode) {
 		dev_err(ctx->dev, "no current mode set\n");
 		return -EINVAL;
 	}
 
-	dev_dbg(ctx->dev, "%s\n", __func__);
+	mode = &pmode->mode;
+	is_fhd = mode->hdisplay == 1080;
+
+	dev_dbg(ctx->dev, "%s (%s)\n", __func__, is_fhd ? "fhd" : "wqhd");
 
 	exynos_panel_reset(ctx);
 	exynos_panel_send_cmd_set(ctx, &nt37290_init_cmd_set);
+	exynos_panel_send_cmd_set(ctx,
+				  is_fhd ? &nt37290_dsc_fhd_cmd_set : &nt37290_dsc_wqhd_cmd_set);
 	exynos_panel_send_cmd_set(ctx, &nt37290_lhbm_on_setting_cmd_set);
 
 	nt37290_update_panel_feat(ctx, pmode, true);
@@ -1219,12 +1252,21 @@ static const struct drm_dsc_config nt37290_dsc_cfg = {
 	},
 };
 
-#define NT37290_DSC_CONFIG \
+#define NT37290_DSC_WQHD_CONFIG \
 	.dsc = { \
 		.enabled = true, \
 		.dsc_count = 2, \
 		.slice_count = 2, \
 		.slice_height = 24, \
+		.cfg = &nt37290_dsc_cfg, \
+	}
+
+#define NT37290_DSC_FHD_CONFIG \
+	.dsc = { \
+		.enabled = true, \
+		.dsc_count = 2, \
+		.slice_count = 2, \
+		.slice_height = 30, \
 		.cfg = &nt37290_dsc_cfg, \
 	}
 
@@ -1250,7 +1292,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_CONFIG,
+			NT37290_DSC_WQHD_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1280,7 +1322,67 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_CONFIG,
+			NT37290_DSC_WQHD_CONFIG,
+			.underrun_param = &underrun_param,
+		},
+		.te2_timing = {
+			.rising_edge = 0,
+			.falling_edge = 48,
+		},
+		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
+	},
+	{
+		/* 1080x2340 @ 60Hz */
+		.mode = {
+			.name = "1080x2340x60",
+			.clock = 173484,
+			.hdisplay = 1080,
+			.hsync_start = 1080 + 80, // add hfp
+			.hsync_end = 1080 + 80 + 24, // add hsa
+			.htotal = 1080 + 80 + 24 + 36, // add hbp
+			.vdisplay = 2340,
+			.vsync_start = 2340 + 12, // add vfp
+			.vsync_end = 2340 + 12 + 4, // add vsa
+			.vtotal = 2340 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
+		},
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.bpc = 8,
+			NT37290_DSC_FHD_CONFIG,
+			.underrun_param = &underrun_param,
+		},
+		.te2_timing = {
+			.rising_edge = 0,
+			.falling_edge = 48,
+		},
+		.idle_mode = IDLE_MODE_UNSUPPORTED,
+	},
+	{
+		/* 1080x2340 @ 120Hz */
+		.mode = {
+			.name = "1080x2340x120",
+			.clock = 346968,
+			.hdisplay = 1080,
+			.hsync_start = 1080 + 80, // add hfp
+			.hsync_end = 1080 + 80 + 24, // add hsa
+			.htotal = 1080 + 80 + 24 + 36, // add hbp
+			.vdisplay = 2340,
+			.vsync_start = 2340 + 12, // add vfp
+			.vsync_end = 2340 + 12 + 4, // add vsa
+			.vtotal = 2340 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
+		},
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.bpc = 8,
+			NT37290_DSC_FHD_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1291,30 +1393,58 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 	},
 };
 
-static const struct exynos_panel_mode nt37290_lp_mode = {
-	.mode = {
-		/* 1440x3120 @ 30Hz */
-		.name = "1440x3120x30",
-		.clock = 149310,
-		.hdisplay = 1440,
-		.hsync_start = 1440 + 80, // add hfp
-		.hsync_end = 1440 + 80 + 24, // add hsa
-		.htotal = 1440 + 80 + 24 + 36, // add hbp
-		.vdisplay = 3120,
-		.vsync_start = 3120 + 12, // add vfp
-		.vsync_end = 3120 + 12 + 4, // add vsa
-		.vtotal = 3120 + 12 + 4 + 14, // add vbp
-		.flags = 0,
-		.width_mm = 71,
-		.height_mm = 155,
+static const struct exynos_panel_mode nt37290_lp_modes[] = {
+	{
+		.mode = {
+			/* 1440x3120 @ 30Hz */
+			.name = "1440x3120x30",
+			.clock = 149310,
+			.hdisplay = 1440,
+			.hsync_start = 1440 + 80, // add hfp
+			.hsync_end = 1440 + 80 + 24, // add hsa
+			.htotal = 1440 + 80 + 24 + 36, // add hbp
+			.vdisplay = 3120,
+			.vsync_start = 3120 + 12, // add vfp
+			.vsync_end = 3120 + 12 + 4, // add vsa
+			.vtotal = 3120 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
+		},
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.bpc = 8,
+			NT37290_DSC_WQHD_CONFIG,
+			.underrun_param = &underrun_param,
+			.is_lp_mode = true,
+		}
 	},
-	.exynos_mode = {
-		.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
-		.vblank_usec = 120,
-		.bpc = 8,
-		NT37290_DSC_CONFIG,
-		.underrun_param = &underrun_param,
-		.is_lp_mode = true,
+	{
+		.mode = {
+			/* 1080x2340 @ 30Hz */
+			.name = "1080x2340x30",
+			.clock = 86742,
+			.hdisplay = 1080,
+			.hsync_start = 1080 + 80, // add hfp
+			.hsync_end = 1080 + 80 + 24, // add hsa
+			.htotal = 1080 + 80 + 24 + 36, // add hbp
+			.vdisplay = 2340,
+			.vsync_start = 2340 + 12, // add vfp
+			.vsync_end = 2340 + 12 + 4, // add vsa
+			.vtotal = 2340 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
+		},
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.bpc = 8,
+			NT37290_DSC_FHD_CONFIG,
+			.underrun_param = &underrun_param,
+			.is_lp_mode = true,
+		}
 	},
 };
 
@@ -1424,7 +1554,8 @@ const struct exynos_panel_desc boe_nt37290 = {
 	.modes = nt37290_modes,
 	.num_modes = ARRAY_SIZE(nt37290_modes),
 	.off_cmd_set = &nt37290_off_cmd_set,
-	.lp_mode = &nt37290_lp_mode,
+	.lp_mode = nt37290_lp_modes,
+	.lp_mode_count = ARRAY_SIZE(nt37290_lp_modes),
 	.lp_cmd_set = &nt37290_lp_cmd_set,
 	.binned_lp = nt37290_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(nt37290_binned_lp),
