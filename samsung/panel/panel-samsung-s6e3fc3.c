@@ -430,8 +430,26 @@ static void s6e3fc3_set_dimming_on(struct exynos_panel *exynos_panel,
 static void s6e3fc3_set_local_hbm_mode(struct exynos_panel *exynos_panel,
 				 bool local_hbm_en)
 {
+	const struct exynos_panel_mode *pmode;
+
 	if (exynos_panel->hbm.local_hbm.enabled == local_hbm_en)
 		return;
+
+	pmode = exynos_panel->current_mode;
+	if (unlikely(pmode == NULL)) {
+		dev_err(exynos_panel->dev, "%s: unknown current mode\n", __func__);
+		return;
+	}
+	if (local_hbm_en) {
+		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+		/* Add check to turn on LHBM @ 90hz only */
+		if (vrefresh != 90) {
+			dev_err(exynos_panel->dev,
+				"unexpected mode `%s` while enabling LHBM, give up\n",
+				pmode->mode.name);
+			return;
+		}
+	}
 
 	exynos_panel->hbm.local_hbm.enabled = local_hbm_en;
 	s6e3fc3_update_wrctrld(exynos_panel);
