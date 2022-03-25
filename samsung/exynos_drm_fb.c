@@ -270,6 +270,8 @@ static void plane_state_to_win_config(struct dpu_bts_win_config *win_config,
 	if (simplified_rot & DRM_MODE_ROTATE_90)
 		win_config->is_rot = true;
 
+	win_config->is_secure = (fb->modifier & DRM_FORMAT_MOD_PROTECTION) != 0;
+
 	DRM_DEBUG("src[%d %d %d %d], dst[%d %d %d %d]\n",
 			win_config->src_x, win_config->src_y,
 			win_config->src_w, win_config->src_h,
@@ -306,6 +308,7 @@ static void conn_state_to_win_config(struct dpu_bts_win_config *win_config,
 	win_config->dpp_ch = wb->id;
 	win_config->comp_src = 0;
 	win_config->is_rot = false;
+	win_config->is_secure = (fb->modifier & DRM_FORMAT_MOD_PROTECTION) != 0;
 
 	DRM_DEBUG("src[%d %d %d %d], dst[%d %d %d %d]\n",
 			win_config->src_x, win_config->src_y,
@@ -342,8 +345,11 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 		if (test_bit(DPP_ATTR_RCD, &dpp->attr)) {
 			if (new_plane_state->crtc) {
 				decon = crtc_to_decon(new_plane_state->crtc);
-				win_config = &decon->bts.rcd_config;
+				win_config = &decon->bts.rcd_win_config.win;
 				plane_state_to_win_config(win_config, new_plane_state);
+
+				decon->bts.rcd_win_config.dma_addr =
+					exynos_drm_fb_dma_addr(new_plane_state->fb, 0);
 			}
 			continue;
 		}
@@ -409,7 +415,7 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 			}
 
 			if (exynos_crtc->rcd_plane_mask == 0) {
-				win_config = &decon->bts.rcd_config;
+				win_config = &decon->bts.rcd_win_config.win;
 				win_config->state = DPU_WIN_STATE_DISABLED;
 			}
 		}

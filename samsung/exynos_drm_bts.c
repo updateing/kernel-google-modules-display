@@ -332,7 +332,8 @@ retry_hi_freq:
 }
 
 static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
-		struct dpu_bts_win_config *config, u64 resol_clk, u32 max_clk)
+				  const struct dpu_bts_win_config *config, u64 resol_clk,
+				  u32 max_clk)
 {
 	u64 aclk1_disp, aclk2_disp, aclk_base, aclk_disp_khz;
 	u32 ppc;
@@ -431,8 +432,8 @@ static u32 dpu_bts_calc_disp_with_full_size(struct decon_device *decon)
 		decon->bts.resol_clk);
 }
 
-static bool is_win_half_covered(struct dpu_bts_win_config *config0,
-		struct dpu_bts_win_config *config1)
+static bool is_win_half_covered(const struct dpu_bts_win_config *config0,
+				const struct dpu_bts_win_config *config1)
 {
 	u32 start_y0;
 	u32 start_y1, end_y1;
@@ -456,8 +457,8 @@ static bool is_win_half_covered(struct dpu_bts_win_config *config0,
 }
 
 static u32 dpu_bts_find_max_overlap_bw(struct decon_device *decon,
-		struct dpu_bts_win_config *win_config,
-		struct dpu_bts_win_config *rcd_config)
+				       const struct dpu_bts_win_config *win_config,
+				       const struct dpu_bts_win_config *rcd_config)
 {
 	int i, j;
 	u32 max_overlap_bw = 0;
@@ -504,8 +505,8 @@ static u32 dpu_bts_find_max_overlap_bw(struct decon_device *decon,
 }
 
 static u32 dpu_bts_find_max_disp_ch_bw(struct decon_device *decon,
-		struct dpu_bts_win_config *win_config,
-		struct dpu_bts_win_config *rcd_config)
+				       const struct dpu_bts_win_config *win_config,
+				       const struct dpu_bts_win_config *rcd_config)
 {
 	int i, j;
 	u32 disp_ch_bw[MAX_AXI_PORT];
@@ -570,8 +571,8 @@ static void dpu_bts_find_max_disp_freq(struct decon_device *decon)
 	u32 max_overlap_bw;
 	u32 max_disp_ch_bw;
 	u32 disp_op_freq = 0;
-	struct dpu_bts_win_config *win_config = decon->bts.win_config;
-	struct dpu_bts_win_config *rcd_config = &decon->bts.rcd_config;
+	const struct dpu_bts_win_config *win_config = decon->bts.win_config;
+	const struct dpu_bts_win_config *rcd_config = &decon->bts.rcd_win_config.win;
 
 	max_overlap_bw = dpu_bts_find_max_overlap_bw(decon, win_config, rcd_config);
 	max_disp_ch_bw = dpu_bts_find_max_disp_ch_bw(decon, win_config, rcd_config);
@@ -762,7 +763,7 @@ static void dpu_bts_calc_bw(struct decon_device *decon)
 	}
 
 	/* rcd bw calculation */
-	config = &decon->bts.rcd_config;
+	config = &decon->bts.rcd_win_config.win;
 	if (config->state == DPU_WIN_STATE_BUFFER) {
 		rcd_idx = config->dpp_ch;
 		dpu_bts_convert_config_to_info(&bts_info.rcddma, config);

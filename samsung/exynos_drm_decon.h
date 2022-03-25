@@ -87,6 +87,7 @@ struct dpu_bts_win_config {
 	u32 dst_h;
 	bool is_rot;
 	bool is_comp;
+	bool is_secure;
 	int dpp_ch;
 	u32 format;
 	u64 comp_src;
@@ -118,6 +119,11 @@ struct bts_decon_info {
 	u32 vclk; /* Khz */
 	u32 lcd_w;
 	u32 lcd_h;
+};
+
+struct decon_win_config {
+	struct dpu_bts_win_config win;
+	dma_addr_t dma_addr;
 };
 
 struct dpu_bts {
@@ -169,7 +175,7 @@ struct dpu_bts {
 
 	struct dpu_bts_win_config win_config[MAX_WIN_PER_DECON];
 	struct dpu_bts_win_config wb_config;
-	struct dpu_bts_win_config rcd_config;
+	struct decon_win_config rcd_win_config;
 	atomic_t delayed_update;
 };
 
@@ -294,14 +300,9 @@ struct dpu_log_rsc_occupancy {
 	u32 rsc_win;
 };
 
-struct decon_win_config {
-	struct dpu_bts_win_config win;
-	dma_addr_t dma_addr;
-};
-
 struct dpu_log_atomic {
 	struct decon_win_config win_config[MAX_WIN_PER_DECON];
-	struct dpu_bts_win_config rcd_config;
+	struct decon_win_config rcd_win_config;
 };
 
 /* Event log structure for DPU power domain status */

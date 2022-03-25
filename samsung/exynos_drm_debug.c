@@ -327,8 +327,8 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 		}
 	}
 
-	memcpy(&log->data.atomic.rcd_config, &decon->bts.rcd_config,
-		sizeof(struct dpu_bts_win_config));
+	memcpy(&log->data.atomic.rcd_win_config, &decon->bts.rcd_win_config,
+	       sizeof(log->data.atomic.rcd_win_config));
 
 	log->type = DPU_EVT_ATOMIC_COMMIT;
 }
@@ -392,16 +392,33 @@ DPU_EVENT_LOG_CMD(struct dsim_device *dsim, u8 type, u8 d0, u16 len)
 	log->type = DPU_EVT_DSIM_COMMAND;
 }
 
+static void dpu_print_log_win_config(const struct decon_win_config *const win_config, int index,
+				     bool is_rcd, struct drm_printer *p)
+{
+	static const char *const str_state[3] = { "DISABLED", "COLOR", "BUFFER" };
+	const struct dpu_bts_win_config *const win = &win_config->win;
+	const struct dpu_fmt *const fmt = dpu_find_fmt_info(win->format);
+
+	char buf[128];
+	int len = scnprintf(buf, sizeof(buf), "\t\t\t\t\t%s%d: %s[0x%llx] SRC[%d %d %d %d] %s%s%s",
+			    is_rcd ? "RCD" : "WIN", index, str_state[win->state],
+			    (win->state == DPU_WIN_STATE_BUFFER) ? win_config->dma_addr : 0,
+			    win->src_x, win->src_y, win->src_w, win->src_h,
+			    (win->is_comp) ? "AFBC " : "", (win->is_rot) ? "ROT " : "",
+			    (win->is_secure) ? "SECURE " : "");
+	len += scnprintf(buf + len, sizeof(buf) - len, "DST[%d %d %d %d] ", win->dst_x, win->dst_y,
+			 win->dst_w, win->dst_h);
+	if (win->state == DPU_WIN_STATE_BUFFER)
+		len += scnprintf(buf + len, sizeof(buf) - len, "CH%d", win->dpp_ch);
+
+	drm_printf(p, "%s %s %s\n", buf, dpu_get_fmt_name(fmt), get_comp_src_name(win->comp_src));
+}
+
 static void dpu_print_log_atomic(struct dpu_log_atomic *atomic,
 						struct drm_printer *p)
 {
 	int i;
-	struct dpu_bts_win_config *win;
-	char *str_state[3] = {"DISABLED", "COLOR", "BUFFER"};
-	const char *str_comp;
-	const struct dpu_fmt *fmt;
-	char buf[128];
-	int len;
+	const struct dpu_bts_win_config *win;
 
 	for (i = 0; i < MAX_WIN_PER_DECON; ++i) {
 		win = &atomic->win_config[i].win;
@@ -414,42 +431,12 @@ static void dpu_print_log_atomic(struct dpu_log_atomic *atomic,
 			pr_warn("%s: invalid win state %d\n", __func__, win->state);
 			continue;
 		}
-
-		fmt = dpu_find_fmt_info(win->format);
-
-		len = scnprintf(buf, sizeof(buf),
-				"\t\t\t\t\tWIN%d: %s[0x%llx] SRC[%d %d %d %d] %s %s ",
-				i, str_state[win->state],
-				(win->state == DPU_WIN_STATE_BUFFER) ?
-				atomic->win_config[i].dma_addr : 0,
-				win->src_x, win->src_y, win->src_w, win->src_h,
-				(win->is_comp) ? "AFBC" : "",
-				(win->is_rot) ? "ROT" : "");
-		len += scnprintf(buf + len, sizeof(buf) - len,
-				"DST[%d %d %d %d] ",
-				win->dst_x, win->dst_y, win->dst_w, win->dst_h);
-		if (win->state == DPU_WIN_STATE_BUFFER)
-			len += scnprintf(buf + len, sizeof(buf) - len, "CH%d ",
-					win->dpp_ch);
-
-		str_comp = get_comp_src_name(win->comp_src);
-		drm_printf(p, "%s %s %s\n", buf, fmt ? fmt->name : "Unknown", str_comp);
+		dpu_print_log_win_config(&atomic->win_config[i], i, false, p);
 	}
 
-	win = &atomic->rcd_config;
+	win = &atomic->rcd_win_config.win;
 	if (win->state == DPU_WIN_STATE_BUFFER) {
-		fmt = dpu_find_fmt_info(win->format);
-
-		len = scnprintf(buf, sizeof(buf),
-				"\t\t\t\t\t RCD: SRC[%d %d %d %d] ",
-				win->src_x, win->src_y, win->src_w, win->src_h);
-		len += scnprintf(buf + len, sizeof(buf) - len,
-				"DST[%d %d %d %d] ",
-				win->dst_x, win->dst_y, win->dst_w, win->dst_h);
-		len += scnprintf(buf + len, sizeof(buf) - len, "CH%d ",
-				win->dpp_ch);
-		str_comp = get_comp_src_name(win->comp_src);
-		drm_printf(p, "%s %s %s\n", buf, fmt ? fmt->name : "Unknown", str_comp);
+		dpu_print_log_win_config(&atomic->rcd_win_config, 0, true, p);
 	}
 }
 
@@ -744,14 +731,10 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_PLANE_PREPARE_FB:
 		case DPU_EVT_PLANE_CLEANUP_FB:
 			fmt = dpu_find_fmt_info(log->data.plane_info.format);
-			scnprintf(buf + len, sizeof(buf) - len,
-					"\tWIN%u: 0x%llx, %ux%u, CH%u, %s",
-					log->data.plane_info.zpos,
-					log->data.plane_info.dma_addr,
-					log->data.plane_info.width,
-					log->data.plane_info.height,
-					log->data.plane_info.index,
-					fmt ? fmt->name : "Unknown");
+			scnprintf(buf + len, sizeof(buf) - len, "\tWIN%u: 0x%llx, %ux%u, CH%u, %s",
+				  log->data.plane_info.zpos, log->data.plane_info.dma_addr,
+				  log->data.plane_info.width, log->data.plane_info.height,
+				  log->data.plane_info.index, dpu_get_fmt_name(fmt));
 			break;
 		case DPU_EVT_PLANE_UPDATE:
 		case DPU_EVT_PLANE_DISABLE:
