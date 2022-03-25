@@ -529,6 +529,8 @@ static void _dpp_disable(struct dpp_device *dpp)
 	if (dpp->is_win_connected) {
 		dpp->disable(dpp);
 		dpp->is_win_connected = false;
+	} else if (test_bit(DPP_ATTR_RCD, &dpp->attr)) {
+		dpp->disable(dpp);
 	}
 }
 
@@ -556,6 +558,7 @@ static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
 	if (test_bit(DPP_ATTR_RCD, &dpp->attr)) {
 		decon_debug(decon, "%s -\n", __func__);
 		dpp->update(dpp, exynos_plane_state);
+		dpp->win_id = MAX_WIN_PER_DECON;
 		return;
 	}
 
@@ -631,10 +634,8 @@ static void decon_disable_plane(struct exynos_drm_crtc *exynos_crtc,
 
 	decon_debug(decon, "%s +\n", __func__);
 
-	if (!test_bit(DPP_ATTR_RCD, &dpp->attr)) {
-		decon_disable_win(decon, dpp->win_id);
-		_dpp_disable(dpp);
-	}
+	decon_disable_win(decon, dpp->win_id);
+	_dpp_disable(dpp);
 
 	DPU_EVENT_LOG(DPU_EVT_PLANE_DISABLE, decon->id, dpp);
 	decon_debug(decon, "%s -\n", __func__);
