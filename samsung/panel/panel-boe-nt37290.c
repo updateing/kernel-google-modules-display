@@ -1060,8 +1060,26 @@ static void nt37290_set_hbm_mode(struct exynos_panel *ctx,
 static void nt37290_set_local_hbm_mode(struct exynos_panel *ctx,
 				       bool local_hbm_en)
 {
+	const struct exynos_panel_mode *pmode;
+
 	if (ctx->hbm.local_hbm.enabled == local_hbm_en)
 		return;
+
+	pmode = ctx->current_mode;
+	if (unlikely(pmode == NULL)) {
+		dev_err(ctx->dev, "%s: unknown current mode\n", __func__);
+		return;
+	}
+
+	if (local_hbm_en) {
+		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+		/* Add check to turn on LHBM @ 120hz only to comply with HW requirement */
+		if (vrefresh != 120) {
+			dev_err(ctx->dev, "unexpected mode `%s` while enabling LHBM, give up\n",
+				pmode->mode.name);
+			return;
+		}
+	}
 
 	ctx->hbm.local_hbm.enabled = local_hbm_en;
 
