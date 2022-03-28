@@ -365,7 +365,7 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 	aclk1_disp = (u64)(src_w * src_h * decon->bts.fps) *
 			decon->config.image_height / config->dst_h;
 	diff_w = (src_w <= config->dst_w) ? 0 : src_w - config->dst_w;
-	ratio_v = (src_h >= config->dst_h) ? 1 : mult_frac(src_h, 1000, config->dst_h);
+	ratio_v = (src_h >= config->dst_h) ? 1000 : mult_frac(src_h, 1000, config->dst_h);
 	aclk2_disp = (u64)((decon->config.image_width + diff_w) *
 			ratio_v + decon->config.image_width * (1000 - ratio_v));
 	aclk2_disp = mult_frac(aclk2_disp, decon->config.image_height * decon->bts.fps, 1000);
