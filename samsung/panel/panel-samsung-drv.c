@@ -3057,6 +3057,8 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	bool need_update_backlight = false;
 	bool is_active;
+	const bool is_lp_mode = ctx->current_mode &&
+				ctx->current_mode->exynos_mode.is_lp_mode;
 
 	mutex_lock(&ctx->mode_lock);
 	if (ctx->panel_state == PANEL_STATE_HANDOFF)
@@ -3069,19 +3071,14 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		drm_panel_enable(&ctx->panel);
 		need_update_backlight = true;
 	}
+	ctx->panel_state = is_lp_mode ? PANEL_STATE_LP : PANEL_STATE_NORMAL;
 
 	if (ctx->self_refresh_active) {
 		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
 
 		ctx->self_refresh_active = false;
-		ctx->panel_state = PANEL_STATE_NORMAL;
 		panel_update_idle_mode_locked(ctx);
 	} else {
-		const bool is_lp_mode = ctx->current_mode &&
-					ctx->current_mode->exynos_mode.is_lp_mode;
-
-		ctx->panel_state = is_lp_mode ? PANEL_STATE_LP : PANEL_STATE_NORMAL;
-
 		exynos_panel_set_backlight_state(ctx, ctx->panel_state);
 
 		/* For the case of OFF->AOD, TE2 will be updated in backlight_update_status */
@@ -3383,6 +3380,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 					panel_update_local_hbm_locked(ctx, false);
 				}
 				funcs->set_lp_mode(ctx, pmode);
+				ctx->panel_state = PANEL_STATE_LP;
 				need_update_backlight = true;
 			}
 			_exynos_panel_set_vddd_voltage(ctx, true);
@@ -3390,6 +3388,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 			_exynos_panel_set_vddd_voltage(ctx, false);
 			if (is_active && funcs->set_nolp_mode) {
 				funcs->set_nolp_mode(ctx, pmode);
+				ctx->panel_state = PANEL_STATE_NORMAL;
 				need_update_backlight = true;
 				state_changed = true;
 			}
