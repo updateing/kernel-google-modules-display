@@ -461,7 +461,7 @@ static u32 dpu_bts_find_max_overlap_bw(struct decon_device *decon,
 				       const struct dpu_bts_win_config *rcd_config)
 {
 	int i, j;
-	u32 max_overlap_bw = 0;
+	u32 max_overlap_bw = 0, rcd_max_overlap_bw = 0;
 
 	/* overlap rt bandwidth requirement */
 	/* TODO: take write rt bandwidth into account */
@@ -483,25 +483,28 @@ static u32 dpu_bts_find_max_overlap_bw(struct decon_device *decon,
 			}
 		}
 
-		if ((rcd_config->state == DPU_WIN_STATE_BUFFER) &&
-			is_win_half_covered(&win_config[i], rcd_config)) {
-			int dpp_ch = rcd_config->dpp_ch;
+		if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
+			int dpp_ch = win_config[i].dpp_ch;
+			int rcd_dpp_ch = rcd_config->dpp_ch;
 
-			overlap_bw += decon->bts.rt_bw[dpp_ch].val;
+			if (is_win_half_covered(&win_config[i], rcd_config))
+				overlap_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
+
+			if (is_win_half_covered(rcd_config, &win_config[i]))
+				rcd_max_overlap_bw += decon->bts.rt_bw[dpp_ch].val;
 		}
 
 		DPU_DEBUG_BTS("  Overlap BW%d = %u\n", i, overlap_bw);
 		max_overlap_bw = max(max_overlap_bw, overlap_bw);
 	}
 
-	/* if all windows are disabling and rcd is enabled, set to rcd rt bw */
-	if (max_overlap_bw == 0 && rcd_config->state == DPU_WIN_STATE_BUFFER) {
-		int dpp_ch = rcd_config->dpp_ch;
+	if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
+		int rcd_dpp_ch = rcd_config->dpp_ch;
 
-		max_overlap_bw = decon->bts.rt_bw[dpp_ch].val;
+		rcd_max_overlap_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
 	}
 
-	return max_overlap_bw;
+	return max(max_overlap_bw, rcd_max_overlap_bw);
 }
 
 static u32 dpu_bts_find_max_disp_ch_bw(struct decon_device *decon,
@@ -510,7 +513,7 @@ static u32 dpu_bts_find_max_disp_ch_bw(struct decon_device *decon,
 {
 	int i, j;
 	u32 disp_ch_bw[MAX_AXI_PORT];
-	u32 max_disp_ch_bw;
+	u32 max_disp_ch_bw, rcd_overlap_ch_bw = 0;
 
 	/* DPU AXI bandwidth requirement */
 	/* TODO: take write rt bandwidth into account */
@@ -535,20 +538,35 @@ static u32 dpu_bts_find_max_disp_ch_bw(struct decon_device *decon,
 			if (win_config[j].state != DPU_WIN_STATE_BUFFER)
 				continue;
 
-			if (decon->bts.rt_bw[dpp_ch].ch_num == ch_num &&
+			if (ch_num == decon->bts.rt_bw[dpp_ch].ch_num &&
 				(is_win_half_covered(&win_config[i], &win_config[j])))
 				overlap_ch_bw += decon->bts.rt_bw[dpp_ch].val;
 		}
 
-		if (rcd_config->state == DPU_WIN_STATE_BUFFER &&
-			is_win_half_covered(&win_config[i], rcd_config)) {
-			int dpp_ch = rcd_config->dpp_ch;
+		if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
+			int rcd_dpp_ch = rcd_config->dpp_ch;
 
-			if (ch_num == decon->bts.rt_bw[dpp_ch].ch_num)
-				overlap_ch_bw += decon->bts.rt_bw[dpp_ch].val;
+			if (ch_num == decon->bts.rt_bw[rcd_dpp_ch].ch_num) {
+				if (is_win_half_covered(&win_config[i], rcd_config))
+					overlap_ch_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
+
+				if (is_win_half_covered(rcd_config, &win_config[i]))
+					rcd_overlap_ch_bw += decon->bts.rt_bw[dpp_ch].val;
+			}
 		}
-
 		disp_ch_bw[ch_num] = max(disp_ch_bw[ch_num], overlap_ch_bw);
+	}
+
+	if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
+		int rcd_dpp_ch = rcd_config->dpp_ch;
+		u32 rcd_ch_num = decon->bts.rt_bw[rcd_dpp_ch].ch_num;
+
+		if (rcd_ch_num >= MAX_AXI_PORT) {
+			pr_err("invalid RCD AXI channel number %u\n", rcd_ch_num);
+		} else {
+			rcd_overlap_ch_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
+			disp_ch_bw[rcd_ch_num] = max(disp_ch_bw[rcd_ch_num], rcd_overlap_ch_bw);
+		}
 	}
 
 	/* must be considered other decon's bw */
