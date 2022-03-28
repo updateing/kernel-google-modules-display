@@ -56,4 +56,12 @@ config DRM_SAMSUNG_WB
 	  This means that both writeback and LCD display can be operated
 	  simultaneously.
 
+config DRM_SAMSUNG_DP
+	bool "DP on Exynos"
+	depends on DRM_SAMSUNG_DECON
+	default n
+	help
+	  This enables support for Exynos DisplayPort device. It will encode
+	  data as DP standard and transfer to the DP Dongle(USB type C to DP) or monitor.
+
 endif

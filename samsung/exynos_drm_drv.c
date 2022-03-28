@@ -978,7 +978,14 @@ static struct exynos_drm_driver_info exynos_drm_drivers[] = {
 	}, {
 		DRV_PTR(dsim_driver, CONFIG_DRM_SAMSUNG_DSI),
 		DRM_COMPONENT_DRIVER
-	}, {
+	},
+#if IS_ENABLED(CONFIG_DRM_SAMSUNG_DP)
+	{
+		DRV_PTR(dp_driver, CONFIG_DRM_SAMSUNG_DP),
+		DRM_COMPONENT_DRIVER
+	},
+#endif
+	{
 		DRV_PTR(tui_driver, CONFIG_DRM_SAMSUNG_TUI),
 		DRM_VIRTUAL_DEVICE
 	}, {
