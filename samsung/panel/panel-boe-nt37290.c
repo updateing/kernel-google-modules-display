@@ -585,25 +585,38 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 					 "Unsupported vrefresh %dHz for manual mode\n", vrefresh);
 		/* auto frame insertion on */
 		} else {
-			/* two 120Hz frames are removed after EVT1.1 */
-			u8 val = (ctx->panel_rev >= PANEL_REV_EVT1_1) ? 0x91 : 0x93;
+			if (vrefresh == 60) {
+				if (idle_vrefresh == 10)
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBA, 0x91, 0x09, 0x03, 0x00, 0x11,
+							   0x0B, 0x0B, 0x00, 0x06);
+				else if (idle_vrefresh == 30)
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBA, 0x91, 0x03, 0x02, 0x00, 0x11,
+							   0x03, 0x03, 0x00, 0x04);
+				else
+					dev_warn(ctx->dev,
+						 "Unsupported idle_vrefresh %dHz for auto mode\n",
+						 idle_vrefresh);
+			} else if (vrefresh == 120) {
+				/* two 120Hz frames are removed after EVT1.1 */
+				u8 val = (ctx->panel_rev >= PANEL_REV_EVT1_1) ? 0x91 : 0x93;
 
-			if (idle_vrefresh == 10)
-				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBA, val, 0x09, 0x03, 0x00, 0x31, 0x0B, 0x0B,
-					0x00, 0x06);
-			else if (idle_vrefresh == 30)
-				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBA, val, 0x03, 0x02, 0x00, 0x11, 0x03, 0x03,
-					0x00, 0x04);
-			else if (idle_vrefresh == 60)
-				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBA, 0x93, 0x01, 0x01, 0x00, 0x01, 0x01, 0x01,
-					0x00, 0x00);
-			else
-				dev_warn(ctx->dev,
-					 "Unsupported idle_vrefresh %dHz for auto mode\n",
-					 idle_vrefresh);
+				if (idle_vrefresh == 10)
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBA, val, 0x09, 0x03, 0x00, 0x31,
+							   0x0B, 0x0B, 0x00, 0x06);
+				else if (idle_vrefresh == 30)
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBA, val, 0x03, 0x02, 0x00, 0x11,
+							   0x03, 0x03, 0x00, 0x04);
+				else if (idle_vrefresh == 60)
+					EXYNOS_DCS_BUF_ADD(ctx, 0xBA, 0x93, 0x01, 0x01, 0x00, 0x01,
+							   0x01, 0x01, 0x00, 0x00);
+				else
+					dev_warn(ctx->dev,
+						 "Unsupported idle_vrefresh %dHz for auto mode\n",
+						 idle_vrefresh);
+			} else {
+				dev_warn(ctx->dev, "Unsupported vrefresh %dHz for auto mode\n",
+					 vrefresh);
+			}
 		}
 
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2C);
@@ -1317,7 +1330,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_UNSUPPORTED,
+		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
 		/* 1440x3120 @ 120Hz */
@@ -1377,7 +1390,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_UNSUPPORTED,
+		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
 		/* 1080x2340 @ 120Hz */
