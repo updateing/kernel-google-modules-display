@@ -162,6 +162,7 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	const struct exynos_dqe *dqe = decon->dqe;
 	uint32_t max_bpc;
 	uint32_t rcd_mask;
+	uint32_t dpp_mask;
 
 	DRM_DEBUG("%s +\n", __func__);
 
@@ -224,6 +225,7 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	if (decon->rcd) {
 		new_exynos_state->dqe.rcd_enabled = false;
 		rcd_mask = crtc_state->plane_mask & exynos_crtc->rcd_plane_mask;
+		dpp_mask = crtc_state->plane_mask & ~exynos_crtc->rcd_plane_mask;
 
 		if (rcd_mask) {
 			drm_atomic_crtc_state_for_each_plane_state(plane, plane_state, crtc_state) {
@@ -233,6 +235,8 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 				}
 			}
 		}
+		if (rcd_mask && !dpp_mask)
+			new_exynos_state->skip_update = true;
 	}
 
 	DRM_DEBUG("%s -\n", __func__);
