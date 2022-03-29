@@ -1432,7 +1432,7 @@ const struct brightness_capability s6e3hc4_brightness_capability = {
 			.max = 1000,
 		},
 		.level = {
-			.min = 2252,
+			.min = 2457,
 			.max = 4095,
 		},
 		.percentage = {
