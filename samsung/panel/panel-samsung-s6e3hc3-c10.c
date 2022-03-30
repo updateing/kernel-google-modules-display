@@ -719,7 +719,7 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 	const struct drm_display_mode *mode;
-	const bool needs_reset = ctx->panel_state != PANEL_STATE_BLANK;
+	const bool needs_reset = !is_panel_enabled(ctx);
 	bool is_fhd;
 
 	if (!pmode) {

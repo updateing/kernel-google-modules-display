@@ -92,6 +92,7 @@
  * @PANEL_STATE_OFF: Panel is fully disabled and powered off
  * @PANEL_STATE_NORMAL: Panel is ON in Normal operating mode
  * @PANEL_STATE_LP: Panel is ON in Low Power mode
+ * @PANEL_STATE_MODESET: Going through modeset, where panel gets disable/enable calls with new mode
  * @PANEL_STATE_BLANK: Panel is ON but no contents are shown on display
  */
 enum exynos_panel_state {
@@ -101,6 +102,7 @@ enum exynos_panel_state {
 	PANEL_STATE_OFF,
 	PANEL_STATE_NORMAL,
 	PANEL_STATE_LP,
+	PANEL_STATE_MODESET,
 	PANEL_STATE_BLANK,
 };
 
@@ -602,6 +604,14 @@ struct exynos_panel {
 	} hbm;
 };
 
+/**
+ * is_panel_active - indicates whether the display is in interactive mode
+ * @ctx: panel struct
+ *
+ * Indicates whether the panel is on and showing display contents. Typically any operations such as
+ * backlight, hbm, mode updates, etc on the panel while in this mode should be reflected instantly
+ * or on next vsync.
+ */
 static inline bool is_panel_active(const struct exynos_panel *ctx)
 {
 	switch (ctx->panel_state) {
@@ -611,6 +621,7 @@ static inline bool is_panel_active(const struct exynos_panel *ctx)
 	case PANEL_STATE_UNINITIALIZED:
 	case PANEL_STATE_HANDOFF:
 	case PANEL_STATE_HANDOFF_MODESET:
+	case PANEL_STATE_MODESET:
 	case PANEL_STATE_BLANK:
 	case PANEL_STATE_OFF:
 	default:
@@ -618,11 +629,29 @@ static inline bool is_panel_active(const struct exynos_panel *ctx)
 	}
 }
 
+/**
+ * is_panel_initialized - indicates whether the display has been initialized at least once
+ * @ctx: panel struct
+ *
+ * Indicates whether thepanel has been initialized at least once. Certain data such as panel
+ * revision is only accurate after display initialization.
+ */
 static inline bool is_panel_initialized(const struct exynos_panel *ctx)
 {
 	return ctx->panel_state != PANEL_STATE_UNINITIALIZED &&
 	       ctx->panel_state != PANEL_STATE_HANDOFF &&
 	       ctx->panel_state != PANEL_STATE_HANDOFF_MODESET;
+}
+
+/**
+ * is_panel_enabled - indicates whether the display is powered on
+ * @ctx: panel struct
+ *
+ * Indicates whether panel is powered up even if not fully initialized or in completely active mode.
+ */
+static inline bool is_panel_enabled(const struct exynos_panel *ctx)
+{
+	return ctx->panel_state != PANEL_STATE_OFF && ctx->panel_state != PANEL_STATE_UNINITIALIZED;
 }
 
 static inline int exynos_dcs_write(struct exynos_panel *ctx, const void *data,

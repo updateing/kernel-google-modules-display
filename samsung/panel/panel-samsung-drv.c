@@ -2905,6 +2905,8 @@ static unsigned long get_backlight_state_from_panel(struct backlight_device *bl,
 		state &= ~(BL_STATE_STANDBY);
 		state |= BL_STATE_LP;
 		break;
+	case PANEL_STATE_MODESET: /* no change */
+		break;
 	case PANEL_STATE_OFF:
 	case PANEL_STATE_BLANK:
 	default:
@@ -3071,7 +3073,7 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		is_active = !exynos_panel_init(ctx);
 	} else if (ctx->panel_state == PANEL_STATE_HANDOFF_MODESET) {
 		if (!exynos_panel_init(ctx)) {
-			ctx->panel_state = PANEL_STATE_BLANK;
+			ctx->panel_state = PANEL_STATE_MODESET;
 			mutex_unlock(&ctx->mode_lock);
 			drm_panel_disable(&ctx->panel);
 			mutex_lock(&ctx->mode_lock);
@@ -3148,16 +3150,12 @@ static void exynos_panel_bridge_pre_enable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 
-	if (is_panel_active(ctx) || (ctx->panel_state == PANEL_STATE_HANDOFF) ||
-	    (ctx->panel_state == PANEL_STATE_HANDOFF_MODESET))
-		return;
-
 	if (ctx->panel_state == PANEL_STATE_BLANK) {
 		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 
 		if (funcs && funcs->panel_reset)
 			funcs->panel_reset(ctx);
-	} else {
+	} else if (!is_panel_enabled(ctx)) {
 		drm_panel_prepare(&ctx->panel);
 	}
 }
@@ -3178,9 +3176,10 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
-		if ((crtc_state && crtc_state->mode_changed &&
-		    drm_atomic_crtc_effectively_active(crtc_state)) ||
-		    ctx->force_power_on)
+		if (crtc_state && crtc_state->mode_changed &&
+		    drm_atomic_crtc_effectively_active(crtc_state))
+			ctx->panel_state = PANEL_STATE_MODESET;
+		else if (ctx->force_power_on)
 			ctx->panel_state = PANEL_STATE_BLANK;
 		else
 			ctx->panel_state = PANEL_STATE_OFF;
@@ -3195,7 +3194,7 @@ static void exynos_panel_bridge_post_disable(struct drm_bridge *bridge,
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 
 	/* fully power off only if panel is in full off mode */
-	if (ctx->panel_state == PANEL_STATE_OFF)
+	if (!is_panel_enabled(ctx))
 		drm_panel_unprepare(&ctx->panel);
 
 	exynos_panel_set_backlight_state(ctx, ctx->panel_state);
