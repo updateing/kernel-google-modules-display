@@ -44,11 +44,17 @@ static unsigned int dpu_event_log_max = 1024;
 static unsigned int dpu_event_print_max = 512;
 static unsigned int dpu_event_print_underrun = 128;
 static unsigned int dpu_event_print_fail_update_bw = 32;
+static unsigned int dpu_debug_dump_mask = DPU_EVT_CONDITION_DEFAULT |
+	DPU_EVT_CONDITION_UNDERRUN | DPU_EVT_CONDITION_FAIL_UPDATE_BW |
+	DPU_EVT_CONDITION_FIFO_TIMEOUT;
 
 module_param_named(event_log_max, dpu_event_log_max, uint, 0);
 module_param_named(event_print_max, dpu_event_print_max, uint, 0600);
+module_param_named(debug_dump_mask, dpu_debug_dump_mask, uint, 0600);
+
 MODULE_PARM_DESC(event_log_max, "entry count of event log buffer array");
 MODULE_PARM_DESC(event_print_max, "print entry count of event log buffer");
+MODULE_PARM_DESC(debug_dump_mask, "mask for dump debug event log");
 
 /* If event are happened continuously, then ignore */
 static bool dpu_event_ignore
@@ -530,7 +536,7 @@ static const char *get_event_name(enum dpu_event_type type)
 
 static bool is_skip_dpu_event_dump(enum dpu_event_type type, enum dpu_event_condition condition)
 {
-	if (condition == DPU_EVT_CONDITION_ALL)
+	if (condition == DPU_EVT_CONDITION_DEFAULT)
 		return false;
 
 	if (condition == DPU_EVT_CONDITION_UNDERRUN) {
@@ -827,7 +833,7 @@ static int dpu_debug_event_show(struct seq_file *s, void *unused)
 	struct decon_device *decon = s->private;
 	struct drm_printer p = drm_seq_file_printer(s);
 
-	dpu_event_log_print(decon, &p, dpu_event_log_max, DPU_EVT_CONDITION_ALL);
+	dpu_event_log_print(decon, &p, dpu_event_log_max, DPU_EVT_CONDITION_DEFAULT);
 	return 0;
 }
 
@@ -1736,22 +1742,31 @@ void dpu_print_hex_dump(void __iomem *regs, const void *buf, size_t len)
 	}
 }
 
+static bool decon_dump_ignore(enum dpu_event_condition condition)
+{
+	return !(dpu_debug_dump_mask & condition);
+}
+
 void decon_dump_all(struct decon_device *decon,
-		enum dpu_event_condition cond, bool async_buf_dump)
+		enum dpu_event_condition condition, bool async_buf_dump)
 {
 	bool active = pm_runtime_active(decon->dev);
 	struct kthread_worker *worker = &decon->worker;
 
 	pr_info("DPU power %s state\n", active ? "on" : "off");
 
-	if ((cond == DPU_EVT_CONDITION_ALL) || (cond == DPU_EVT_CONDITION_IDMA_ERROR)) {
+	if (decon_dump_ignore(condition))
+		return;
+
+	if ((condition == DPU_EVT_CONDITION_DEFAULT) ||
+		(condition == DPU_EVT_CONDITION_IDMA_ERROR)) {
 		if (async_buf_dump)
 			kthread_queue_work(worker, &decon->buf_dump_work);
 		else
 			buf_dump_all(decon);
 	}
 
-	decon_dump_event_condition(decon, cond);
+	decon_dump_event_condition(decon, condition);
 
 	if (active)
 		decon_dump(decon);
@@ -1763,6 +1778,9 @@ void decon_dump_event_condition(const struct decon_device *decon,
 	struct drm_printer p = drm_info_printer(decon->dev);
 	u32 print_log_size;
 
+	if (decon_dump_ignore(condition))
+		return;
+
 	switch (condition) {
 	case DPU_EVT_CONDITION_UNDERRUN:
 	case DPU_EVT_CONDITION_FIFO_TIMEOUT:
@@ -1772,7 +1790,7 @@ void decon_dump_event_condition(const struct decon_device *decon,
 	case DPU_EVT_CONDITION_FAIL_UPDATE_BW:
 		print_log_size = dpu_event_print_fail_update_bw;
 		break;
-	case DPU_EVT_CONDITION_ALL:
+	case DPU_EVT_CONDITION_DEFAULT:
 	default:
 		print_log_size = dpu_event_print_max;
 		break;
@@ -1805,7 +1823,7 @@ int dpu_itmon_notifier(struct notifier_block *nb, unsigned long act, void *data)
 		pr_info("%s: port: %s, dest: %s\n", __func__,
 				itmon_data->port, itmon_data->dest);
 
-		decon_dump_all(decon, DPU_EVT_CONDITION_ALL, true);
+		decon_dump_all(decon, DPU_EVT_CONDITION_DEFAULT, true);
 
 		decon->itmon_notified = true;
 		return NOTIFY_OK;

@@ -1257,7 +1257,7 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 
 			atomic_set(&decon->frames_pending, 0);
 			if (!recovering)
-				decon_dump_all(decon, DPU_EVT_CONDITION_ALL, false);
+				decon_dump_all(decon, DPU_EVT_CONDITION_DEFAULT, false);
 
 			decon_force_vblank_event(decon);
 
@@ -1298,7 +1298,7 @@ static int dpu_sysmmu_fault_handler(struct iommu_fault *fault, void *data)
 
 	decon_warn(decon, "%s +\n", __func__);
 
-	decon_dump_all(decon, DPU_EVT_CONDITION_ALL, false);
+	decon_dump_all(decon, DPU_EVT_CONDITION_DEFAULT, false);
 
 	return 0;
 }
