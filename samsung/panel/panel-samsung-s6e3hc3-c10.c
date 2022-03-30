@@ -739,14 +739,15 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0x9D, 0x01);
 	EXYNOS_PPS_WRITE_BUF(ctx, is_fhd ? FHD_PPS_SETTING : WQHD_PPS_SETTING);
 
-	if (needs_reset)
+	if (needs_reset) {
 		EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, 120, 0x11); /* sleep out: 120ms delay */
 
-	exynos_panel_send_cmd_set(ctx, &s6e3hc3_c10_init_cmd_set);
+		exynos_panel_send_cmd_set(ctx, &s6e3hc3_c10_init_cmd_set);
+	}
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, is_fhd ? 0x0D : 0x0C);
-	EXYNOS_DCS_BUF_ADD_SET(ctx, lock_cmd_f0);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 
 	s6e3hc3_c10_update_panel_feat(ctx, pmode, true);
 	s6e3hc3_c10_write_display_mode(ctx, mode); /* dimming and HBM */
@@ -755,7 +756,7 @@ static int s6e3hc3_c10_enable(struct drm_panel *panel)
 
 	if (pmode->exynos_mode.is_lp_mode)
 		exynos_panel_set_lp_mode(ctx, pmode);
-	else
+	else if (needs_reset || (ctx->panel_state == PANEL_STATE_BLANK))
 		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
 
 	return 0;
@@ -766,6 +767,10 @@ static int s6e3hc3_c10_disable(struct drm_panel *panel)
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	int ret;
+
+	/* skip disable sequence if going through modeset */
+	if (ctx->panel_state == PANEL_STATE_MODESET)
+		return 0;
 
 	ret = exynos_panel_disable(panel);
 	if (ret)
