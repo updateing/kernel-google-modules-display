@@ -757,8 +757,8 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 	else if (old_exynos_crtc_state->wb_type == EXYNOS_WB_CWB)
 		decon_reg_set_cwb_enable(decon->id, false);
 
-	/* if there are no planes attached, enable colormap as fallback */
-	if (new_crtc_state->plane_mask == 0) {
+	/* if there are no dpp planes attached, enable colormap as fallback */
+	if ((new_crtc_state->plane_mask & ~exynos_crtc->rcd_plane_mask) == 0) {
 		const int win_id = decon_get_win_id(new_crtc_state, 0);
 
 		if (win_id < 0) {
