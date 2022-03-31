@@ -844,13 +844,12 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 			delay += 10;
 
 		EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, delay, MIPI_DCS_EXIT_SLEEP_MODE);
+		exynos_panel_send_cmd_set(ctx, &s6e3hc4_init_cmd_set);
 	}
-
-	exynos_panel_send_cmd_set(ctx, &s6e3hc4_init_cmd_set);
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, is_fhd ? 0x0D : 0x0C);
-	EXYNOS_DCS_BUF_ADD_SET(ctx, lock_cmd_f0);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 
 	s6e3hc4_update_panel_feat(ctx, pmode, true);
 	s6e3hc4_write_display_mode(ctx, mode); /* dimming and HBM */
@@ -858,7 +857,7 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 
 	if (pmode->exynos_mode.is_lp_mode)
 		exynos_panel_set_lp_mode(ctx, pmode);
-	else
+	else if (needs_reset || (ctx->panel_state == PANEL_STATE_BLANK))
 		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
 
 	return 0;
@@ -869,6 +868,10 @@ static int s6e3hc4_disable(struct drm_panel *panel)
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	struct s6e3hc4_panel *spanel = to_spanel(ctx);
 	int ret;
+
+	/* skip disable sequence if going through modeset */
+	if (ctx->panel_state == PANEL_STATE_MODESET)
+		return 0;
 
 	ret = exynos_panel_disable(panel);
 	if (ret)
