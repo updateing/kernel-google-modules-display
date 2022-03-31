@@ -382,6 +382,60 @@ static const struct drm_private_state_funcs exynos_priv_state_funcs = {
 	.atomic_destroy_state = exynos_atomic_destroy_priv_state,
 };
 
+static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
+				      struct drm_atomic_state *state,
+				      bool pre_swap)
+{
+	struct drm_plane *plane;
+	struct drm_plane_state *new_plane_state;
+	int i, ret, err = 0;
+
+	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
+		struct dma_fence *fence = new_plane_state->fence;
+
+		if (!fence)
+			continue;
+
+		WARN_ON(!new_plane_state->fb);
+		ret = dma_fence_wait_timeout(fence, pre_swap, 10 * HZ);
+		if (ret == 0) {
+			pr_err("%s: timeout of waiting for plane buffer dma fence\n",
+				__func__);
+			pr_err("%s: plane: %s crtc(%d,%d,%d,%d) src(%d,%d,%d,%d)\n",
+				__func__, plane->name ? : "NA",
+				new_plane_state->crtc_x, new_plane_state->crtc_y,
+				new_plane_state->crtc_w, new_plane_state->crtc_h,
+				new_plane_state->src_x, new_plane_state->src_y,
+				new_plane_state->src_w, new_plane_state->src_h);
+
+			spin_lock_irq(fence->lock);
+			pr_err("%s: fence: %s-%s %llu-%llu status:%s\n",
+				__func__, fence->ops ? fence->ops->get_driver_name(fence) : "none",
+				fence->ops ? fence->ops->get_timeline_name(fence) : "none",
+				fence->context, fence->seqno,
+				dma_fence_get_status_locked(fence) < 0 ? "error" : "active");
+			if (test_bit(DMA_FENCE_FLAG_TIMESTAMP_BIT, &fence->flags)) {
+				struct timespec64 ts64 = ktime_to_timespec64(fence->timestamp);
+				pr_err("%s: fence: timestamp:%lld.%09ld\n", __func__,
+					(s64)ts64.tv_sec, ts64.tv_nsec);
+			}
+			if (fence->error)
+				pr_err("%s: fence: err=%d\n", __func__, fence->error);
+			spin_unlock_irq(fence->lock);
+
+			err = -ETIMEDOUT;
+		} else if (ret < 0) {
+			pr_err("%s: error of waiting for dma fence, ret=%d\n", __func__, ret);
+			dma_fence_put(fence);
+			return ret;
+		}
+		dma_fence_put(fence);
+		new_plane_state->fence = NULL;
+	}
+
+	return err;
+}
+
 static void commit_tail(struct drm_atomic_state *old_state)
 {
 	struct drm_device *dev = old_state->dev;
@@ -390,7 +444,7 @@ static void commit_tail(struct drm_atomic_state *old_state)
 	funcs = dev->mode_config.helper_private;
 
 	DPU_ATRACE_BEGIN("wait_for_fences");
-	drm_atomic_helper_wait_for_fences(dev, old_state, false);
+	WARN_ON(exynos_atomic_helper_wait_for_fences(dev, old_state, false));
 	DPU_ATRACE_END("wait_for_fences");
 
 	drm_atomic_helper_wait_for_dependencies(old_state);
