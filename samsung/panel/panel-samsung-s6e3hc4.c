@@ -171,6 +171,7 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_low_cmds[] = {
 	/* AOD low Mode, 10 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
 	EXYNOS_DSI_CMD_SEQ(0x94, 0x01, 0x07, 0x98, 0x02),
+	EXYNOS_DSI_CMD_SEQ(0x51, 0x00, 0x01),
 	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
 	EXYNOS_DSI_CMD0(display_on),
 };
@@ -182,6 +183,7 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_high_cmds[] = {
 	/* AOD high Mode, 50 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
 	EXYNOS_DSI_CMD_SEQ(0x94, 0x00, 0x07, 0x98, 0x02),
+	EXYNOS_DSI_CMD_SEQ(0x51, 0x00, 0x01),
 	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
 	EXYNOS_DSI_CMD0(display_on),
 };
@@ -757,6 +759,9 @@ static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 {
 	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 	u32 delay_us = mult_frac(1000, 1020, vrefresh);
+
+	/* clear the brightness level */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0x51, 0x00, 0x00);
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
 	/* AOD low mode setting off */
