@@ -92,6 +92,9 @@ static const struct exynos_dsi_cmd s6e3fc3_p10_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x09, 0x5F), /* PASET */
 
 	EXYNOS_DSI_CMD0(test_key_on_f0),
+	/* TE width */
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x01, 0x09, 0x5C, 0x00, 0x0B),
+
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00), /* FQ CON */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x0E, 0xF2), /* Global Para */
@@ -165,6 +168,7 @@ static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_lhbm_location);
 
 static const struct exynos_dsi_cmd s6e3fc3_p10_mode_ns_60_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_on_f0),
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x00), /* TE width (default) */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0x80), /* FQ CON */
 	EXYNOS_DSI_CMD_SEQ(0x60, 0x00), /* 60 hz NS */
@@ -198,6 +202,9 @@ static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_mode_ns_60);
 
 static const struct exynos_dsi_cmd s6e3fc3_p10_mode_hs_60_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_on_f0),
+	/* TE width */
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x01, 0x09, 0x5C, 0x00, 0x0B),
+
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00), /* FQ CON */
 	EXYNOS_DSI_CMD_SEQ(0x60, 0x00), /* 60 hz HS */
@@ -224,6 +231,9 @@ static DEFINE_EXYNOS_CMD_SET(s6e3fc3_p10_mode_hs_60);
 
 static const struct exynos_dsi_cmd s6e3fc3_p10_mode_hs_90_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_on_f0),
+	/* TE width */
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x01, 0x09, 0x5C, 0x00, 0x0B),
+
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2), /* Global Para */
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00), /* FQ CON */
 	EXYNOS_DSI_CMD_SEQ(0x60, 0x08), /* 90 hz HS */
@@ -719,7 +729,7 @@ static const struct exynos_panel_mode s6e3fc3_p10_modes[] = {
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
-			.te_usec = 5673,
+			.te_usec = 5760,
 			.bpc = 8,
 			.dsc = {
 				.enabled = true,
@@ -753,7 +763,7 @@ static const struct exynos_panel_mode s6e3fc3_p10_modes[] = {
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
-			.te_usec = 144,
+			.te_usec = 215,
 			.bpc = 8,
 			.dsc = {
 				.enabled = true,
