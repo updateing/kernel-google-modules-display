@@ -15,6 +15,7 @@
 #include <dp_cal.h>
 
 #include "regs-dp.h"
+#include "regs-usbdpphy.h"
 
 /* DP register access functions */
 static struct cal_regs_desc regs_dp[REGS_DP_TYPE_MAX][SST_MAX];
@@ -27,6 +28,15 @@ static struct cal_regs_desc regs_dp[REGS_DP_TYPE_MAX][SST_MAX];
 #define dp_write_mask(id, offset, val, mask)                                   \
 	cal_write_mask(dp_regs_desc(id), offset, val, mask)
 
+#define dp_phy_regs_desc(id)	(&regs_dp[REGS_PHY][id])
+#define dp_phy_read(id, offset) cal_read(dp_phy_regs_desc(id), offset)
+#define dp_phy_write(id, offset, val)                                          \
+	cal_write(dp_phy_regs_desc(id), offset, val)
+#define dp_phy_read_mask(id, offset, mask)                                     \
+	cal_read_mask(dp_phy_regs_desc(id), offset, mask)
+#define dp_phy_write_mask(id, offset, val, mask)                               \
+	cal_write_mask(dp_phy_regs_desc(id), offset, val, mask)
+
 /* DP memory map interface */
 void dp_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 		       enum dp_regs_type type, unsigned int id)
@@ -38,6 +48,172 @@ void dp_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 /*
  * USBDP Combo PHY Control Functions
  */
+
+/* USBDP PHY Common Registers */
+static void dpphy_reg_reset(u32 en)
+{
+	dp_phy_write_mask(SST1, CMN_REG00BD, DP_INIT_RSTN_SET(~en),
+			  DP_INIT_RSTN_MASK);
+	udelay(2);
+	dp_phy_write_mask(SST1, CMN_REG00BD, DP_CMN_RSTN_SET(~en),
+			  DP_CMN_RSTN_MASK);
+	udelay(2);
+}
+
+static void dpphy_reg_set_default_config(struct dp_hw_config *hw_config)
+{
+	dp_phy_write_mask(SST1, CMN_REG0008, OVRD_AUX_DISABLE,
+			  OVRD_AUX_EN_MASK);
+
+	/* DP Default Settings */
+	dp_phy_write_mask(SST1, CMN_REG0189, DP_TX_CLK_INV_RBR_SET(15),
+			  DP_TX_CLK_INV_RBR_MASK);
+	dp_phy_write_mask(SST1, CMN_REG0189, DP_TX_CLK_INV_HBR_SET(15),
+			  DP_TX_CLK_INV_HBR_MASK);
+	dp_phy_write_mask(SST1, CMN_REG018A, DP_TX_CLK_INV_HBR2_SET(15),
+			  DP_TX_CLK_INV_HBR2_MASK);
+	dp_phy_write_mask(SST1, CMN_REG018A, DP_TX_CLK_INV_HBR3_SET(15),
+			  DP_TX_CLK_INV_HBR3_MASK);
+	dp_phy_write_mask(SST1, CMN_REG005E, ANA_ROPLL_ANA_VCI_SEL_SET(1),
+			  ANA_ROPLL_ANA_VCI_SEL_MASK);
+
+	/* ROPLL for DP Settings for 19.2MHz Ref.Clk */
+	// ROPLL_PMS_MDIV
+	dp_phy_write(SST1, CMN_REG0066, 0xD4);
+	dp_phy_write(SST1, CMN_REG0067, 0x8E);
+	dp_phy_write(SST1, CMN_REG0068, 0x8E);
+	dp_phy_write(SST1, CMN_REG0069, 0xD4);
+	// ROPLL_PMS_MDIV_AFC
+	dp_phy_write(SST1, CMN_REG006C, 0xD4);
+	dp_phy_write(SST1, CMN_REG006D, 0x8E);
+	dp_phy_write(SST1, CMN_REG006E, 0x8E);
+	dp_phy_write(SST1, CMN_REG006F, 0xD4);
+	// ROPLL_SDM_DENOMINATOR
+	dp_phy_write(SST1, CMN_REG007B, 0x2C);
+	dp_phy_write(SST1, CMN_REG007C, 0x14);
+	dp_phy_write(SST1, CMN_REG007D, 0x14);
+	dp_phy_write(SST1, CMN_REG007E, 0x2C);
+	// ROPLL_SDM_NUMERATOR
+	dp_phy_write(SST1, CMN_REG0082, 0x11);
+	dp_phy_write(SST1, CMN_REG0083, 0x0A);
+	dp_phy_write(SST1, CMN_REG0084, 0x0A);
+	dp_phy_write(SST1, CMN_REG0085, 0x11);
+	// ROPLL_SDC_N
+	dp_phy_write(SST1, CMN_REG0087, 0x01);
+	dp_phy_write(SST1, CMN_REG0088, 0x00);
+	dp_phy_write(SST1, CMN_REG0089, 0x03);
+	// ROPLL_SDC_NUMERATOR
+	dp_phy_write(SST1, CMN_REG008C, 0x02);
+	dp_phy_write(SST1, CMN_REG008D, 0x09);
+	dp_phy_write(SST1, CMN_REG008E, 0x09);
+	dp_phy_write(SST1, CMN_REG008F, 0x02);
+	// ROPLL_SDC_DENOMINATOR
+	dp_phy_write(SST1, CMN_REG0092, 0x0A);
+	dp_phy_write(SST1, CMN_REG0093, 0x14);
+	dp_phy_write(SST1, CMN_REG0094, 0x14);
+	dp_phy_write(SST1, CMN_REG0095, 0x0A);
+
+	if (hw_config->use_ssc) {
+		// ROPLL_SSC_FM_DEVIATION
+		// ROPLL_SSC_FM_FREQ
+	}
+}
+
+static void dpphy_reg_set_link_bw(enum dp_link_rate_type link_rate)
+{
+	dp_phy_write_mask(SST1, CMN_REG00B9, DP_TX_LINK_BW_SET(link_rate),
+			  DP_TX_LINK_BW_MASK);
+}
+
+static void dpphy_reg_set_lane_config(struct dp_hw_config *hw_config)
+{
+	u32 lane_mux_config = 0;
+	u32 lane_en_config = 0;
+	u32 lane1_config = 0;
+	u32 lane3_config = 0;
+
+	switch (hw_config->pin_type) {
+	case PIN_TYPE_A:
+	case PIN_TYPE_C:
+	case PIN_TYPE_E:
+		/* 4 Lanes Mode Configuration */
+		lane_mux_config = LANE_MUX_SEL_DP_LN3 | LANE_MUX_SEL_DP_LN2 |
+				  LANE_MUX_SEL_DP_LN1 | LANE_MUX_SEL_DP_LN0;
+		lane_en_config = DP_LANE_EN_LN3 | DP_LANE_EN_LN2 |
+				 DP_LANE_EN_LN1 | DP_LANE_EN_LN0;
+
+		lane1_config = OVRD_LN1_TX_RXD_COMP_EN | OVRD_LN1_TX_RXD_EN |
+			       LN1_TX_SER_40BIT_EN_SP;
+		lane3_config = OVRD_LN3_TX_RXD_COMP_EN | OVRD_LN3_TX_RXD_EN |
+			       LN3_TX_SER_40BIT_EN_SP;
+		break;
+
+	case PIN_TYPE_B:
+	case PIN_TYPE_D:
+	case PIN_TYPE_F:
+		/* 4 Lanes Mode Configuration */
+		if (hw_config->orient_type == PLUG_NORMAL) {
+			lane_mux_config =
+				LANE_MUX_SEL_DP_LN3 | LANE_MUX_SEL_DP_LN2;
+			lane_en_config = DP_LANE_EN_LN3 | DP_LANE_EN_LN2;
+
+			lane1_config = LN1_TX_SER_40BIT_EN_SP;
+			lane3_config = OVRD_LN3_TX_RXD_COMP_EN |
+				       OVRD_LN3_TX_RXD_EN |
+				       LN3_TX_SER_40BIT_EN_SP;
+		} else {
+			lane_mux_config =
+				LANE_MUX_SEL_DP_LN1 | LANE_MUX_SEL_DP_LN0;
+			lane_en_config = DP_LANE_EN_LN1 | DP_LANE_EN_LN0;
+
+			lane1_config = OVRD_LN1_TX_RXD_COMP_EN |
+				       OVRD_LN1_TX_RXD_EN |
+				       LN1_TX_SER_40BIT_EN_SP;
+			lane3_config = LN3_TX_SER_40BIT_EN_SP;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	dp_phy_write_mask(SST1, CMN_REG00B8, lane_mux_config,
+			  LANE_MUX_SEL_DP_MASK);
+	dp_phy_write_mask(SST1, CMN_REG00B9, lane_en_config, DP_LANE_EN_MASK);
+
+	dp_phy_write_mask(SST1, TRSV_REG0413, lane1_config,
+			  OVRD_LN1_TX_RXD_COMP_EN | OVRD_LN1_TX_RXD_EN |
+				  LN1_TX_SER_40BIT_EN_SP);
+	dp_phy_write_mask(SST1, TRSV_REG0813, lane3_config,
+			  OVRD_LN3_TX_RXD_COMP_EN | OVRD_LN3_TX_RXD_EN |
+				  LN3_TX_SER_40BIT_EN_SP);
+}
+
+static void dpphy_reg_set_ssc(u32 en)
+{
+	dp_phy_write_mask(SST1, CMN_REG00B8, SSC_EN_SET(en), SSC_EN_MASK);
+}
+
+/* USBDP PHY TRSV Registers */
+
+/* USBDP PHY functions */
+static void dpphy_reg_init(struct dp_hw_config *hw_config)
+{
+	/* Hold PHY soft reset */
+	dpphy_reg_reset(1);
+
+	/* USBDP PHY Settings */
+	dpphy_reg_set_default_config(hw_config);
+	dpphy_reg_set_link_bw(hw_config->link_rate);
+	dpphy_reg_set_lane_config(hw_config);
+	dpphy_reg_set_ssc(hw_config->use_ssc ? 1 : 0);
+
+	/* wait for 60us */
+	udelay(60);
+
+	/* Release PHY soft reset */
+	dpphy_reg_reset(0);
+}
 
 /*
  * DP Link Control Functions
@@ -75,6 +251,13 @@ static void dp_reg_set_txclk_osc(void)
 	dp_write_mask(SST1, SYSTEM_CLK_CONTROL, TXCLK_SEL_OSCCLK,
 		      TXCLK_SEL_MASK);
 }
+
+static void dp_reg_set_txclk_txclk(void)
+{
+	dp_write_mask(SST1, SYSTEM_CLK_CONTROL, TXCLK_SEL_TXCLK,
+		      TXCLK_SEL_MASK);
+}
+
 static void dp_reg_set_txclk_sel_mode_by_txclksel(void)
 {
 	dp_write_mask(SST1, SYSTEM_CLK_CONTROL, TXCLK_SEL_MODE_BY_TXCLK_SEL,
@@ -142,6 +325,18 @@ static void dp_hw_set_initial_common_funcs(void)
 // System HPD Control Configuration
 
 // System PLL Lock Control Configuration
+static int dp_reg_wait_phy_pll_lock(void)
+{
+	u32 val;
+
+	if (readl_poll_timeout_atomic(regs_dp[REGS_LINK][SST1].regs +
+					      SYSTEM_PLL_LOCK_CONTROL,
+				      val, PLL_LOCK_STATUS_GET(val), 10, 200)) {
+		cal_log_err(0, "%s is timeout.\n", __func__);
+		return -ETIME;
+	} else
+		return 0;
+}
 
 /* OSC Clock Divider Control Registers */
 static void dp_reg_set_osc_clk_div(unsigned int mhz)
@@ -510,6 +705,17 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 	/*
 	 * USBDP PHY Initialization
 	 */
+	dpphy_reg_init(hw_config);
+	cal_log_debug(0, "init USBDP Combo PHY\n");
+
+	/* Wait for PHY PLL Lock */
+	dp_reg_wait_phy_pll_lock();
+	cal_log_debug(0, "locked PHY PLL\n");
+
+	/* Set system clock to TXCLK */
+	dp_reg_set_txclk_txclk();
+	cal_log_debug(0, "set system clk to TX: Mux(%u)\n",
+		      dp_reg_get_gfmux_status());
 
 	/*
 	 * DP Link Initialization

@@ -150,6 +150,7 @@ struct dp_hw_config {
 	enum dp_dynamic_range_type range;
 	enum bit_depth bpc;
 	struct video_timing vtiming;
+	bool use_ssc;
 };
 
 
