@@ -63,6 +63,47 @@ static void dp_disable(struct drm_encoder *encoder)
 {
 }
 
+/* Delayed Works */
+static void dp_work_hpd_plug(struct work_struct *work)
+{
+	struct dp_device *dp = get_dp_drvdata();
+
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+		mutex_lock(&dp->hpd_lock);
+
+		pm_runtime_get_sync(dp->dev);
+		dp_debug(dp, "pm_rtm_get_sync usage_cnt(%d)\n",
+			 atomic_read(&dp->dev->power.usage_count));
+		pm_stay_awake(dp->dev);
+
+		/* PHY power on */
+		usleep_range(10000, 10030);
+		dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
+		usleep_range(10000, 11000);
+
+		mutex_unlock(&dp->hpd_lock);
+	}
+}
+
+static void dp_work_hpd_unplug(struct work_struct *work)
+{
+	struct dp_device *dp = get_dp_drvdata();
+
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+		mutex_lock(&dp->hpd_lock);
+
+		/* PHY power off */
+		dp_hw_deinit();
+
+		pm_runtime_put_sync(dp->dev);
+		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
+			 atomic_read(&dp->dev->power.usage_count));
+		pm_relax(dp->dev);
+
+		mutex_unlock(&dp->hpd_lock);
+	}
+}
+
 /* ExtCon Handshaking Functions */
 static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 {
@@ -71,18 +112,16 @@ static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 		return;
 	}
 
-	mutex_lock(&dp->hpd_lock);
-
 	if (state == EXYNOS_HPD_PLUG) {
 		dp_info(dp, "DP HPD changed to EXYNOS_HPD_PLUG\n");
 		dp_set_hpd_state(dp, state);
+		queue_delayed_work(dp->dp_wq, &dp->hpd_plug_work, 0);
 	} else if (state == EXYNOS_HPD_UNPLUG) {
 		dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
 		dp_set_hpd_state(dp, state);
-	} else { /* state == EXYNOS_HPD_IRQ */
-	}
-
-	mutex_unlock(&dp->hpd_lock);
+		queue_delayed_work(dp->dp_wq, &dp->hpd_unplug_work, 0);
+	} else
+		dp_err(dp, "DP HPD changed to abnormal state(%d)\n", state);
 }
 
 static int usb_typec_dp_notification(struct notifier_block *nb,
@@ -93,14 +132,44 @@ static int usb_typec_dp_notification(struct notifier_block *nb,
 	int ret;
 
 	if (action == 1) {
-		ret = extcon_get_property(dp->edev, EXTCON_DISP_DP, EXTCON_PROP_DISP_HPD, &property);
+		ret = extcon_get_property(dp->edev, EXTCON_DISP_DP, EXTCON_PROP_DISP_HPD,
+					  &property);
 		if (!ret) {
 			if (property.intval == 1) {
 				dp_info(dp, "%s: USB Type-C is HPD PLUG status\n", __func__);
 
-				if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)
+				if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+					memset(&dp->hw_config, 0, sizeof(struct dp_hw_config));
+
+					ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
+								  EXTCON_PROP_DISP_ORIENTATION,
+								  &property);
+					if (!ret) {
+						dp_info(dp, "%s: disp_orientation = %d\n", __func__,
+							property.intval);
+						dp->hw_config.orient_type =
+							(enum plug_orientation)(property.intval);
+					}
+
+					ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
+								  EXTCON_PROP_DISP_PIN_CONFIG,
+								  &property);
+					if (!ret) {
+						dp_info(dp, "%s: disp_pin_config = %d\n", __func__,
+							property.intval);
+						dp->hw_config.pin_type =
+							(enum pin_assignment)(property.intval);
+
+						if (dp->hw_config.pin_type == PIN_TYPE_A ||
+						    dp->hw_config.pin_type == PIN_TYPE_C ||
+						    dp->hw_config.pin_type == PIN_TYPE_E)
+							dp->hw_config.num_lanes = 4;
+						else
+							dp->hw_config.num_lanes = 2;
+					}
+
 					dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
-				else
+				} else
 					dp_warn(dp, "%s: HPD is already set\n", __func__);
 			} else {
 				dp_info(dp, "%s: USB Type-C is HPD UNPLUG status\n", __func__);
@@ -179,8 +248,8 @@ static const struct drm_connector_funcs dp_connector_funcs = {
 };
 
 /* DP DRM Connector Helper Functions */
-static int dp_detect(struct drm_connector *connector,
-		     struct drm_modeset_acquire_ctx *ctx, bool force)
+static int dp_detect(struct drm_connector *connector, struct drm_modeset_acquire_ctx *ctx,
+		     bool force)
 {
 	return connector_status_unknown;
 }
@@ -204,8 +273,7 @@ static int dp_create_connector(struct drm_encoder *encoder)
 
 	connector->polled = DRM_CONNECTOR_POLL_HPD;
 
-	ret = drm_connector_init(encoder->dev, connector,
-				 &dp_connector_funcs,
+	ret = drm_connector_init(encoder->dev, connector, &dp_connector_funcs,
 				 DRM_MODE_CONNECTOR_DisplayPort);
 	if (ret) {
 		dp_err(dp, "failed to initialize connector with drm\n");
@@ -260,8 +328,8 @@ static void dp_unbind(struct device *dev, struct device *master, void *data)
 }
 
 static const struct component_ops dp_component_ops = {
-	.bind	= dp_bind,
-	.unbind	= dp_unbind,
+	.bind = dp_bind,
+	.unbind = dp_unbind,
 };
 
 /* DP DRM Driver */
@@ -304,6 +372,7 @@ static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
 		dp_err(dp, "failed to remap DP LINK SFR region\n");
 		return -EINVAL;
 	}
+	dp_regs_desc_init(dp->res.link_regs, res->start, "LINK", REGS_LINK, SST1);
 
 	/* USBDP Combo PHY SFR */
 	// ToDo: USBDP PHY is shared with USB Driver.
@@ -314,6 +383,7 @@ static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
 		dp_err(dp, "failed to remap USBDP Combo PHY SFR region\n");
 		return -EINVAL;
 	}
+	dp_regs_desc_init(dp->res.phy_regs, (phys_addr_t)addr_phy, "PHY", REGS_PHY, SST1);
 
 	/* DP Interrupt */
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
@@ -369,6 +439,17 @@ static int dp_probe(struct platform_device *pdev)
 	mutex_init(&dp->hpd_lock);
 	mutex_init(&dp->hpd_state_lock);
 
+	/* Create WorkQueue & Delayed Works*/
+	dp->dp_wq = create_singlethread_workqueue(dev_name(&pdev->dev));
+	if (!dp->dp_wq) {
+		dp_err(dp, "create wq failed.\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	INIT_DELAYED_WORK(&dp->hpd_plug_work, dp_work_hpd_plug);
+	INIT_DELAYED_WORK(&dp->hpd_unplug_work, dp_work_hpd_unplug);
+
 	/* Register callback to ExtCon */
 	dp->edev = extcon_get_edev_by_phandle(dev, 0);
 	if (IS_ERR_OR_NULL(dp->edev)) {
@@ -394,6 +475,8 @@ static int dp_remove(struct platform_device *pdev)
 
 	mutex_destroy(&dp->hpd_lock);
 	mutex_destroy(&dp->hpd_state_lock);
+
+	destroy_workqueue(dp->dp_wq);
 
 	dp_info(dp, "DP Driver has been removed\n");
 	return 0;

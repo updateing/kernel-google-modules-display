@@ -20,6 +20,9 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
 
+#include "dp_cal.h"
+
+
 int get_dp_log_level(void);
 
 #define dp_info(dp, fmt, ...)	\
@@ -64,6 +67,10 @@ struct dp_device {
 	struct device *dev;
 	struct dp_resources res;
 
+	struct workqueue_struct *dp_wq;
+	struct delayed_work hpd_plug_work;
+	struct delayed_work hpd_unplug_work;
+
 	struct mutex hpd_lock;
 
 	/* HPD State */
@@ -77,6 +84,9 @@ struct dp_device {
 	struct extcon_dev *edev;
 	struct notifier_block dp_typec_nb;
 	int notifier_registered;
+
+	/* DP HW Configurations */
+	struct dp_hw_config hw_config;
 };
 
 static inline struct dp_device *get_dp_drvdata(void)
