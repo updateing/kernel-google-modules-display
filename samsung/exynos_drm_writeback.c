@@ -46,14 +46,14 @@ static inline bool wb_is_cwb(const struct writeback_device *wb)
 	return decon->config.out_type != DECON_OUT_WB;
 }
 
-void wb_dump(struct writeback_device *wb)
+void wb_dump(struct drm_printer *p, struct writeback_device *wb)
 {
 	if (wb->state != WB_STATE_ON) {
 		pr_info("writeback state is off\n");
 		return;
 	}
 
-	__dpp_dump(wb->id, wb->regs.dpp_base_regs, wb->regs.dma_base_regs,
+	__dpp_dump(p, wb->id, wb->regs.dpp_base_regs, wb->regs.dma_base_regs,
 			wb->attr);
 }
 

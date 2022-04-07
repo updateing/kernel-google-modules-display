@@ -139,10 +139,10 @@ static struct dpp_device *of_find_dpp_by_node(struct device_node *np)
 }
 #endif
 
-void dpp_dump(struct dpp_device *dpp);
-void rcd_dump(struct dpp_device *dpp);
-void dpp_dump_buffer(struct dpp_device *dpp);
-void cgc_dump(struct exynos_dma *dma);
+void dpp_dump(struct drm_printer *p, struct dpp_device *dpp);
+void rcd_dump(struct drm_printer *p, struct dpp_device *dpp);
+void dpp_dump_buffer(struct drm_printer *p, struct dpp_device *dpp);
+void cgc_dump(struct drm_printer *p, struct exynos_dma *dma);
 
 static __always_inline const char *get_comp_src_name(u64 comp_src)
 {

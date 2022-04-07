@@ -11,6 +11,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/console.h>
 #include <linux/debugfs.h>
 #include <linux/ktime.h>
 #include <linux/moduleparam.h>
@@ -1418,10 +1419,12 @@ static const struct file_operations recovery_fops = {
 
 static void buf_dump_all(const struct decon_device *decon)
 {
+	struct drm_printer p = console_set_on_cmdline ?
+		drm_debug_printer("[drm]") : drm_info_printer(decon->dev);
 	int i;
 
 	for (i = 0; i < decon->dpp_cnt; ++i)
-		dpp_dump_buffer(decon->dpp[i]);
+		dpp_dump_buffer(&p, decon->dpp[i]);
 }
 
 static void buf_dump_handler(struct kthread_work *work)
@@ -1722,23 +1725,28 @@ err:
 
 #define PREFIX_LEN	40
 #define ROW_LEN		32
-void dpu_print_hex_dump(void __iomem *regs, const void *buf, size_t len)
+void dpu_print_hex_dump(struct drm_printer *p, void __iomem *regs, const void *buf, size_t len)
 {
 	char prefix_buf[PREFIX_LEN];
-	unsigned long p;
-	int i, row;
+	unsigned char linebuf[96];
+	unsigned long offset;
+	int i, linelen;
 
 	for (i = 0; i < len; i += ROW_LEN) {
-		p = buf - regs + i;
+		const u8 *ptr = buf + i;
+
+		offset = buf - regs + i;
 
 		if (len - i < ROW_LEN)
-			row = len - i;
+			linelen = len - i;
 		else
-			row = ROW_LEN;
+			linelen = ROW_LEN;
 
-		snprintf(prefix_buf, sizeof(prefix_buf), "[%08lX] ", p);
-		print_hex_dump(KERN_INFO, prefix_buf, DUMP_PREFIX_NONE,
-				32, 4, buf + i, row, false);
+		snprintf(prefix_buf, sizeof(prefix_buf), "[%08lX] ", offset);
+		hex_dump_to_buffer(ptr, linelen, ROW_LEN, 4,
+				linebuf, sizeof(linebuf), false);
+
+		drm_printf(p, "%s%s\n", prefix_buf, linebuf);
 	}
 }
 
@@ -1753,7 +1761,8 @@ void decon_dump_all(struct decon_device *decon,
 	bool active = pm_runtime_active(decon->dev);
 	struct kthread_worker *worker = &decon->worker;
 
-	pr_info("DPU power %s state\n", active ? "on" : "off");
+	pr_info("%s: power %s state\n",
+		dev_name(decon->dev), active ? "on" : "off");
 
 	if (decon_dump_ignore(condition))
 		return;
@@ -1775,7 +1784,8 @@ void decon_dump_all(struct decon_device *decon,
 void decon_dump_event_condition(const struct decon_device *decon,
 		enum dpu_event_condition condition)
 {
-	struct drm_printer p = drm_info_printer(decon->dev);
+	struct drm_printer p = console_set_on_cmdline ?
+		drm_debug_printer("[drm]") : drm_info_printer(decon->dev);
 	u32 print_log_size;
 
 	if (decon_dump_ignore(condition))

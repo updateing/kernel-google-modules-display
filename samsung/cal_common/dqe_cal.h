@@ -200,7 +200,7 @@ void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state);
 void dqe_reg_get_histogram_bins(u32 dqe_id, struct histogram_bins *bins);
 void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_prog_pos pos);
 void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height);
-void dqe_dump(u32 dqe_id);
+void dqe_dump(struct drm_printer *p, u32 dqe_id);
 void dqe_reg_set_rcd_en(u32 dqe_id, bool en);
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected);
 void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id);

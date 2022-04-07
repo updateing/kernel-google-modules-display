@@ -21,6 +21,7 @@
 #include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/component.h>
+#include <linux/console.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/of.h>
@@ -96,8 +97,9 @@ static inline unsigned long fps_timeout(int fps)
 void decon_dump(const struct decon_device *decon)
 {
 	int i;
-	int acquired = console_trylock();
 	struct decon_device *d;
+	struct drm_printer p = console_set_on_cmdline ?
+		drm_debug_printer("[drm]") : drm_info_printer(decon->dev);
 
 	for (i = 0; i < REGS_DECON_ID_MAX; ++i) {
 		d = get_decon_drvdata(i);
@@ -105,24 +107,22 @@ void decon_dump(const struct decon_device *decon)
 			continue;
 
 		if (d->state != DECON_STATE_ON) {
-			decon_info(decon, "DECON disabled(%d)\n", decon->state);
+			drm_printf(&p, "%s[%u]: DECON disabled(%d)\n",
+				decon->dev->driver->name, decon->id, decon->state);
 			continue;
 		}
 
-		__decon_dump(d->id, &d->regs, d->config.dsc.enabled, d->dqe != NULL);
+		__decon_dump(&p, d->id, &d->regs, d->config.dsc.enabled, d->dqe != NULL);
 	}
 
 	for (i = 0; i < decon->dpp_cnt; ++i)
-		dpp_dump(decon->dpp[i]);
+		dpp_dump(&p, decon->dpp[i]);
 
 	if (decon->rcd)
-		rcd_dump(decon->rcd);
+		rcd_dump(&p, decon->rcd);
 
 	if (decon->cgc_dma)
-		cgc_dump(decon->cgc_dma);
-
-	if (acquired)
-		console_unlock();
+		cgc_dump(&p, decon->cgc_dma);
 }
 
 static inline u32 win_start_pos(int x, int y)
