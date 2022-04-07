@@ -590,7 +590,7 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 
 			if (idle_vrefresh == 10)
 				EXYNOS_DCS_BUF_ADD(ctx,
-					0xBA, val, 0x09, 0x03, 0x00, 0x11, 0x0B, 0x0B,
+					0xBA, val, 0x09, 0x03, 0x00, 0x31, 0x0B, 0x0B,
 					0x00, 0x06);
 			else if (idle_vrefresh == 30)
 				EXYNOS_DCS_BUF_ADD(ctx,
