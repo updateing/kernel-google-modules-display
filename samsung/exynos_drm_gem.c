@@ -44,7 +44,7 @@ void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 	if (obj->import_attach) {
 		dma_buf = obj->import_attach->dmabuf;
 		if (dma_buf && exynos_gem_obj->vaddr) {
-			struct dma_buf_map map = DMA_BUF_MAP_INIT_VADDR(exynos_gem_obj->vaddr);
+			struct iosys_map map = IOSYS_MAP_INIT_VADDR(exynos_gem_obj->vaddr);
 			dma_buf_vunmap(dma_buf, &map);
 		}
 
@@ -58,7 +58,7 @@ void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 void *exynos_drm_gem_get_vaddr(struct exynos_drm_gem *exynos_gem_obj)
 {
 	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
-	struct dma_buf_map map;
+	struct iosys_map map;
 	int ret;
 
 	if (WARN_ON(!attach))

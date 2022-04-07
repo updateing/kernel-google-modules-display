@@ -227,7 +227,7 @@ static dma_addr_t dpp_alloc_map_buf_test(void)
 	struct dma_buf_attachment *attachment;
 	struct sg_table *sg_table;
 	size_t size;
-	struct dma_buf_map map;
+	struct iosys_map map;
 	dma_addr_t dma_addr;
 	struct decon_device *decon = get_decon_drvdata(0);
 	struct drm_device *drm_dev = decon->drm_dev;
