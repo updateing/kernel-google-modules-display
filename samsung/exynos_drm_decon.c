@@ -1097,7 +1097,7 @@ static void decon_disable(struct exynos_drm_crtc *crtc)
 static inline unsigned long fps_timeout(int fps)
 {
 	/* default to 60 fps, if fps is not provided */
-	const frame_time_ms = DIV_ROUND_UP(MSEC_PER_SEC, fps ? : 60);
+	const long frame_time_ms = DIV_ROUND_UP(MSEC_PER_SEC, fps ? : 60);
 
 	return msecs_to_jiffies(frame_time_ms) + TIMEOUT;
 }
