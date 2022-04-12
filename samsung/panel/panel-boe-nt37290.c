@@ -369,6 +369,10 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	/* CMD2 Page 1 */
 	EXYNOS_DSI_CMD_SEQ(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x01),
 	EXYNOS_DSI_CMD_SEQ(0xC5, 0x00, 0x0B, 0x0B, 0x0B),
+	/* CMD2 Page 0: display driving voltage Vkeep 6.35V->5.95V */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0x6F, 0x14),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xC2, 0x00, 0x50),
 
 	/* CMD3 Page 0 */
 	EXYNOS_DSI_CMD_SEQ(0xFF, 0xAA, 0x55, 0xA5, 0x80),
@@ -380,6 +384,9 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xF5, 0x00),
 	EXYNOS_DSI_CMD_SEQ(0x6F, 0x09),
 	EXYNOS_DSI_CMD_SEQ(0xF9, 0x10),
+	/* CMD3 Page 2: MIPI termination resistor 90ohm */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xFF, 0xAA, 0x55, 0xA5, 0x82),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xF2, 0x3F),
 	/* CMD3 Page 3 */
 	EXYNOS_DSI_CMD_SEQ(0xFF, 0xAA, 0x55, 0xA5, 0x83),
 	EXYNOS_DSI_CMD_SEQ(0x6F, 0x14),
