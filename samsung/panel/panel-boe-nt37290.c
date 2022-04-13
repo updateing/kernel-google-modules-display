@@ -1597,6 +1597,7 @@ const struct exynos_panel_desc boe_nt37290 = {
 	.lp_cmd_set = &nt37290_lp_cmd_set,
 	.binned_lp = nt37290_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(nt37290_binned_lp),
+	.is_panel_idle_supported = true,
 	.panel_func = &nt37290_drm_funcs,
 	.exynos_panel_func = &nt37290_exynos_funcs,
 };
