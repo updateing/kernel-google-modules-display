@@ -149,8 +149,6 @@ struct dpu_bts {
 	u32 vfp;
 	u32 vsa;
 	u32 fps;
-	u32 pending_vblank_usec;
-	u32 vblank_usec;
 	/* includes writeback dpp */
 	struct dpu_bts_bw rt_bw[MAX_DPP_CNT];
 
@@ -482,12 +480,10 @@ void decon_force_vblank_event(struct decon_device *decon);
 
 #if IS_ENABLED(CONFIG_EXYNOS_BTS)
 void decon_mode_bts_pre_update(struct decon_device *decon,
-				const struct drm_crtc_state *crtc_state,
-				const struct drm_atomic_state *state);
+				const struct drm_crtc_state *crtc_state);
 #else
 void decon_mode_bts_pre_update(struct decon_device *decon,
-				const struct drm_crtc_state *crtc_state,
-				const struct drm_atomic_state *state) { }
+				const struct drm_crtc_state *crtc_state) { }
 #endif
 
 #if IS_ENABLED(CONFIG_EXYNOS_ITMON)

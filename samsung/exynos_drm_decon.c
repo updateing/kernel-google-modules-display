@@ -73,9 +73,7 @@ static const struct of_device_id decon_driver_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, decon_driver_dt_match);
 
-static void decon_mode_update_bts(struct decon_device *decon,
-				const struct drm_display_mode *mode,
-				const unsigned int vblank_usec);
+static void decon_mode_update_bts(struct decon_device *decon, const struct drm_display_mode *mode);
 static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 				    struct drm_crtc_state *old_crtc_state);
 static int decon_request_te_irq(struct exynos_drm_crtc *exynos_crtc,
@@ -351,6 +349,7 @@ static void decon_update_config(struct decon_config *config,
 		decon_update_dsi_config(config, crtc_state, exynos_conn_state);
 
 	config->out_bpc = exynos_conn_state->exynos_mode.bpc;
+	config->vblank_usec = exynos_conn_state->exynos_mode.vblank_usec;
 }
 
 static bool decon_is_seamless_possible(const struct decon_device *decon,
@@ -809,9 +808,7 @@ static void _decon_enable(struct decon_device *decon)
 	decon_enable_irqs(decon);
 }
 
-static void decon_mode_update_bts(struct decon_device *decon,
-				const struct drm_display_mode *mode,
-				const unsigned int vblank_usec)
+static void decon_mode_update_bts(struct decon_device *decon, const struct drm_display_mode *mode)
 {
 	struct videomode vm;
 
@@ -821,7 +818,6 @@ static void decon_mode_update_bts(struct decon_device *decon,
 	decon->bts.vfp = vm.vfront_porch;
 	decon->bts.vsa = vm.vsync_len;
 	decon->bts.fps = drm_mode_vrefresh(mode);
-	decon->bts.vblank_usec = vblank_usec;
 
 	decon->config.image_width = mode->hdisplay;
 	decon->config.image_height = mode->vdisplay;
@@ -830,10 +826,22 @@ static void decon_mode_update_bts(struct decon_device *decon,
 		    mode->hdisplay, mode->vdisplay, decon->bts.fps);
 }
 
+static void decon_mode_set(struct exynos_drm_crtc *crtc,
+			   const struct drm_display_mode *mode,
+			   const struct drm_display_mode *adjusted_mode)
+{
+	struct decon_device *decon = crtc->ctx;
+	int i;
+
+	for (i = 0; i < MAX_WIN_PER_DECON; i++)
+		decon->bts.win_config[i].state = DPU_WIN_STATE_DISABLED;
+
+	decon_mode_update_bts(decon, adjusted_mode);
+}
+
 #if IS_ENABLED(CONFIG_EXYNOS_BTS)
 static void decon_seamless_mode_bts_update(struct decon_device *decon,
-					const struct drm_display_mode *mode,
-					const unsigned int vblank_usec)
+					   const struct drm_display_mode *mode)
 {
 	DPU_ATRACE_BEGIN(__func__);
 
@@ -848,46 +856,23 @@ static void decon_seamless_mode_bts_update(struct decon_device *decon,
 	 * 2 once the issue is clarified.
 	 */
 	if (decon->bts.fps > drm_mode_vrefresh(mode)) {
-		decon->bts.pending_vblank_usec = vblank_usec;
 		atomic_set(&decon->bts.delayed_update, 3);
 	} else {
-		decon_mode_update_bts(decon, mode, vblank_usec);
+		decon_mode_update_bts(decon, mode);
 		atomic_set(&decon->bts.delayed_update, 0);
 	}
 	DPU_ATRACE_END(__func__);
 }
 
-#define DEFAULT_VBLANK_USEC	100
-
-static unsigned int decon_get_vblank_usec(const struct drm_crtc_state *crtc_state,
-					const struct drm_atomic_state *old_state)
-{
-	const struct exynos_drm_connector_state *exynos_conn_state =
-			crtc_get_exynos_connector_state(old_state, crtc_state);
-
-	if (WARN_ON(!exynos_conn_state))
-		return DEFAULT_VBLANK_USEC;
-
-	return exynos_conn_state->exynos_mode.vblank_usec;
-}
-
 void decon_mode_bts_pre_update(struct decon_device *decon,
-				const struct drm_crtc_state *crtc_state,
-				const struct drm_atomic_state *old_state)
+				const struct drm_crtc_state *crtc_state)
 {
 	const struct exynos_drm_crtc_state *exynos_crtc_state = to_exynos_crtc_state(crtc_state);
 
-	if (exynos_crtc_state->seamless_mode_changed) {
-		unsigned int vblank_usec = decon_get_vblank_usec(crtc_state, old_state);
-
-		decon_seamless_mode_bts_update(decon, &crtc_state->adjusted_mode, vblank_usec);
-	} else if (drm_atomic_crtc_needs_modeset(crtc_state)) {
-		unsigned int vblank_usec = decon_get_vblank_usec(crtc_state, old_state);
-
-		decon_mode_update_bts(decon, &crtc_state->mode, vblank_usec);
-	} else if (!atomic_dec_if_positive(&decon->bts.delayed_update)) {
-		decon_mode_update_bts(decon, &crtc_state->mode, decon->bts.pending_vblank_usec);
-	}
+	if (exynos_crtc_state->seamless_mode_changed)
+		decon_seamless_mode_bts_update(decon, &crtc_state->adjusted_mode);
+	else if (!atomic_dec_if_positive(&decon->bts.delayed_update))
+		decon_mode_update_bts(decon, &crtc_state->mode);
 
 	decon->bts.ops->calc_bw(decon);
 	decon->bts.ops->update_bw(decon, false);
@@ -943,10 +928,8 @@ static void _decon_stop(struct decon_device *decon, bool reset)
 	 * Make sure all window connections are disabled when getting disabled,
 	 * in case there are any stale mappings.
 	 */
-	for (i = 0; i < MAX_WIN_PER_DECON; ++i) {
-		decon->bts.win_config[i].state = DPU_WIN_STATE_DISABLED;
+	for (i = 0; i < MAX_WIN_PER_DECON; ++i)
 		decon_reg_set_win_enable(decon->id, i, 0);
-	}
 
 	for (i = 0; i < decon->dpp_cnt; ++i) {
 		struct dpp_device *dpp = decon->dpp[i];
@@ -1208,6 +1191,7 @@ static const struct exynos_drm_crtc_ops decon_crtc_ops = {
 	.disable = decon_disable,
 	.enable_vblank = decon_enable_vblank,
 	.disable_vblank = decon_disable_vblank,
+	.mode_set = decon_mode_set,
 	.atomic_check = decon_atomic_check,
 	.atomic_begin = decon_atomic_begin,
 	.update_plane = decon_update_plane,

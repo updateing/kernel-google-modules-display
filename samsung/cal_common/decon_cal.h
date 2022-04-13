@@ -218,6 +218,7 @@ struct decon_config {
 	struct exynos_dsc	dsc;
 	unsigned int		out_bpc;
 	unsigned int		in_bpc;
+	unsigned int		vblank_usec;
 	int			main_dsim_id;
 };
 

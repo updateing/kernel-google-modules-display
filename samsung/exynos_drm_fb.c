@@ -401,7 +401,7 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 		}
 
 		DPU_EVENT_LOG_ATOMIC_COMMIT(decon->id);
-		decon_mode_bts_pre_update(decon, new_crtc_state, old_state);
+		decon_mode_bts_pre_update(decon, new_crtc_state);
 	}
 }
 
