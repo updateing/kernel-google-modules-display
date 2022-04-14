@@ -17,7 +17,7 @@
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/mm_types.h>
-#include <linux/ion.h>
+#include <linux/dma-heap.h>
 
 #include "exynos_drm_dsim.h"
 #include "exynos_drm_gem.h"
@@ -49,17 +49,20 @@ exynos_drm_gem_prime_import_sg_table(struct drm_device *dev,
 	const unsigned long size = attach->dmabuf->size;
 	struct exynos_drm_gem *exynos_gem_obj =
 		exynos_drm_gem_alloc(dev, size, 0);
+	dma_addr_t dma_addr;
 
 	if (IS_ERR(exynos_gem_obj))
 		return ERR_CAST(exynos_gem_obj);
 
 	exynos_gem_obj->sgt = sgt;
-	exynos_gem_obj->dma_addr = sg_dma_address(sgt->sgl);
-	if (IS_ERR_VALUE(exynos_gem_obj->dma_addr)) {
-		pr_err("Failed to allocate IOVM\n");
+	dma_addr = sg_dma_address(sgt->sgl);
+	if (IS_ERR_VALUE(dma_addr)) {
+		pr_err("Failed to allocate IOVM (%lld)\n", dma_addr);
 		kfree(exynos_gem_obj);
-		return ERR_PTR(exynos_gem_obj->dma_addr);
+		return ERR_PTR(dma_addr);
 	}
+
+	exynos_gem_obj->dma_addr = dma_addr;
 
 	pr_debug("mapped dma_addr: 0x%llx\n", exynos_gem_obj->dma_addr);
 
@@ -81,20 +84,45 @@ static void exynos_drm_gem_unmap(struct exynos_drm_gem *exynos_gem_obj)
 void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 {
 	struct exynos_drm_gem *exynos_gem_obj = to_exynos_gem(obj);
+	struct dma_buf *dma_buf;
 
 	exynos_drm_gem_unmap(exynos_gem_obj);
 
-	if (obj->import_attach)
+	if (obj->import_attach) {
+		dma_buf = obj->import_attach->dmabuf;
+		if (dma_buf && exynos_gem_obj->vaddr)
+			dma_buf_vunmap(dma_buf, exynos_gem_obj->vaddr);
+
 		drm_prime_gem_destroy(obj, exynos_gem_obj->sgt);
+	}
 
 	drm_gem_object_release(&exynos_gem_obj->base);
 	kfree(exynos_gem_obj);
+}
+
+void *exynos_drm_gem_get_vaddr(struct exynos_drm_gem *exynos_gem_obj)
+{
+	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
+
+	if (WARN_ON(!attach))
+		return NULL;
+
+	if (!exynos_gem_obj->vaddr) {
+		exynos_gem_obj->vaddr = dma_buf_vmap(attach->dmabuf);
+		if (!exynos_gem_obj->vaddr)
+			pr_err("Failed to map virtual address\n");
+		else
+			pr_debug("mapped vaddr: %pK\n", exynos_gem_obj->vaddr);
+	}
+
+	return  exynos_gem_obj->vaddr;
 }
 
 static int exynos_drm_gem_create(struct drm_device *dev, struct drm_file *filep,
 				 size_t size, unsigned int flags,
 				 unsigned int *gem_handle)
 {
+	struct dma_heap *dma_heap;
 	struct dma_buf *dmabuf;
 	struct drm_gem_object *obj;
 	int ret;
@@ -104,15 +132,22 @@ static int exynos_drm_gem_create(struct drm_device *dev, struct drm_file *filep,
 		return -EINVAL;
 	}
 
-	dmabuf = ion_alloc(size, ION_HEAP_SYSTEM, 0);
-	if (IS_ERR_OR_NULL(dmabuf)) {
-		pr_err("ION Failed to alloc %#zx bytes\n", size);
+	dma_heap = dma_heap_find("system");
+	if (!dma_heap) {
+		pr_err("Failed to find DMA-BUF system heap\n");
+		return -EINVAL;
+	}
+
+	dmabuf = dma_heap_buffer_alloc(dma_heap, size, O_RDWR, 0);
+	dma_heap_put(dma_heap);
+	if (IS_ERR(dmabuf)) {
+		pr_err("Failed to allocate %#zx bytes from DMA-BUF system heap\n", size);
 		return PTR_ERR(dmabuf);
 	}
 
 	obj = exynos_drm_gem_prime_import(dev, dmabuf);
 	if (IS_ERR(obj)) {
-		pr_err("Unable to import created ION buffer\n");
+		pr_err("Unable to import created DMA-BUF heap buffer\n");
 		ret = PTR_ERR(obj);
 	} else {
 		struct exynos_drm_gem *exynos_gem_obj = to_exynos_gem(obj);
@@ -162,9 +197,25 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 struct drm_gem_object *exynos_drm_gem_prime_import(struct drm_device *dev,
 						   struct dma_buf *dma_buf)
 {
-	struct exynos_drm_private *priv = dev->dev_private;
+	struct exynos_drm_private *priv = drm_to_exynos_dev(dev);
 
 	return drm_gem_prime_import_dev(dev, dma_buf, priv->iommu_client);
+}
+
+struct drm_gem_object *exynos_drm_gem_fd_to_obj(struct drm_device *dev, int val)
+{
+	struct dma_buf *dma_buf;
+	struct drm_gem_object *obj;
+
+	dma_buf = dma_buf_get(val);
+	if (IS_ERR(dma_buf)) {
+		pr_err("failed to get dma buf\n");
+		return NULL;
+	}
+	obj = exynos_drm_gem_prime_import(dev, dma_buf);
+	dma_buf_put(dma_buf);
+
+	return obj;
 }
 
 static int exynos_drm_gem_mmap_object(struct exynos_drm_gem *exynos_gem_obj,

@@ -206,7 +206,7 @@ static const struct exynos_panel_mode s6e3hc2_fhd_modes[] = {
 #define CALI_GAMMA_HEADER_SIZE	3
 #define S6E3HC2_GAMMA_BAND_LEN 45
 
-/**
+/*
  * s6e3hc2_gamma_info - Information used to access gamma data on s6e3hc2.
  * @cmd: Command to use when writing/reading gamma from the DDIC.
  * @len: Total number of bytes to write/read from DDIC, including prefix_len.
@@ -214,12 +214,14 @@ static const struct exynos_panel_mode s6e3hc2_fhd_modes[] = {
  *     from the DDIC. This is a subset of len.
  * @flash_offset: Address offset to use when reading from flash.
  */
-const struct s6e3hc2_gamma_info {
+struct s6e3hc2_gamma_info {
 	u8 cmd;
 	u32 len;
 	u32 prefix_len;
 	u32 flash_offset;
-} s6e3hc2_gamma_tables[] = {
+};
+
+const struct s6e3hc2_gamma_info s6e3hc2_gamma_tables[] = {
 	/* order of commands matter due to use of cmds grouping */
 	{ 0xC8, S6E3HC2_GAMMA_BAND_LEN * 3, 0, 0x0000 },
 	{ 0xC9, S6E3HC2_GAMMA_BAND_LEN * 4, 0, 0x0087 },
@@ -640,11 +642,11 @@ static void s6e3hc2_write_display_mode(struct exynos_panel *ctx,
 	if (drm_mode_vrefresh(mode) == 90)
 		val |= S6E3HC2_WRCTRLD_FRAME_RATE_BIT;
 
-	if (ctx->hbm_mode)
+	if (IS_HBM_ON(ctx->hbm_mode))
 		val |= S6E3HC2_WRCTRLD_HBM_BIT;
 
 	dev_dbg(ctx->dev, "%s(wrctrld:0x%x, hbm: %s, refresh: %uhz)\n",
-		__func__, val, ctx->hbm_mode ? "on" : "off", drm_mode_vrefresh(mode));
+		__func__, val, IS_HBM_ON(ctx->hbm_mode) ? "on" : "off", drm_mode_vrefresh(mode));
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_WRITE_SEQ(ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
@@ -732,8 +734,6 @@ static void s6e3hc2_common_post_enable(struct exynos_panel *ctx)
 	else
 		EXYNOS_DCS_WRITE_SEQ(ctx, 0x29); /* display on */
 
-	backlight_update_status(ctx->bl);
-
 	kthread_flush_work(&spanel->gamma_work);
 	if (!spanel->native_gamma_ready)
 		kthread_queue_work(&spanel->worker, &spanel->gamma_work);
@@ -792,11 +792,11 @@ static int s6e3hc2_panel_disable(struct drm_panel *panel)
 }
 
 static void s6e3hc2_set_hbm_mode(struct exynos_panel *exynos_panel,
-				bool hbm_mode)
+				enum exynos_hbm_mode mode)
 {
 	const struct exynos_panel_mode *pmode = exynos_panel->current_mode;
 
-	exynos_panel->hbm_mode = hbm_mode;
+	exynos_panel->hbm_mode = mode;
 
 	s6e3hc2_write_display_mode(exynos_panel, &pmode->mode);
 }
@@ -1283,8 +1283,8 @@ const struct exynos_panel_desc samsung_s6e3hc2_wqhd = {
 	.dft_brightness = 511,
 	.brt_capability = &s6e3hc2_brightness_capability,
 	/* supported HDR format bitmask : 1(DOLBY_VISION), 2(HDR10), 3(HLG) */
-	.hdr_formats = BIT(2),
-	.max_luminance = 5400000,
+	.hdr_formats = BIT(2) | BIT(3),
+	.max_luminance = 6000000,
 	.max_avg_luminance = 1200000,
 	.min_luminance = 5,
 	.bl_range = s6e3hc2_bl_range,
@@ -1308,8 +1308,8 @@ const struct exynos_panel_desc samsung_s6e3hc2_fhd = {
 	.dft_brightness = 511,
 	.brt_capability = &s6e3hc2_brightness_capability,
 	/* supported HDR format bitmask : 1(DOLBY_VISION), 2(HDR10), 3(HLG) */
-	.hdr_formats = BIT(2),
-	.max_luminance = 5400000,
+	.hdr_formats = BIT(2) | BIT(3),
+	.max_luminance = 6000000,
 	.max_avg_luminance = 1200000,
 	.min_luminance = 5,
 	.bl_range = s6e3hc2_bl_range,

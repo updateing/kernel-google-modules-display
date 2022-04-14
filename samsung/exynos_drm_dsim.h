@@ -27,9 +27,16 @@
 #include "exynos_drm_drv.h"
 
 enum dsim_state {
-	DSIM_STATE_HSCLKEN,
-	DSIM_STATE_ULPS,
-	DSIM_STATE_SUSPEND
+	DSIM_STATE_HSCLKEN,     /* dsim fully active */
+	DSIM_STATE_ULPS,	/* low power state */
+	DSIM_STATE_SUSPEND,	/* inactive */
+	DSIM_STATE_BYPASS,	/* bypass mode, dsim shouldn't be used */
+};
+
+enum dsim_dual_dsi {
+	DSIM_DUAL_DSI_NONE,
+	DSIM_DUAL_DSI_MAIN,
+	DSIM_DUAL_DSI_SEC,
 };
 
 struct dsim_pll_features {
@@ -64,6 +71,7 @@ struct dsim_device {
 	struct device *dev;
 	struct drm_bridge *panel_bridge;
 	struct mipi_dsi_device *dsi_device;
+	struct device_link *dev_link;
 
 	enum exynos_drm_output_type output_type;
 	int te_from;
@@ -91,6 +99,7 @@ struct dsim_device {
 	struct completion rd_comp;
 
 	enum dsim_state state;
+	enum dsim_state suspend_state;
 
 	/* set bist mode by sysfs */
 	unsigned int bist_mode;
@@ -104,30 +113,52 @@ struct dsim_device {
 	int idle_ip_index;
 	u8 total_pend_ph;
 	u16 total_pend_pl;
+	/* override message flag MIPI_DSI_MSG_LASTCOMMAND */
+	bool force_batching;
+
+	enum dsim_dual_dsi dual_dsi;
 };
 
 extern struct dsim_device *dsim_drvdata[MAX_DSI_CNT];
 
 #define encoder_to_dsim(e) container_of(e, struct dsim_device, encoder)
 
-#define MIPI_WR_TIMEOUT				msecs_to_jiffies(50)
+#define MIPI_WR_TIMEOUT				msecs_to_jiffies(80)
 #define MIPI_RD_TIMEOUT				msecs_to_jiffies(100)
 
 struct decon_device;
+
+static inline struct dsim_device *
+exynos_get_dual_dsi(enum dsim_dual_dsi dual_dsi)
+{
+	int i;
+	struct dsim_device *dsim = NULL;
+
+	for (i = 0; i < MAX_DSI_CNT; i++) {
+		dsim = dsim_drvdata[i];
+		if (dsim->dual_dsi == dual_dsi)
+			return dsim;
+	}
+
+	return NULL;
+}
 
 static inline const struct decon_device *
 dsim_get_decon(const struct dsim_device *dsim)
 {
 	const struct drm_crtc *crtc = dsim->encoder.crtc;
+	struct dsim_device *main_dsi;
+
+	if (dsim->dual_dsi == DSIM_DUAL_DSI_SEC) {
+		main_dsi = exynos_get_dual_dsi(DSIM_DUAL_DSI_MAIN);
+		crtc = main_dsi->encoder.crtc;
+	}
 
 	if (!crtc)
 		return NULL;
 
 	return to_exynos_crtc(crtc)->ctx;
 }
-
-void dsim_enter_ulps(struct dsim_device *dsim);
-void dsim_exit_ulps(struct dsim_device *dsim);
 
 #ifdef CONFIG_DEBUG_FS
 void dsim_diag_create_debugfs(struct dsim_device *dsim);

@@ -36,11 +36,6 @@
 
 #define DEFAULT_WIN	0
 
-#if !defined(MODULE) && defined(CONFIG_EXYNOS_DPU30)
-extern bool enable_fbdev_display;
-#else
-#define enable_fbdev_display 0
-#endif
 
 #define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc, base)
 #define to_exynos_plane(x)	container_of(x, struct exynos_drm_plane, base)
@@ -113,10 +108,6 @@ struct exynos_hdr_state {
 
 struct exynos_drm_plane_state {
 	struct drm_plane_state base;
-	struct exynos_drm_rect crtc;
-	struct exynos_drm_rect src;
-	unsigned int h_ratio;
-	unsigned int v_ratio;
 	uint32_t blob_id_restriction;
 	uint32_t max_luminance;
 	uint32_t min_luminance;
@@ -129,6 +120,7 @@ struct exynos_drm_plane_state {
 	struct drm_property_blob *oetf_lut;
 	struct drm_property_blob *gm;
 	struct drm_property_blob *tm;
+	struct drm_property_blob *block;
 };
 
 static inline struct exynos_drm_plane_state *
@@ -150,6 +142,7 @@ to_exynos_plane_state(const struct drm_plane_state *state)
 struct exynos_drm_plane {
 	struct drm_plane base;
 	unsigned int index;
+	struct dentry *debugfs_entry;
 
 	struct {
 		struct drm_property *restriction;
@@ -163,6 +156,7 @@ struct exynos_drm_plane {
 		struct drm_property *gm;
 		struct drm_property *tm;
 		struct drm_property *colormap;
+		struct drm_property *block;
 	} props;
 };
 
@@ -205,6 +199,7 @@ struct exynos_drm_plane_config {
  * @disable_plane: disable hardware specific overlay.
  * @te_handler: trigger to transfer video image at the tearing effect
  *	synchronization signal if there is a page flip request.
+ * @wait_for_flip_done: wait for active crtc flip to be done
  */
 struct exynos_drm_crtc;
 struct exynos_drm_crtc_ops {
@@ -231,6 +226,9 @@ struct exynos_drm_crtc_ops {
 	void (*atomic_flush)(struct exynos_drm_crtc *crtc,
 			struct drm_crtc_state *old_crtc_state);
 	void (*te_handler)(struct exynos_drm_crtc *crtc);
+	void (*wait_for_flip_done)(struct exynos_drm_crtc *crtc,
+			const struct drm_crtc_state *old_crtc_state,
+			const struct drm_crtc_state *new_crtc_state);
 };
 
 struct exynos_drm_crtc_state {
@@ -238,6 +236,7 @@ struct exynos_drm_crtc_state {
 	uint32_t color_mode;
 	uint32_t in_bpc;
 	uint32_t force_bpc; /* crtc(DECON) bpc mode */
+	uint64_t expected_present_time;
 	struct exynos_dqe_state dqe;
 	struct drm_property_blob *cgc_lut;
 	struct drm_property_blob *disp_dither;
@@ -246,6 +245,7 @@ struct exynos_drm_crtc_state {
 	struct drm_property_blob *gamma_matrix;
 	struct drm_property_blob *histogram_roi;
 	struct drm_property_blob *histogram_weights;
+	struct drm_gem_object *cgc_gem;
 	enum exynos_drm_writeback_type wb_type;
 	u8 seamless_mode_changed : 1;
 	/**
@@ -253,7 +253,31 @@ struct exynos_drm_crtc_state {
 	 *          power/regulators are kept enabled
 	 */
 	u8 bypass : 1;
+
+	/**
+	 * @skip_update: if flag is set, most DPU updates should be skipped
+	 *               and signaling of commit done should happen immediately
+	 */
+	u8 skip_update : 1;
+
+	/**
+	 * @planes_updated: this flag tracks whether planes were really changed, compared with
+	 *                  crtc_state->planes_changed where it may be set if planes were added
+	 *                  to atomic state due to any mode set (ex. self refresh change)
+	 */
+	u8 planes_updated : 1;
+
+	/**
+	 * @hibernation_exit: set when crtc is going out of hibernation, serves as
+	 *		      potential optimization to avoid full updates
+	 */
+	u8 hibernation_exit : 1;
+
 	unsigned int reserved_win_mask;
+	unsigned int visible_win_mask;
+	struct drm_rect partial_region;
+	struct drm_property_blob *partial;
+	bool needs_reconfigure;
 };
 
 static inline struct exynos_drm_crtc_state *
@@ -290,7 +314,13 @@ struct exynos_drm_crtc {
 		struct drm_property *histogram_roi;
 		struct drm_property *histogram_weights;
 		struct drm_property *histogram_threshold;
+		struct drm_property *histogram_pos;
+		struct drm_property *partial;
+		struct drm_property *cgc_lut_fd;
+		struct drm_property *expected_present_time;
 	} props;
+	u8 active_state;
+	u32 rcd_plane_mask;
 };
 
 struct drm_exynos_file_private {
@@ -330,13 +360,12 @@ to_exynos_priv_state(const struct drm_private_state *state)
  * @wait: wait an atomic commit to finish
  */
 struct exynos_drm_private {
-	struct drm_fb_helper *fb_helper;
+	struct drm_device drm;
 	struct drm_atomic_state *suspend_state;
 	struct device *iommu_client;
-	struct device *dma_dev;
 	void *mapping;
-
 	bool tui_enabled;
+	u32 secured_dpp_mask;
 
 	/* for atomic commit */
 	u32			pending;
@@ -347,12 +376,7 @@ struct exynos_drm_private {
 	struct drm_private_obj	obj;
 };
 
-static inline struct device *to_dma_dev(struct drm_device *dev)
-{
-	struct exynos_drm_private *priv = dev->dev_private;
-
-	return priv->dma_dev;
-}
+#define drm_to_exynos_dev(dev) container_of(dev, struct exynos_drm_private, drm)
 
 #ifdef CONFIG_DRM_EXYNOS_DPI
 struct drm_encoder *exynos_dpi_probe(struct device *dev);
