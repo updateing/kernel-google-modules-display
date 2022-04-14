@@ -113,7 +113,7 @@ struct dsim_device {
 	int idle_ip_index;
 	u8 total_pend_ph;
 	u16 total_pend_pl;
-	/* override message flag MIPI_DSI_MSG_LASTCOMMAND */
+	/* override message flag ~EXYNOS_DSI_MSG_QUEUE */
 	bool force_batching;
 
 	enum dsim_dual_dsi dual_dsi;

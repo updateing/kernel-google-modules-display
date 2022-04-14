@@ -797,18 +797,16 @@ static inline void te2_state_changed(struct backlight_device *bl)
 } while (0)
 
 #define EXYNOS_DCS_BUF_ADD(ctx, seq...) \
-	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, 0, seq)
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, EXYNOS_DSI_MSG_QUEUE, seq)
 
 #define EXYNOS_DCS_BUF_ADD_SET(ctx, set) \
-	EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, set, 0)
+	EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, set, EXYNOS_DSI_MSG_QUEUE)
 
 #define EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, seq...) \
-	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, EXYNOS_DSI_MSG_IGNORE_VBLANK | \
-		MIPI_DSI_MSG_LASTCOMMAND, seq)
+	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, EXYNOS_DSI_MSG_IGNORE_VBLANK, seq)
 
 #define EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, set) \
-	EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, set, EXYNOS_DSI_MSG_IGNORE_VBLANK | \
-		MIPI_DSI_MSG_LASTCOMMAND)
+	EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, set, EXYNOS_DSI_MSG_IGNORE_VBLANK)
 
 #define DSC_PPS_SIZE sizeof(struct drm_dsc_picture_parameter_set)
 

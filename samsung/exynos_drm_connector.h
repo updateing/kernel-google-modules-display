@@ -38,7 +38,7 @@ struct exynos_drm_connector;
 
 /* Stack all commands until lastcommand bit and trigger all in one go */
 #ifndef EXYNOS_DSI_MSG_QUEUE
-#define EXYNOS_DSI_MSG_QUEUE BIT(13)
+#define EXYNOS_DSI_MSG_QUEUE BIT(15)
 #endif
 
 /* packetgo feature to batch msgs can wait for vblank, use this flag to ignore */
