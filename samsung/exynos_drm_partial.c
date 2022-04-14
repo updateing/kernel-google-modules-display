@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <video/mipi_display.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_fourcc_gs101.h>
 #include "exynos_drm_decon.h"
 #include "exynos_drm_format.h"
 #include "exynos_drm_dsim.h"

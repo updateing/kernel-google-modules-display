@@ -27,6 +27,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_fourcc_gs101.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_probe_helper.h>
 
@@ -141,8 +142,9 @@ static int writeback_atomic_check(struct drm_encoder *encoder,
 }
 
 static void writeback_atomic_commit(struct drm_connector *connector,
-		struct drm_connector_state *state)
+		struct drm_atomic_state *atomic_state)
 {
+	struct drm_connector_state *state = drm_atomic_get_new_connector_state(atomic_state, connector);
 	struct drm_writeback_connector *wb_conn = conn_to_wb_conn(connector);
 	struct writeback_device *wb = conn_to_wb_dev(connector);
 	struct dpp_params_info *config = &wb->win_config;

@@ -15,6 +15,7 @@
 #define _EXYNOS_DRM_DPP_H_
 
 #include <drm/samsung_drm.h>
+#include <drm/drm_fourcc_gs101.h>
 
 #include <dpp_cal.h>
 

@@ -19,6 +19,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_fourcc_gs101.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <uapi/drm/exynos_drm.h>
 #include <uapi/linux/videodev2_exynos_media.h>
@@ -184,8 +185,6 @@ err:
 static const struct drm_format_info *
 exynos_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
 {
-	struct drm_format_name_buf n;
-	const char *format_name;
 	const struct drm_format_info *info = NULL;
 
 	if (cmd->modifier[0] == DRM_FORMAT_MOD_SAMSUNG_COLORMAP) {
@@ -193,8 +192,8 @@ exynos_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
 		if (info->format == DRM_FORMAT_BGRA8888)
 			return info;
 
-		format_name = drm_get_format_name(info->format, &n);
-		DRM_WARN("%s is not proper format for colormap\n", format_name);
+		DRM_WARN("%p4cc is not proper format for colormap\n",
+				&info->format);
 	}
 
 	return NULL;
@@ -380,8 +379,6 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 		if (conn->connector_type != DRM_MODE_CONNECTOR_WRITEBACK)
 			continue;
 
-		conn_to_wb_dev(conn);
-
 		old_job = wb_check_job(old_conn_state);
 		new_job = wb_check_job(new_conn_state);
 
@@ -528,7 +525,7 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 			if (new_crtc_state->enable && funcs->prepare)
 				funcs->prepare(crtc);
 			else if (funcs->atomic_disable)
-				funcs->atomic_disable(crtc, old_crtc_state);
+				funcs->atomic_disable(crtc, old_state);
 			else if (funcs->disable)
 				funcs->disable(crtc);
 			else if (funcs->dpms)
@@ -660,6 +657,4 @@ void exynos_drm_mode_config_init(struct drm_device *dev)
 
 	dev->mode_config.funcs = &exynos_drm_mode_config_funcs;
 	dev->mode_config.helper_private = &exynos_drm_mode_config_helpers;
-
-	dev->mode_config.allow_fb_modifiers = true;
 }

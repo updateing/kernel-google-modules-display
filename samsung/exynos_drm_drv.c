@@ -108,7 +108,6 @@ static int exynos_atomic_check_windows(struct drm_device *dev, struct drm_atomic
 		struct exynos_drm_crtc_state *new_exynos_crtc_state;
 		unsigned int old_win_cnt, new_win_cnt;
 
-		to_exynos_crtc_state(old_crtc_state);
 		new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
 
 		if (!new_crtc_state->active_changed && !new_crtc_state->zpos_changed &&
@@ -775,11 +774,6 @@ int exynos_atomic_exit_tui(void)
 	return ret;
 }
 
-static const struct vm_operations_struct exynos_drm_gem_vm_ops = {
-	.open = drm_gem_vm_open,
-	.close = drm_gem_vm_close,
-};
-
 static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv;
@@ -821,8 +815,6 @@ static struct drm_driver exynos_drm_driver = {
 				     DRIVER_RENDER | DRIVER_GEM,
 	.open			   = exynos_drm_open,
 	.postclose		   = exynos_drm_postclose,
-	.gem_free_object_unlocked  = exynos_drm_gem_free_object,
-	.gem_vm_ops		   = &exynos_drm_gem_vm_ops,
 	.dumb_create		   = exynos_drm_gem_dumb_create,
 	.dumb_map_offset	   = exynos_drm_gem_dumb_map_offset,
 	.prime_handle_to_fd	   = drm_gem_prime_handle_to_fd,
@@ -996,7 +988,9 @@ static int exynos_drm_bind(struct device *dev)
 	 *	just specific driver own one instead because
 	 *	drm framework supports only one irq handler.
 	 */
+#if IS_ENABLED(CONFIG_DRM_LEGACY)
 	drm->irq_enabled = true;
+#endif
 
 	/* init kms poll for handling hpd */
 	drm_kms_helper_poll_init(drm);
@@ -1190,4 +1184,5 @@ MODULE_AUTHOR("Inki Dae <inki.dae@samsung.com>");
 MODULE_AUTHOR("Joonyoung Shim <jy0922.shim@samsung.com>");
 MODULE_AUTHOR("Seung-Woo Kim <sw0312.kim@samsung.com>");
 MODULE_DESCRIPTION("Samsung SoC DRM Driver");
+MODULE_IMPORT_NS(DMA_BUF);
 MODULE_LICENSE("GPL");

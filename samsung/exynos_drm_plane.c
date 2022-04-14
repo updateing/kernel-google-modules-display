@@ -229,6 +229,47 @@ static int exynos_drm_plane_late_register(struct drm_plane *plane)
 	return exynos_drm_debugfs_plane_add(exynos_plane);
 }
 
+static int
+exynos_drm_check_format_modifier(u32 format, u64 modifier)
+{
+	if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_COLORMAP, modifier))
+		return 0;
+
+	/* allow rest of the modifiers to support content protection */
+	modifier &= ~DRM_FORMAT_MOD_PROTECTION;
+
+	if (!modifier ||
+	    has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), modifier) ||
+	    has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), modifier))
+		return 0;
+
+	/* TODO: is DRM_FORMAT_MOD_SAMSUNG_YUV_8_2_SPLIT and DRM_FORMAT_MOD_LINEAR
+	 * supported??
+	 */
+
+	DRM_ERROR("not supported modifier(0x%llx)\n", modifier);
+	return -EOPNOTSUPP;
+}
+
+static int
+exynos_drm_plane_check_format(struct exynos_drm_plane_state *state)
+{
+	struct drm_framebuffer *fb = state->base.fb;
+
+	if (!fb || !fb->modifier || !fb->format)
+		return 0;
+
+	return exynos_drm_check_format_modifier(fb->format->format, fb->modifier);
+}
+
+static bool
+exynos_drm_plane_format_mod_supported_per_plane(struct drm_plane *plane,
+						uint32_t format,
+						uint64_t modifier)
+{
+	return exynos_drm_check_format_modifier(format, modifier) == 0;
+}
+
 static struct drm_plane_funcs exynos_plane_funcs = {
 	.update_plane		= drm_atomic_helper_update_plane,
 	.disable_plane		= drm_atomic_helper_disable_plane,
@@ -240,36 +281,8 @@ static struct drm_plane_funcs exynos_plane_funcs = {
 	.atomic_get_property	= exynos_drm_plane_get_property,
 	.atomic_print_state	= exynos_drm_plane_print_state,
 	.late_register		= exynos_drm_plane_late_register,
+	.format_mod_supported	= exynos_drm_plane_format_mod_supported_per_plane,
 };
-
-static int
-exynos_drm_plane_check_format(struct exynos_drm_plane_state *state)
-{
-	struct drm_framebuffer *fb = state->base.fb;
-
-	if (!fb)
-		return 0;
-
-	if (fb->modifier) {
-		uint64_t modifier = fb->modifier;
-
-		if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_COLORMAP, modifier))
-			return 0;
-
-		/* allow rest of the modifiers to support content protection */
-		modifier &= ~DRM_FORMAT_MOD_PROTECTION;
-
-		if (!modifier ||
-		    has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), modifier) ||
-		    has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), modifier))
-			return 0;
-
-		DRM_ERROR("not supported modifier(0x%llx)\n", fb->modifier);
-		return -ENOTSUPP;
-	}
-
-	return 0;
-}
 
 static void
 exynos_plane_update_hdr_params(struct exynos_drm_plane_state *exynos_state)
@@ -310,8 +323,9 @@ exynos_plane_update_hdr_params(struct exynos_drm_plane_state *exynos_state)
 }
 
 static int exynos_plane_atomic_check(struct drm_plane *plane,
-				     struct drm_plane_state *state)
+				     struct drm_atomic_state *atomic_state)
 {
+	struct drm_plane_state *state = drm_atomic_get_new_plane_state(atomic_state, plane);
 	struct exynos_drm_plane *exynos_plane = to_exynos_plane(plane);
 	struct exynos_drm_plane_state *exynos_state =
 						to_exynos_plane_state(state);
@@ -377,7 +391,7 @@ static void exynos_plane_disable(struct drm_plane *plane, struct drm_crtc *crtc)
 }
 
 static void exynos_plane_atomic_update(struct drm_plane *plane,
-				       struct drm_plane_state *old_state)
+				       struct drm_atomic_state *atomic_state)
 {
 	struct drm_plane_state *state = plane->state;
 	struct exynos_drm_crtc *exynos_crtc;
@@ -395,8 +409,10 @@ static void exynos_plane_atomic_update(struct drm_plane *plane,
 }
 
 static void exynos_plane_atomic_disable(struct drm_plane *plane,
-					struct drm_plane_state *old_state)
+					struct drm_atomic_state *state)
 {
+	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state, plane);
+
 	if (!old_state || !old_state->crtc)
 		return;
 

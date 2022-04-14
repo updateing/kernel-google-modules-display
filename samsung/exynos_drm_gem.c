@@ -22,6 +22,72 @@
 #include "exynos_drm_dsim.h"
 #include "exynos_drm_gem.h"
 
+static void exynos_drm_gem_unmap(struct exynos_drm_gem *exynos_gem_obj)
+{
+	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
+
+	if (!attach)
+		return;
+
+	/* nothing to do for color map buffers */
+	if (exynos_gem_obj->flags & EXYNOS_DRM_GEM_FLAG_COLORMAP)
+		return;
+}
+
+void exynos_drm_gem_free_object(struct drm_gem_object *obj)
+{
+	struct exynos_drm_gem *exynos_gem_obj = to_exynos_gem(obj);
+	struct dma_buf *dma_buf;
+
+	exynos_drm_gem_unmap(exynos_gem_obj);
+
+	if (obj->import_attach) {
+		dma_buf = obj->import_attach->dmabuf;
+		if (dma_buf && exynos_gem_obj->vaddr) {
+			struct iosys_map map = IOSYS_MAP_INIT_VADDR(exynos_gem_obj->vaddr);
+			dma_buf_vunmap(dma_buf, &map);
+		}
+
+		drm_prime_gem_destroy(obj, exynos_gem_obj->sgt);
+	}
+
+	drm_gem_object_release(&exynos_gem_obj->base);
+	kfree(exynos_gem_obj);
+}
+
+void *exynos_drm_gem_get_vaddr(struct exynos_drm_gem *exynos_gem_obj)
+{
+	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
+	struct iosys_map map;
+	int ret;
+
+	if (WARN_ON(!attach))
+		return NULL;
+
+	if (!exynos_gem_obj->vaddr) {
+		ret = dma_buf_vmap(attach->dmabuf, &map);
+		if (ret) {
+			pr_err("Failed to map virtual address\n");
+			return NULL;
+		}
+
+		exynos_gem_obj->vaddr = map.vaddr;
+		pr_debug("mapped vaddr: %pK\n", exynos_gem_obj->vaddr);
+	}
+
+	return exynos_gem_obj->vaddr;
+}
+
+static const struct vm_operations_struct exynos_drm_gem_vm_ops = {
+	.open = drm_gem_vm_open,
+	.close = drm_gem_vm_close,
+};
+
+static const struct drm_gem_object_funcs exynos_drm_gem_object_funcs = {
+	.free = exynos_drm_gem_free_object,
+	.vm_ops = &exynos_drm_gem_vm_ops,
+};
+
 struct exynos_drm_gem *exynos_drm_gem_alloc(struct drm_device *dev,
 					    size_t size, unsigned int flags)
 {
@@ -32,6 +98,7 @@ struct exynos_drm_gem *exynos_drm_gem_alloc(struct drm_device *dev,
 		return ERR_PTR(-ENOMEM);
 
 	exynos_gem_obj->flags = flags;
+	exynos_gem_obj->base.funcs = &exynos_drm_gem_object_funcs;
 
 	/* no need to release initialized private gem object */
 	drm_gem_private_object_init(dev, &exynos_gem_obj->base, size);
@@ -67,55 +134,6 @@ exynos_drm_gem_prime_import_sg_table(struct drm_device *dev,
 	pr_debug("mapped dma_addr: 0x%llx\n", exynos_gem_obj->dma_addr);
 
 	return &exynos_gem_obj->base;
-}
-
-static void exynos_drm_gem_unmap(struct exynos_drm_gem *exynos_gem_obj)
-{
-	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
-
-	if (!attach)
-		return;
-
-	/* nothing to do for color map buffers */
-	if (exynos_gem_obj->flags & EXYNOS_DRM_GEM_FLAG_COLORMAP)
-		return;
-}
-
-void exynos_drm_gem_free_object(struct drm_gem_object *obj)
-{
-	struct exynos_drm_gem *exynos_gem_obj = to_exynos_gem(obj);
-	struct dma_buf *dma_buf;
-
-	exynos_drm_gem_unmap(exynos_gem_obj);
-
-	if (obj->import_attach) {
-		dma_buf = obj->import_attach->dmabuf;
-		if (dma_buf && exynos_gem_obj->vaddr)
-			dma_buf_vunmap(dma_buf, exynos_gem_obj->vaddr);
-
-		drm_prime_gem_destroy(obj, exynos_gem_obj->sgt);
-	}
-
-	drm_gem_object_release(&exynos_gem_obj->base);
-	kfree(exynos_gem_obj);
-}
-
-void *exynos_drm_gem_get_vaddr(struct exynos_drm_gem *exynos_gem_obj)
-{
-	struct dma_buf_attachment *attach = exynos_gem_obj->base.import_attach;
-
-	if (WARN_ON(!attach))
-		return NULL;
-
-	if (!exynos_gem_obj->vaddr) {
-		exynos_gem_obj->vaddr = dma_buf_vmap(attach->dmabuf);
-		if (!exynos_gem_obj->vaddr)
-			pr_err("Failed to map virtual address\n");
-		else
-			pr_debug("mapped vaddr: %pK\n", exynos_gem_obj->vaddr);
-	}
-
-	return  exynos_gem_obj->vaddr;
 }
 
 static int exynos_drm_gem_create(struct drm_device *dev, struct drm_file *filep,
