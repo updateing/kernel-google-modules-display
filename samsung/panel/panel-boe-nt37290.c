@@ -1380,7 +1380,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 	{
 		/* 1080x2340 @ 60Hz */
@@ -1440,7 +1440,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 };
 
