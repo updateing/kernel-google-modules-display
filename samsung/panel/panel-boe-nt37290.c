@@ -568,7 +568,7 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2F,
 				   nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_MANUAL));
 		/* 120Hz gamma band */
-		if (ctx->panel_rev >= PANEL_REV_EVT1_1)
+		if (ctx->panel_rev == PANEL_REV_EVT1_1)
 			EXYNOS_DCS_BUF_ADD(ctx, 0x26, 0x00);
 		/* restore TE timing (no shift) */
 		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
@@ -604,8 +604,8 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 						 "Unsupported idle_vrefresh %dHz for auto mode\n",
 						 idle_vrefresh);
 			} else if (vrefresh == 120) {
-				/* two 120Hz frames are removed after EVT1.1 */
-				u8 val = (ctx->panel_rev >= PANEL_REV_EVT1_1) ? 0x91 : 0x93;
+				/* two 120Hz frames are removed on EVT1.1 */
+				u8 val = (ctx->panel_rev == PANEL_REV_EVT1_1) ? 0x91 : 0x93;
 
 				if (idle_vrefresh == 10)
 					EXYNOS_DCS_BUF_ADD(ctx, 0xBA, val, 0x09, 0x03, 0x00, 0x31,
@@ -635,7 +635,7 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 		}
 
 		/* VRR gamma band (60~10Hz) */
-		if (ctx->panel_rev >= PANEL_REV_EVT1_1)
+		if (ctx->panel_rev == PANEL_REV_EVT1_1)
 			EXYNOS_DCS_BUF_ADD(ctx, 0x26, 0x01);
 
 		if (vrefresh == 120)
