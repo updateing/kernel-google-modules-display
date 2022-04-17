@@ -1127,7 +1127,7 @@ static void s6e3hc4_get_panel_rev(struct exynos_panel *ctx, u32 id)
 {
 	/* extract command 0xDB */
 	u8 build_code = (id & 0xFF00) >> 8;
-	u8 rev = ((build_code & 0xE0) >> 3) | (build_code & 0x03);
+	u8 rev = ((build_code & 0xE0) >> 3) | ((build_code & 0x0C) >> 2);
 
 	exynos_panel_get_panel_rev(ctx, rev);
 }
