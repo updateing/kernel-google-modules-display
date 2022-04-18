@@ -351,8 +351,13 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x26, 0x00),
 	/* TE output line */
 	EXYNOS_DSI_CMD_SEQ(0x35),
-	/* select brightness value */
-	EXYNOS_DSI_CMD_SEQ(0x51, 0x03, 0xF8, 0x03, 0xF8, 0x0F, 0xFE),
+	/* select brightness value for proto1.1 and EVT1 (~142nits) */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1),
+			       0x51, 0x02, 0x42, 0x02, 0x42, 0x0F, 0xFE),
+	/* select brightness value for EVT1.1 and after (~142nits) */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1_1),
+			       0x51, 0x08, 0x8D, 0x08, 0x8D, 0x0F, 0xFE),
+	/* control brightness */
 	/* control brightness */
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x20),
 	EXYNOS_DSI_CMD_SEQ(0x5A, 0x01),
