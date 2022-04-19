@@ -86,6 +86,8 @@ struct nt37290_panel {
 	bool delayed_idle;
 	/** @hw_osc2_clk_idx: current index of OSC2 clock table in panel */
 	int hw_osc2_clk_idx;
+	/** @rrs_in_progress: indicate whether RRS (Runtime Resolution Switch) is in progress */
+	bool rrs_in_progress;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct nt37290_panel, base)
@@ -316,11 +318,9 @@ static const struct exynos_dsi_cmd nt37290_dsc_wqhd_cmds[] = {
 
 	/* row address */
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x0C, 0x2F),
-	/* slice 30, 2 decoders */
+	/* PPS1: slice 30, 2 decoders, 1440x3120 */
 	EXYNOS_DSI_CMD_SEQ(0x90, 0x03, 0x03),
-	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x1E, 0xD2, 0x00, 0x02,
-			   0x86, 0x03, 0x28, 0x00, 0x0A, 0x03, 0x97, 0x02,
-			   0x8B, 0x10, 0xF0),
+	EXYNOS_DSI_CMD_SEQ(0x03, 0x00),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_wqhd);
 
@@ -335,13 +335,23 @@ static const struct exynos_dsi_cmd nt37290_dsc_fhd_cmds[] = {
 
 	/* row address */
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x09, 0x23),
-	/* slice 30, 2 decoder */
+	/* PPS2: slice 30, 2 decoders, 1080x2340 */
 	EXYNOS_DSI_CMD_SEQ(0x90, 0x03, 0x03),
+	EXYNOS_DSI_CMD_SEQ(0x03, 0x10),
+};
+static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_fhd);
+
+static const struct exynos_dsi_cmd nt37290_dsc_init_cmds[] = {
+	/* PPS1: slice 30, 2 decoder, scaling off (1440x3120) */
 	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x1E, 0xD2, 0x00, 0x02,
+			   0x86, 0x03, 0x28, 0x00, 0x0A, 0x03, 0x97, 0x02,
+			   0x8B, 0x10, 0xF0),
+	/* PPS2: slice 30, 2 decoder, scaling up 1.33x (1080x2340) */
+	EXYNOS_DSI_CMD_SEQ(0x93, 0x89, 0x28, 0x00, 0x1E, 0xD2, 0x00, 0x02,
 			   0x25, 0x02, 0xC5, 0x00, 0x07, 0x03, 0x97, 0x03,
 			   0x64, 0x10, 0xF0),
 };
-static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_fhd);
+static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_init);
 
 static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	/* CMD1 */
@@ -357,7 +367,6 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	/* select brightness value for EVT1.1 and after (~142nits) */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1_1),
 			       0x51, 0x08, 0x8D, 0x08, 0x8D, 0x0F, 0xFE),
-	/* control brightness */
 	/* control brightness */
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x20),
 	EXYNOS_DSI_CMD_SEQ(0x5A, 0x01),
@@ -447,6 +456,11 @@ static void nt37290_update_te2(struct exynos_panel *ctx)
 
 	if (!ctx)
 		return;
+
+	if (spanel->rrs_in_progress) {
+		dev_dbg(ctx->dev, "%s: RRS in progress, skip\n", __func__);
+		return;
+	}
 
 	ret = exynos_panel_get_current_mode_te2(ctx, &timing);
 	if (!ret) {
@@ -795,6 +809,12 @@ static void nt37290_commit_done(struct exynos_panel *ctx)
 	if (!is_panel_active(ctx) || !pmode)
 		return;
 
+	if (spanel->rrs_in_progress) {
+		/* we should finish RRS in this commit */
+		spanel->rrs_in_progress = false;
+		return;
+	}
+
 	if (test_bit(G10_FEAT_EARLY_EXIT, spanel->feat))
 		nt37290_trigger_early_exit(ctx);
 	/**
@@ -846,6 +866,7 @@ static int nt37290_enable(struct drm_panel *panel)
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 	const struct drm_display_mode *mode;
+	const bool needs_reset = !is_panel_enabled(ctx);
 	bool is_fhd;
 
 	if (!pmode) {
@@ -858,18 +879,25 @@ static int nt37290_enable(struct drm_panel *panel)
 
 	dev_dbg(ctx->dev, "%s (%s)\n", __func__, is_fhd ? "fhd" : "wqhd");
 
-	exynos_panel_reset(ctx);
-	exynos_panel_send_cmd_set(ctx, &nt37290_init_cmd_set);
+	DPU_ATRACE_BEGIN(__func__);
+
+	if (needs_reset) {
+		exynos_panel_reset(ctx);
+		exynos_panel_send_cmd_set(ctx, &nt37290_init_cmd_set);
+		exynos_panel_send_cmd_set(ctx, &nt37290_dsc_init_cmd_set);
+		exynos_panel_send_cmd_set(ctx, &nt37290_lhbm_on_setting_cmd_set);
+		nt37290_update_panel_feat(ctx, pmode, true);
+	}
+
 	exynos_panel_send_cmd_set(ctx,
 				  is_fhd ? &nt37290_dsc_fhd_cmd_set : &nt37290_dsc_wqhd_cmd_set);
-	exynos_panel_send_cmd_set(ctx, &nt37290_lhbm_on_setting_cmd_set);
 
-	nt37290_update_panel_feat(ctx, pmode, true);
-
-	if (!pmode->exynos_mode.is_lp_mode)
-		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
-	else
+	if (pmode->exynos_mode.is_lp_mode)
 		nt37290_set_lp_mode(ctx, pmode);
+	else if (needs_reset || ctx->panel_state == PANEL_STATE_BLANK)
+		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+
+	DPU_ATRACE_END(__func__);
 
 	return 0;
 }
@@ -878,6 +906,12 @@ static int nt37290_disable(struct drm_panel *panel)
 {
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	struct nt37290_panel *spanel = to_spanel(ctx);
+
+	/* skip disable sequence if going through modeset */
+	if (ctx->panel_state == PANEL_STATE_MODESET) {
+		spanel->rrs_in_progress = true;
+		return 0;
+	}
 
 	/* panel register state gets reset after disabling hardware */
 	bitmap_clear(spanel->hw_feat, 0, G10_FEAT_MAX);
@@ -1510,6 +1544,7 @@ static void nt37290_panel_init(struct exynos_panel *ctx)
 	struct dentry *csroot = ctx->debugfs_cmdset_entry;
 
 	exynos_panel_debugfs_create_cmdset(ctx, csroot, &nt37290_init_cmd_set, "init");
+	exynos_panel_send_cmd_set(ctx, &nt37290_dsc_init_cmd_set);
 	exynos_panel_send_cmd_set(ctx, &nt37290_lhbm_on_setting_cmd_set);
 
 	ctx->osc2_clk_khz = osc2_clk_data[spanel->hw_osc2_clk_idx].clk_khz;
