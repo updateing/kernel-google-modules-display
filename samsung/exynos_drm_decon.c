@@ -1034,6 +1034,9 @@ static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
 		}
 	}
 
+	if (decon->rcd)
+		_dpp_disable(decon->rcd);
+
 	decon_reg_stop(decon->id, &decon->config, reset, fps);
 
 	if (reset && decon->dqe)
