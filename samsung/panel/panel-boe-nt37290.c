@@ -316,11 +316,11 @@ static const struct exynos_dsi_cmd nt37290_dsc_wqhd_cmds[] = {
 
 	/* row address */
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x0C, 0x2F),
-	/* slice 24, 2 decoder */
+	/* slice 30, 2 decoders */
 	EXYNOS_DSI_CMD_SEQ(0x90, 0x03, 0x03),
-	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x18, 0xD2, 0x00, 0x02,
-			   0x86, 0x02, 0x83, 0x00, 0x0A, 0x04, 0x86, 0x03,
-			   0x2E, 0x10, 0xF0),
+	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x1E, 0xD2, 0x00, 0x02,
+			   0x86, 0x03, 0x28, 0x00, 0x0A, 0x03, 0x97, 0x02,
+			   0x8B, 0x10, 0xF0),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_wqhd);
 
@@ -1303,16 +1303,7 @@ static const struct drm_dsc_config nt37290_dsc_cfg = {
 	},
 };
 
-#define NT37290_DSC_WQHD_CONFIG \
-	.dsc = { \
-		.enabled = true, \
-		.dsc_count = 2, \
-		.slice_count = 2, \
-		.slice_height = 24, \
-		.cfg = &nt37290_dsc_cfg, \
-	}
-
-#define NT37290_DSC_FHD_CONFIG \
+#define NT37290_DSC_CONFIG \
 	.dsc = { \
 		.enabled = true, \
 		.dsc_count = 2, \
@@ -1343,7 +1334,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_WQHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1373,7 +1364,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_WQHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1403,7 +1394,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_FHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1433,7 +1424,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_FHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1466,7 +1457,7 @@ static const struct exynos_panel_mode nt37290_lp_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_WQHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
 		}
@@ -1492,7 +1483,7 @@ static const struct exynos_panel_mode nt37290_lp_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_FHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
 		}
