@@ -943,14 +943,12 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 
 	if (i == 0 && j == 0) {
 		dsc_enc0_w = comp_slice_width_pixel_unit;
-		if (dscc_en) {
+		if (dscc_en)
 			dsc_enc1_w = comp_slice_width_pixel_unit;
-		}
 	} else if (i == 0 && j != 0) {
 		dsc_enc0_w = comp_slice_width_pixel_unit + 1;
-		if (dscc_en) {
+		if (dscc_en)
 			dsc_enc1_w = comp_slice_width_pixel_unit + 1;
-		}
 	} else if (i != 0) {
 		while (1) {
 			comp_slice_width_pixel_unit++;
@@ -959,9 +957,8 @@ static void dsc_calc_pps_info(struct decon_config *config, u32 dscc_en,
 				break;
 		}
 		dsc_enc0_w = comp_slice_width_pixel_unit;
-		if (dscc_en) {
+		if (dscc_en)
 			dsc_enc1_w = comp_slice_width_pixel_unit;
-		}
 	}
 
 	if (dual_slice_en) {

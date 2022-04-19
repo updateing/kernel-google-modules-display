@@ -105,7 +105,6 @@ static int exynos_atomic_check_windows(struct drm_device *dev, struct drm_atomic
 		struct exynos_drm_crtc_state *new_exynos_crtc_state;
 		unsigned int old_win_cnt, new_win_cnt;
 
-		to_exynos_crtc_state(old_crtc_state);
 		new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
 
 		if (!new_crtc_state->active_changed && !new_crtc_state->zpos_changed)
@@ -923,7 +922,9 @@ static int exynos_drm_bind(struct device *dev)
 	 *	just specific driver own one instead because
 	 *	drm framework supports only one irq handler.
 	 */
+#if IS_ENABLED(CONFIG_DRM_LEGACY)
 	drm->irq_enabled = true;
+#endif
 
 	/* init kms poll for handling hpd */
 	drm_kms_helper_poll_init(drm);
