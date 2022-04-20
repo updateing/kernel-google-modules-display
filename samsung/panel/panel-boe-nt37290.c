@@ -1610,6 +1610,12 @@ const struct exynos_panel_desc boe_nt37290 = {
 	.binned_lp = nt37290_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(nt37290_binned_lp),
 	.is_panel_idle_supported = true,
+	/*
+	 * After waiting for TE, wait for extra time to make sure the frame start
+	 * happens after both DPU and panel PPS are set and before the next VSYNC.
+	 * This reserves about 6ms for finishing both PPS and frame start.
+	 */
+	.delay_dsc_reg_init_us = 6000,
 	.panel_func = &nt37290_drm_funcs,
 	.exynos_panel_func = &nt37290_exynos_funcs,
 };
