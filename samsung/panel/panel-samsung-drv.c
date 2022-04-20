@@ -3260,12 +3260,23 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		mutex_unlock(&ctx->mode_lock);
 	} else {
 		if (crtc_state && crtc_state->mode_changed &&
-		    drm_atomic_crtc_effectively_active(crtc_state))
+		    drm_atomic_crtc_effectively_active(crtc_state)) {
+			if (ctx->desc->delay_dsc_reg_init_us) {
+				struct exynos_drm_connector_state *exynos_conn_state =
+							to_exynos_connector_state(conn_state);
+				struct exynos_display_mode *exynos_mode =
+							&exynos_conn_state->exynos_mode;
+
+				exynos_mode->dsc.delay_reg_init_us =
+							ctx->desc->delay_dsc_reg_init_us;
+			}
+
 			ctx->panel_state = PANEL_STATE_MODESET;
-		else if (ctx->force_power_on)
+		} else if (ctx->force_power_on) {
 			ctx->panel_state = PANEL_STATE_BLANK;
-		else
+		} else {
 			ctx->panel_state = PANEL_STATE_OFF;
+		}
 
 		drm_panel_disable(&ctx->panel);
 	}

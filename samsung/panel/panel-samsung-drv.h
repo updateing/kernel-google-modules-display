@@ -479,6 +479,7 @@ struct exynos_panel_desc {
 	bool dbv_extra_frame;
 	bool is_partial;
 	bool is_panel_idle_supported;
+	const unsigned int delay_dsc_reg_init_us;
 	const struct brightness_capability *brt_capability;
 	const u32 *bl_range;
 	u32 bl_num_ranges;
