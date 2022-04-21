@@ -488,7 +488,7 @@ static void nt37290_update_min_idle_vrefresh(struct exynos_panel *ctx,
 	const int vrefresh = drm_mode_vrefresh(&pmode->mode);
 	int idle_vrefresh = ctx->min_vrefresh;
 
-	if (!idle_vrefresh || !is_auto_mode_allowed(ctx) ||
+	if (idle_vrefresh < 0 || !is_auto_mode_allowed(ctx) ||
 	    pmode->idle_mode == IDLE_MODE_UNSUPPORTED)
 		idle_vrefresh = 0;
 	else if (idle_vrefresh <= 10)
