@@ -871,6 +871,10 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, is_fhd ? 0x0D : 0x0C);
+	if (ctx->panel_rev >= PANEL_REV_EVT1_1 && ctx->panel_rev <= PANEL_REV_DVT1_1) {
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xFD, 0x95);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x95, 0x80, 0x44, 0x08, 0x81, 0x10, 0x17, 0x74);
+	}
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 
 	s6e3hc4_update_panel_feat(ctx, pmode, true);
