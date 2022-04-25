@@ -716,6 +716,13 @@ static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	if (pmode->exynos_mode.is_lp_mode)
 		return false;
 
+	/* do not change frequency when LHBM is enabled */
+	if (ctx->hbm.local_hbm.enabled) {
+		dev_warn(ctx->dev, "%s: frequency change is not allowed while LHBM is enabled\n",
+			__func__);
+		return false;
+	}
+
 	DPU_ATRACE_BEGIN(__func__);
 
 	updated = nt37290_change_frequency(ctx, pmode);
@@ -766,7 +773,8 @@ static void nt37290_trigger_early_exit(struct exynos_panel *ctx)
 
 	DPU_ATRACE_BEGIN(__func__);
 
-	if (ctx->idle_delay_ms && delta_us > IDLE_DELAY_THRESHOLD_US) {
+	if (ctx->idle_delay_ms && delta_us > IDLE_DELAY_THRESHOLD_US &&
+	    !ctx->hbm.local_hbm.enabled) {
 		const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 		dev_dbg(ctx->dev, "%s: disable auto idle mode for %s\n",
@@ -794,7 +802,7 @@ static void nt37290_commit_done(struct exynos_panel *ctx)
 	 * after the delay time has elapsed.
 	 */
 	else if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY &&
-		 spanel->delayed_idle)
+		 spanel->delayed_idle && !ctx->hbm.local_hbm.enabled)
 		nt37290_change_frequency(ctx, pmode);
 }
 
