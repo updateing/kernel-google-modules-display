@@ -978,7 +978,7 @@ static void dsim_reg_set_vt_htiming1(u32 id, u32 hfp_period, u32 hbp_period)
 	dsim_write(id, DSIM_VT_HTIMING1, val);
 }
 
-static void dsim_reg_set_hperiod(u32 id, struct dsim_reg_config *config,
+static void dsim_reg_set_hperiod(u32 id, const struct dsim_reg_config *config,
 		struct dsim_clks *clks)
 {
 	u32 vclk,  wclk;
@@ -2165,8 +2165,9 @@ void dsim_reg_set_vrr_config(u32 id, const struct dsim_reg_config *config,
 		idx = config->mres_mode;
 		dsim_reg_set_cm_underrun_lp_ref(id, config->cmd_underrun_cnt[idx]);
 		dsim_reg_set_cmd_ctrl(id, config, clks);
+	} else if (config->mode == DSIM_VIDEO_MODE) {
+		dsim_reg_set_hperiod(id, config, clks);
 	}
-	/* TODO: handle video mode panel */
 }
 
 /* Exit ULPS mode and set clocks and lanes */
