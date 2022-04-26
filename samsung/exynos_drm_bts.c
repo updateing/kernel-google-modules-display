@@ -56,13 +56,21 @@
 /*
  * 1. function clock
  *    panel_clk = panel_w * panel_h * fps * margin / ppc
- *    clk1[i] = src_w * src_h * fps * (panel_h / dst_h) * margin / ppc
- *    clk2[i] = ((panel_w + diff_w) * ratio_v + panel_w * (1 - ratio_v)) *
+ *    vertical scale-down case (src_h > dst_h)
+ *     clk[i] = (line_a * ratio_a + line_b * (1 - ratio_a)) *
+ *                  panel_h * fps * margin / ppc
+ *        - line_a = max((ratio_v - 2) * src_w + max(src_w, dst_w), panel_w + diff_w)
+ *        - line_b = max((ratio_v - 1) * src_w + max(src_w, dst_w), panel_w + diff_w)
+ *        - ratio_v = ceiling(src_h / dst_h)
+ *        - ratio_a = ratio_v - (src_h / dst_h)
+ *        - diff_w = (src_w <= dst_w) ? 0 : src_w - dst_w
+ *    non-vertical scale-down case
+ *     clk[i] = ((panel_w + diff_w) * ratio_v + panel_w * (1 - ratio_v)) *
  *                  panel_h * fps * margin / ppc
  *        - ratio_v = (src_h >= dst_h) ? 1 : src_h / dst_h
  *        - diff_w = (src_w <= dst_w) ? 0 : src_w - dst_w
  *    margin = 1.1 + HW bubble cycles
- *    aclk1 = max(panel_clk, clk1[i], clk2[i])
+ *    aclk1 = max(panel_clk, clk[i])
  * 2. AXI throughput clock
  *    1) fps based
  *       clk_bw[i] = src_w * src_h * fps * (bpp / 8) * (panel_h / dst_h) * 1.1
@@ -335,7 +343,7 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 				  const struct dpu_bts_win_config *config, u64 resol_clk,
 				  u32 max_clk)
 {
-	u64 aclk1_disp, aclk2_disp, aclk_base, aclk_disp_khz;
+	u64 aclk_disp, aclk_base, aclk_disp_khz;
 	u32 ppc;
 	u32 src_w, src_h;
 	u32 diff_w, ratio_v;
@@ -362,14 +370,25 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 		ppc = decon->bts.ppc;
 
 	margin = 1100 + ((48000 + 20000) / decon->config.image_width);
-	aclk1_disp = (u64)(src_w * src_h * decon->bts.fps) *
-			decon->config.image_height / config->dst_h;
 	diff_w = (src_w <= config->dst_w) ? 0 : src_w - config->dst_w;
-	ratio_v = (src_h >= config->dst_h) ? 1000 : mult_frac(src_h, 1000, config->dst_h);
-	aclk2_disp = (u64)((decon->config.image_width + diff_w) *
+
+	if (src_h > config->dst_h) {
+		u32 ratio_a, line_a, line_b;
+
+		ratio_v = DIV_ROUND_UP(src_h, config->dst_h);
+		ratio_a = (ratio_v * 1000) - mult_frac(src_h, 1000, config->dst_h);
+		line_a = max((ratio_v - 2) * src_w + max(src_w, config->dst_w),
+				decon->config.image_width + diff_w);
+		line_b = max((ratio_v - 1) * src_w + max(src_w, config->dst_w),
+				decon->config.image_width + diff_w);
+		aclk_disp = (u64)(line_a * ratio_a + line_b * (1000 - ratio_a));
+	} else {
+		ratio_v = (src_h >= config->dst_h) ? 1000 : mult_frac(src_h, 1000, config->dst_h);
+		aclk_disp = (u64)((decon->config.image_width + diff_w) *
 			ratio_v + decon->config.image_width * (1000 - ratio_v));
-	aclk2_disp = mult_frac(aclk2_disp, decon->config.image_height * decon->bts.fps, 1000);
-	aclk_disp_khz = (max(aclk1_disp, aclk2_disp) * margin / 1000) / 1000;
+	}
+	aclk_disp = mult_frac(aclk_disp, decon->config.image_height * decon->bts.fps, 1000);
+	aclk_disp_khz = (aclk_disp * margin / 1000) / 1000;
 
 	if (aclk_disp_khz < resol_clk)
 		aclk_disp_khz = resol_clk;
