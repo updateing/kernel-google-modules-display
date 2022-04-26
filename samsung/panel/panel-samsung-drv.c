@@ -1894,7 +1894,7 @@ static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 	struct exynos_drm_connector_state *exynos_connector_state =
 		to_exynos_connector_state(connector_state);
 	const struct exynos_panel_mode *pmode =
-		exynos_panel_get_mode(ctx, &crtc_state->adjusted_mode);
+		exynos_panel_get_mode(ctx, &crtc_state->mode);
 
 	if (!pmode) {
 		dev_warn(ctx->dev, "invalid mode %s\n", pmode->mode.name);
