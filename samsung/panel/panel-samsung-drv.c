@@ -1389,7 +1389,7 @@ static ssize_t osc2_clk_khz_store(struct device *dev, struct device_attribute *a
 	if (!is_panel_active(ctx))
 		return -EPERM;
 
-	if (!funcs && !funcs->set_osc2_clk_khz)
+	if (!funcs || !funcs->set_osc2_clk_khz)
 		return -EOPNOTSUPP;
 
 	ret = kstrtou32(buf, 0, &osc2_clk_khz);
