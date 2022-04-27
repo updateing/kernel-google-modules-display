@@ -2015,6 +2015,7 @@ static int decon_runtime_suspend(struct device *dev)
 		decon_warn(decon, "decon state = %u at suspending\n",
 			decon->state);
 		WARN_ON(1);
+		decon_dump_all(decon, DPU_EVT_CONDITION_DEFAULT, false);
 		return -EINVAL;
 	}
 
@@ -2042,6 +2043,7 @@ static int decon_runtime_resume(struct device *dev)
 		decon_warn(decon, "decon state = %u at resuming\n",
 			decon->state);
 		WARN_ON(1);
+		decon_dump_all(decon, DPU_EVT_CONDITION_DEFAULT, false);
 		return -EINVAL;
 	}
 
