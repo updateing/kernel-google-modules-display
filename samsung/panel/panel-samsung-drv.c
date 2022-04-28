@@ -1752,19 +1752,21 @@ static void exynos_panel_pre_commit_properties(
 	if (mipi_sync)
 		exynos_dsi_dcs_write_buffer_force_batch_end(dsi);
 
-	if ((MIPI_CMD_SYNC_GHBM & conn_state->mipi_sync)) {
+	if (((MIPI_CMD_SYNC_GHBM | MIPI_CMD_SYNC_BL) & conn_state->mipi_sync)
+	    && !(MIPI_CMD_SYNC_LHBM & conn_state->mipi_sync)
+	    && ctx->desc->dbv_extra_frame) {
 		/**
-		 * panel needs one extra VSYNC period to apply GHBM. The frame
+		 * panel needs one extra VSYNC period to apply GHBM/dbv. The frame
 		 * update should be delayed.
 		 */
-		DPU_ATRACE_BEGIN("ghbm_wait");
+		DPU_ATRACE_BEGIN("dbv_wait");
 		if (!drm_crtc_vblank_get(conn_state->base.crtc)) {
 			drm_crtc_wait_one_vblank(conn_state->base.crtc);
 			drm_crtc_vblank_put(conn_state->base.crtc);
 		} else {
-			pr_warn("%s failed to get vblank for ghbm wait\n", __func__);
+			pr_warn("%s failed to get vblank for dbv wait\n", __func__);
 		}
-		DPU_ATRACE_END("ghbm_wait");
+		DPU_ATRACE_END("dbv_wait");
 	}
 
 	if (ghbm_updated)

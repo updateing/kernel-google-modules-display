@@ -473,6 +473,8 @@ struct exynos_panel_desc {
 	u32 max_brightness;
 	u32 min_brightness;
 	u32 dft_brightness; /* default brightness */
+	/* extra frame is needed to apply brightness change if it's not at next VSYNC */
+	bool dbv_extra_frame;
 	bool is_partial;
 	bool is_panel_idle_supported;
 	const struct brightness_capability *brt_capability;
