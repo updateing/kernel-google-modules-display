@@ -2111,37 +2111,37 @@ void decon_reg_get_crc_data(u32 id, u32 *w0_data, u32 *w1_data)
 	*w1_data = CRC_DATA_DSIMIF1_GET(val);
 }
 
-void __decon_dump(u32 id, struct decon_regs *decon_regs, bool dsc_en)
+void __decon_dump(struct drm_printer *p, u32 id, struct decon_regs *decon_regs, bool dsc_en)
 {
 	struct decon_device *decon = get_decon_drvdata(0);
 	void __iomem *win_regs = decon->regs.regs + WIN_OFFSET;
 	void __iomem *regs = decon_regs->regs;
 
-	cal_log_info(id, "\n=== DECON%d SFR DUMP ===\n", id);
-	dpu_print_hex_dump(regs, regs, 0x620);
+	cal_drm_printf(p, id, "\n=== DECON%d SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs, 0x620);
 
-	cal_log_info(id, "\n=== DECON%d SHADOW SFR DUMP ===\n", id);
-	dpu_print_hex_dump(regs, regs + SHADOW_OFFSET, 0x304);
+	cal_drm_printf(p, id, "\n=== DECON%d SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs + SHADOW_OFFSET, 0x304);
 
-	cal_log_info(id, "\n=== DECON0 WINDOW SFR DUMP ===\n");
-	dpu_print_hex_dump(win_regs, win_regs, 0x340);
+	cal_drm_printf(p, id, "\n=== DECON0 WINDOW SFR DUMP ===\n");
+	dpu_print_hex_dump(p, win_regs, win_regs, 0x340);
 
-	cal_log_info(id, "\n=== DECON0 WINDOW SHADOW SFR DUMP ===\n");
-	dpu_print_hex_dump(win_regs, win_regs + SHADOW_OFFSET, 0x220);
+	cal_drm_printf(p, id, "\n=== DECON0 WINDOW SHADOW SFR DUMP ===\n");
+	dpu_print_hex_dump(p, win_regs, win_regs + SHADOW_OFFSET, 0x220);
 
 	if ((id == REGS_DECON0_ID) && dsc_en) {
-		cal_log_info(id, "\n=== DECON0 DSC0 SFR DUMP ===\n");
-		dpu_print_hex_dump(regs, regs + DSC0_OFFSET, 0x80);
+		cal_drm_printf(p, id, "\n=== DECON0 DSC0 SFR DUMP ===\n");
+		dpu_print_hex_dump(p, regs, regs + DSC0_OFFSET, 0x80);
 
-		cal_log_info(id, "\n=== DECON0 DSC1 SFR DUMP ===\n");
-		dpu_print_hex_dump(regs, regs + DSC1_OFFSET, 0x80);
+		cal_drm_printf(p, id, "\n=== DECON0 DSC1 SFR DUMP ===\n");
+		dpu_print_hex_dump(p, regs, regs + DSC1_OFFSET, 0x80);
 
-		cal_log_info(id, "\n=== DECON0 DSC0 SHADOW SFR DUMP ===\n");
-		dpu_print_hex_dump(regs, regs + SHADOW_OFFSET + DSC0_OFFSET,
+		cal_drm_printf(p, id, "\n=== DECON0 DSC0 SHADOW SFR DUMP ===\n");
+		dpu_print_hex_dump(p, regs, regs + SHADOW_OFFSET + DSC0_OFFSET,
 				0x80);
 
-		cal_log_info(id, "\n=== DECON0 DSC1 SHADOW SFR DUMP ===\n");
-		dpu_print_hex_dump(regs, regs + SHADOW_OFFSET + DSC1_OFFSET,
+		cal_drm_printf(p, id, "\n=== DECON0 DSC1 SHADOW SFR DUMP ===\n");
+		dpu_print_hex_dump(p, regs, regs + SHADOW_OFFSET + DSC1_OFFSET,
 				0x80);
 	}
 }

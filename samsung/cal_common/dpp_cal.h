@@ -231,13 +231,13 @@ void dpp_reg_configure_params(u32 id, struct dpp_params_info *p,
 		const unsigned long attr);
 
 /* DPU_DMA, DPP DEBUG */
-void __dpp_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
+void __dpp_dump(struct drm_printer *p, u32 id, void __iomem *regs, void __iomem *dma_regs,
 		unsigned long attr);
 
-void __rcd_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
+void __rcd_dump(struct drm_printer *p, u32 id, void __iomem *regs, void __iomem *dma_regs,
 		unsigned long attr);
 
-void __cgc_dump(u32 id, void __iomem *dma_regs);
+void __cgc_dump(struct drm_printer *p, u32 id, void __iomem *dma_regs);
 
 /* DPP hw limitation check */
 int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr);

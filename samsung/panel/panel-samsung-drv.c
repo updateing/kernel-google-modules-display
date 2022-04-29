@@ -1389,7 +1389,7 @@ static ssize_t osc2_clk_khz_store(struct device *dev, struct device_attribute *a
 	if (!is_panel_active(ctx))
 		return -EPERM;
 
-	if (!funcs && !funcs->set_osc2_clk_khz)
+	if (!funcs || !funcs->set_osc2_clk_khz)
 		return -EOPNOTSUPP;
 
 	ret = kstrtou32(buf, 0, &osc2_clk_khz);
@@ -1894,7 +1894,7 @@ static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 	struct exynos_drm_connector_state *exynos_connector_state =
 		to_exynos_connector_state(connector_state);
 	const struct exynos_panel_mode *pmode =
-		exynos_panel_get_mode(ctx, &crtc_state->adjusted_mode);
+		exynos_panel_get_mode(ctx, &crtc_state->mode);
 
 	if (!pmode) {
 		dev_warn(ctx->dev, "invalid mode %s\n", pmode->mode.name);

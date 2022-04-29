@@ -620,18 +620,18 @@ void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height)
 	dqe_write(dqe_id, DQE_TOP_PARTIAL_CON, val);
 }
 
-void dqe_dump(u32 dqe_id)
+void dqe_dump(struct drm_printer *p, u32 dqe_id)
 {
 	void __iomem *dqe_regs = regs_dqe[dqe_id].desc.regs;
 
-	cal_log_info(0, "\n=== DQE_%d SFR ===\n", dqe_id);
-	dpu_print_hex_dump(dqe_regs, dqe_regs, 0x20);
+	cal_drm_printf(p, 0, "\n=== DQE_%d SFR ===\n", dqe_id);
+	dpu_print_hex_dump(p, dqe_regs, dqe_regs, 0x20);
 
-	cal_log_info(0, "\n=== DQE_%d RCD SFR ===\n", dqe_id);
-	dpu_print_hex_dump(dqe_regs, dqe_regs + 0x3000, 0x4);
+	cal_drm_printf(p, 0, "\n=== DQE_%d RCD SFR ===\n", dqe_id);
+	dpu_print_hex_dump(p, dqe_regs, dqe_regs + 0x3000, 0x4);
 
-	cal_log_info(0, "\n=== DQE_%d HIST SFR ===\n", dqe_id);
-	dpu_print_hex_dump(dqe_regs, dqe_regs + 0x3400, 0x4);
+	cal_drm_printf(p, 0, "\n=== DQE_%d HIST SFR ===\n", dqe_id);
+	dpu_print_hex_dump(p, dqe_regs, dqe_regs + 0x3400, 0x4);
 }
 
 void dqe_reg_set_rcd_en(u32 dqe_id, bool en)

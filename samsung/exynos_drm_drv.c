@@ -111,6 +111,7 @@ static int exynos_atomic_check_windows(struct drm_device *dev, struct drm_atomic
 		new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
 
 		if (!new_crtc_state->active_changed && !new_crtc_state->zpos_changed &&
+		    !new_crtc_state->connectors_changed &&
 		    (old_crtc_state->plane_mask == new_crtc_state->plane_mask))
 			continue;
 

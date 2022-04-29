@@ -43,6 +43,9 @@
 #include "exynos_drm_fb.h"
 #include "exynos_drm_format.h"
 
+#define dpp_drm_printf(p, dpp, fmt, ...) \
+drm_printf(p, "%s[%d]: "fmt, dpp->dev->driver->name, dpp->id, ##__VA_ARGS__)
+
 #define dpp_info(dpp, fmt, ...)	\
 pr_info("%s[%d]: "fmt, dpp->dev->driver->name, dpp->id, ##__VA_ARGS__)
 
@@ -170,30 +173,30 @@ static inline const char *get_comp_type_str(enum dpp_comp_type type)
 		return "";
 }
 
-void dpp_dump_buffer(struct dpp_device *dpp)
+void dpp_dump_buffer(struct drm_printer *p, struct dpp_device *dpp)
 {
 	const struct drm_plane_state *plane_state;
 	struct drm_framebuffer *fb;
 	void *vaddr;
 
 	if (dpp->state != DPP_STATE_ON) {
-		dpp_info(dpp, "dpp state is off\n");
+		dpp_drm_printf(p, dpp, "dpp state is off\n");
 		return;
 	}
 
 	if (dpp->win_config.comp_type == COMP_TYPE_NONE) {
-		dpp_info(dpp, "buffer doesn't have compressed data\n");
+		dpp_drm_printf(p, dpp, "buffer doesn't have compressed data\n");
 		return;
 	}
 
 	if (dpp->protection) {
-		dpp_info(dpp, "dpp is protected\n");
+		dpp_drm_printf(p, dpp, "dpp is protected\n");
 		return;
 	}
 
 	plane_state = dpp->plane.base.state;
 	if (!plane_state || !plane_state->fb) {
-		dpp_info(dpp, "framebuffer not found\n");
+		dpp_drm_printf(p, dpp, "framebuffer not found\n");
 		return;
 	}
 
@@ -202,41 +205,42 @@ void dpp_dump_buffer(struct dpp_device *dpp)
 
 	vaddr = exynos_drm_fb_to_vaddr(fb);
 	if (vaddr) {
-		pr_info("=== buffer dump[%s:%s]: dpp%d dma addr 0x%llx, vaddr 0x%pK ===\n",
+		dpp_drm_printf(p, dpp,
+				"=== buffer dump[%s:%s]: dpp%d dma addr 0x%llx, vaddr 0x%pK ===\n",
 				get_comp_type_str(dpp->win_config.comp_type),
 				get_comp_src_name(dpp->comp_src),
 				dpp->id, dpp->win_config.addr[0], vaddr);
-		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_ADDRESS, 32, 4, vaddr, 256, false);
+		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_ADDRESS, 32, 4, vaddr, 256, false);
 	} else {
-		dpp_info(dpp, "unable to find vaddr\n");
+		dpp_drm_printf(p, dpp, "unable to find vaddr\n");
 	}
 
 	drm_framebuffer_put(fb);
 }
 
-void dpp_dump(struct dpp_device *dpp)
+void dpp_dump(struct drm_printer *p, struct dpp_device *dpp)
 {
 	if (dpp->state != DPP_STATE_ON) {
-		dpp_info(dpp, "dpp state is off\n");
+		dpp_drm_printf(p, dpp, "dpp state is off\n");
 		return;
 	}
-	__dpp_dump(dpp->id, dpp->regs.dpp_base_regs, dpp->regs.dma_base_regs,
+	__dpp_dump(p, dpp->id, dpp->regs.dpp_base_regs, dpp->regs.dma_base_regs,
 			dpp->attr);
 }
 
-void rcd_dump(struct dpp_device *dpp)
+void rcd_dump(struct drm_printer *p, struct dpp_device *dpp)
 {
 	if (dpp->state != DPP_STATE_ON) {
-		dpp_info(dpp, "rcd state is off\n");
+		dpp_drm_printf(p, dpp, "rcd state is off\n");
 		return;
 	}
-	__rcd_dump(dpp->id, dpp->regs.dpp_base_regs, dpp->regs.dma_base_regs,
+	__rcd_dump(p, dpp->id, dpp->regs.dpp_base_regs, dpp->regs.dma_base_regs,
 			dpp->attr);
 }
 
-void cgc_dump(struct exynos_dma *dma)
+void cgc_dump(struct drm_printer *p, struct exynos_dma *dma)
 {
-	__cgc_dump(dma->id, dma->regs);
+	__cgc_dump(p, dma->id, dma->regs);
 }
 
 static dma_addr_t dpp_alloc_map_buf_test(void)

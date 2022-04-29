@@ -151,108 +151,108 @@ static const struct exynos_dsi_cmd nt37290_off_cmds[] = {
 static DEFINE_EXYNOS_CMD_SET(nt37290_off);
 
 static const struct exynos_dsi_cmd nt37290_lhbm_on_setting_cmds[] = {
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x07),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xC0, 0xB1),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x08),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xC0, 0x55),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xD5, 0x21, 0x00, 0x39, 0x31, 0x39,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x07),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xC0, 0xB1),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x08),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xC0, 0x55),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xD5, 0x21, 0x00, 0x39, 0x31, 0x39,
 				0x31, 0x00, 0x00, 0x3F, 0xC9, 0xEF, 0xAE, 0x3F, 0xC9, 0xEF, 0xAE,
 				0x00, 0x0C, 0xC6, 0xDB, 0x61, 0x23, 0x00, 0x00, 0x79, 0x00, 0x00,
 				0x79, 0x33, 0xF0, 0x87, 0x87, 0x39, 0x31, 0x00, 0x00, 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xD6, 0x27, 0x00, 0x39, 0x31, 0x39,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xD6, 0x27, 0x00, 0x39, 0x31, 0x39,
 				0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0xC9, 0xEF, 0xAE,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00, 0x7A, 0xF3, 0x00, 0x00,
 				0x79, 0x33, 0x30, 0x79, 0x87, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xD7, 0x2B, 0x00, 0x39, 0x31, 0x39,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xD7, 0x2B, 0x00, 0x39, 0x31, 0x39,
 				0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 				0x7F, 0xF3, 0x39, 0x24, 0x9F, 0x55, 0x00, 0x7A, 0xF3, 0x00, 0x7A,
 				0xF3, 0x33, 0x0F, 0x79, 0x79, 0xC6, 0xCF, 0x00, 0x00, 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xD8, 0x2D, 0x00, 0x39, 0x31, 0x39,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xD8, 0x2D, 0x00, 0x39, 0x31, 0x39,
 				0x31, 0x00, 0x00, 0x3F, 0xC9, 0xEF, 0xAE, 0x00, 0x00, 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0x00, 0x00, 0x79, 0x00, 0x7A,
 				0xF3, 0x33, 0xC0, 0x87, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
-	EXYNOS_DSI_CMD0_REV(cmd2_page0, PANEL_REV_GE(PANEL_REV_EVT1)),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x05),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x01),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x02),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x13),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00, 0x7A, 0x00, 0x7A),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x1B),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00, 0x00, 0x00, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x1F),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00, 0xF3, 0x00, 0xF3),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x2B),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x3F, 0xFF, 0x3F, 0xFF, 0x3F,
+	EXYNOS_DSI_CMD0_REV(cmd2_page0, PANEL_REV_EVT1),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x05),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x01),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x02),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x13),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00, 0x7A, 0x00, 0x7A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x1B),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00, 0x00, 0x00, 0x00),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x1F),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00, 0xF3, 0x00, 0xF3),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x2B),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x3F, 0xFF, 0x3F, 0xFF, 0x3F,
 				0xFF),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x31),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x22),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x32),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x2A),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x33),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x2A),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x34),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x16),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x35),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x36),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x02),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x37),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x01),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x38),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x0C, 0x38),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x3A),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x01, 0x1F, 0x00, 0x61, 0x00,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x31),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x22),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x32),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x2A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x33),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x2A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x34),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x16),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x35),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x36),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x02),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x37),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x01),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x38),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x0C, 0x38),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x3A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x01, 0x1F, 0x00, 0x61, 0x00,
 				0x93),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x40),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00, 0xF8, 0x01, 0x07, 0x00,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x40),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00, 0xF8, 0x01, 0x07, 0x00,
 				0x2E),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x46),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x00, 0x99, 0x00, 0x29, 0x00,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x46),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x00, 0x99, 0x00, 0x29, 0x00,
 				0x88),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x4C),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x1F, 0xFC, 0x1F, 0xFC, 0x1F,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x4C),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x1F, 0xFC, 0x1F, 0xFC, 0x1F,
 				0xFC),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x52),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x0A, 0x99, 0x22, 0xDA, 0x3E,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x52),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x0A, 0x99, 0x22, 0xDA, 0x3E,
 				0xB5),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x58),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x3D, 0xDC, 0x28, 0xD5, 0x1D,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x58),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x3D, 0xDC, 0x28, 0xD5, 0x1D,
 				0x52),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x5E),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x13, 0x51, 0x13, 0xCD, 0x0D,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x5E),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x13, 0x51, 0x13, 0xCD, 0x0D,
 				0x4E),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x64),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x3B, 0x3F, 0x2E, 0x39, 0x35,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x64),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x3B, 0x3F, 0x2E, 0x39, 0x35,
 				0xF2),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x6A),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x25, 0x35, 0x18, 0x3C, 0x30,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x6A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x25, 0x35, 0x18, 0x3C, 0x30,
 				0xCF),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x70),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x3E, 0xD6, 0x03, 0xE4, 0x3F,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x70),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x3E, 0xD6, 0x03, 0xE4, 0x3F,
 				0xF5),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x76),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x23, 0x19, 0x1C, 0x89, 0x37,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x76),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x23, 0x19, 0x1C, 0x89, 0x37,
 				0x4B),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x7C),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x3F, 0x69, 0x0A, 0xC7, 0x3C,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x7C),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x3F, 0x69, 0x0A, 0xC7, 0x3C,
 				0xB5),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x82),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x13, 0x61, 0x1E, 0x2E, 0x03,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x82),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x13, 0x61, 0x1E, 0x2E, 0x03,
 				0xA9),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x88),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xDF, 0x40),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x01),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x87, 0x07, 0x5E),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x03),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x87, 0x07, 0x5E),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x6F, 0x05),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0x87, 0x07, 0x5E, 0x07, 0x5E, 0x07,
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x88),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0xDF, 0x40),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x01),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x87, 0x07, 0x5E),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x03),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x87, 0x07, 0x5E),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x6F, 0x05),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_EVT1, 0x87, 0x07, 0x5E, 0x07, 0x5E, 0x07,
 				0x5E, 0x07, 0x5E, 0x07, 0x5E, 0x07, 0x5E, 0x07, 0x5E, 0x07, 0x5E),
 
 	EXYNOS_DSI_CMD_SEQ(0x88, 0x01), /* enable */
@@ -302,11 +302,11 @@ static const struct exynos_dsi_cmd nt37290_lhbm_on_setting_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x87, 0x09, 0x08, 0x02, 0xF9, 0x01, 0x08, 0x0D, 0x17, 0x04, 0x6B, 0x00,
 					 0xD0, 0x04, 0x77, 0x05, 0x7D),
 
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0x51, 0x3F, 0xFF),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0x53, 0x20),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xFF, 0xAA, 0x55, 0xA5, 0x84),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0x6F, 0x7C),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1), 0xF3, 0x01),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1_1, 0x51, 0x02, 0x50),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1_1, 0x53, 0x20),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1_1, 0xFF, 0xAA, 0x55, 0xA5, 0x84),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1_1, 0x6F, 0x7C),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_PROTO1_1, 0xF3, 0x01),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_lhbm_on_setting);
 
@@ -316,11 +316,11 @@ static const struct exynos_dsi_cmd nt37290_dsc_wqhd_cmds[] = {
 
 	/* row address */
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x0C, 0x2F),
-	/* slice 24, 2 decoder */
+	/* slice 30, 2 decoders */
 	EXYNOS_DSI_CMD_SEQ(0x90, 0x03, 0x03),
-	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x18, 0xD2, 0x00, 0x02,
-			   0x86, 0x02, 0x83, 0x00, 0x0A, 0x04, 0x86, 0x03,
-			   0x2E, 0x10, 0xF0),
+	EXYNOS_DSI_CMD_SEQ(0x91, 0x89, 0x28, 0x00, 0x1E, 0xD2, 0x00, 0x02,
+			   0x86, 0x03, 0x28, 0x00, 0x0A, 0x03, 0x97, 0x02,
+			   0x8B, 0x10, 0xF0),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_dsc_wqhd);
 
@@ -351,8 +351,13 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x26, 0x00),
 	/* TE output line */
 	EXYNOS_DSI_CMD_SEQ(0x35),
-	/* select brightness value */
-	EXYNOS_DSI_CMD_SEQ(0x51, 0x03, 0xF8, 0x03, 0xF8, 0x0F, 0xFE),
+	/* select brightness value for proto1.1 and EVT1 (~142nits) */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1),
+			       0x51, 0x02, 0x42, 0x02, 0x42, 0x0F, 0xFE),
+	/* select brightness value for EVT1.1 and after (~142nits) */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1_1),
+			       0x51, 0x08, 0x8D, 0x08, 0x8D, 0x0F, 0xFE),
+	/* control brightness */
 	/* control brightness */
 	EXYNOS_DSI_CMD_SEQ(0x53, 0x20),
 	EXYNOS_DSI_CMD_SEQ(0x5A, 0x01),
@@ -373,6 +378,14 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0x6F, 0x14),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xC2, 0x00, 0x50),
+	/* CMD2 Page 8: IRC IP settings */
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0x6F, 0x10),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xB7, 0x08, 0x00, 0x08, 0x00, 0x08, 0x00, 0x08,
+					       0x00, 0x08, 0x00, 0x08, 0x00, 0x08, 0x00, 0x08,
+					       0x00),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0x6F, 0x28),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xB8, 0x08, 0x00, 0x08, 0x00, 0x08, 0x00),
 
 	/* CMD3 Page 0 */
 	EXYNOS_DSI_CMD_SEQ(0xFF, 0xAA, 0x55, 0xA5, 0x80),
@@ -386,7 +399,7 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xF9, 0x10),
 	/* CMD3 Page 2: MIPI termination resistor 90ohm */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xFF, 0xAA, 0x55, 0xA5, 0x82),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xF2, 0x3F),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_EVT1), 0xF2, 0x37),
 	/* CMD3 Page 3 */
 	EXYNOS_DSI_CMD_SEQ(0xFF, 0xAA, 0x55, 0xA5, 0x83),
 	EXYNOS_DSI_CMD_SEQ(0x6F, 0x14),
@@ -480,7 +493,7 @@ static void nt37290_update_min_idle_vrefresh(struct exynos_panel *ctx,
 	const int vrefresh = drm_mode_vrefresh(&pmode->mode);
 	int idle_vrefresh = ctx->min_vrefresh;
 
-	if (!idle_vrefresh || !is_auto_mode_allowed(ctx) ||
+	if (idle_vrefresh < 0 || !is_auto_mode_allowed(ctx) ||
 	    pmode->idle_mode == IDLE_MODE_UNSUPPORTED)
 		idle_vrefresh = 0;
 	else if (idle_vrefresh <= 10)
@@ -568,7 +581,7 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 		EXYNOS_DCS_BUF_ADD(ctx, 0x2F,
 				   nt37290_get_frame_rate_ctrl(ctx, DFC_MODE_MANUAL));
 		/* 120Hz gamma band */
-		if (ctx->panel_rev >= PANEL_REV_EVT1_1)
+		if (ctx->panel_rev == PANEL_REV_EVT1_1)
 			EXYNOS_DCS_BUF_ADD(ctx, 0x26, 0x00);
 		/* restore TE timing (no shift) */
 		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
@@ -604,8 +617,8 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 						 "Unsupported idle_vrefresh %dHz for auto mode\n",
 						 idle_vrefresh);
 			} else if (vrefresh == 120) {
-				/* two 120Hz frames are removed after EVT1.1 */
-				u8 val = (ctx->panel_rev >= PANEL_REV_EVT1_1) ? 0x91 : 0x93;
+				/* two 120Hz frames are removed on EVT1.1 */
+				u8 val = (ctx->panel_rev == PANEL_REV_EVT1_1) ? 0x91 : 0x93;
 
 				if (idle_vrefresh == 10)
 					EXYNOS_DCS_BUF_ADD(ctx, 0xBA, val, 0x09, 0x03, 0x00, 0x31,
@@ -635,7 +648,7 @@ static bool nt37290_update_panel_feat(struct exynos_panel *ctx,
 		}
 
 		/* VRR gamma band (60~10Hz) */
-		if (ctx->panel_rev >= PANEL_REV_EVT1_1)
+		if (ctx->panel_rev == PANEL_REV_EVT1_1)
 			EXYNOS_DCS_BUF_ADD(ctx, 0x26, 0x01);
 
 		if (vrefresh == 120)
@@ -703,6 +716,13 @@ static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	if (pmode->exynos_mode.is_lp_mode)
 		return false;
 
+	/* do not change frequency when LHBM is enabled */
+	if (ctx->hbm.local_hbm.enabled) {
+		dev_warn(ctx->dev, "%s: frequency change is not allowed while LHBM is enabled\n",
+			__func__);
+		return false;
+	}
+
 	DPU_ATRACE_BEGIN(__func__);
 
 	updated = nt37290_change_frequency(ctx, pmode);
@@ -753,7 +773,8 @@ static void nt37290_trigger_early_exit(struct exynos_panel *ctx)
 
 	DPU_ATRACE_BEGIN(__func__);
 
-	if (ctx->idle_delay_ms && delta_us > IDLE_DELAY_THRESHOLD_US) {
+	if (ctx->idle_delay_ms && delta_us > IDLE_DELAY_THRESHOLD_US &&
+	    !ctx->hbm.local_hbm.enabled) {
 		const struct exynos_panel_mode *pmode = ctx->current_mode;
 
 		dev_dbg(ctx->dev, "%s: disable auto idle mode for %s\n",
@@ -781,7 +802,7 @@ static void nt37290_commit_done(struct exynos_panel *ctx)
 	 * after the delay time has elapsed.
 	 */
 	else if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY &&
-		 spanel->delayed_idle)
+		 spanel->delayed_idle && !ctx->hbm.local_hbm.enabled)
 		nt37290_change_frequency(ctx, pmode);
 }
 
@@ -1290,16 +1311,7 @@ static const struct drm_dsc_config nt37290_dsc_cfg = {
 	},
 };
 
-#define NT37290_DSC_WQHD_CONFIG \
-	.dsc = { \
-		.enabled = true, \
-		.dsc_count = 2, \
-		.slice_count = 2, \
-		.slice_height = 24, \
-		.cfg = &nt37290_dsc_cfg, \
-	}
-
-#define NT37290_DSC_FHD_CONFIG \
+#define NT37290_DSC_CONFIG \
 	.dsc = { \
 		.enabled = true, \
 		.dsc_count = 2, \
@@ -1330,7 +1342,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_WQHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1360,14 +1372,14 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_WQHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 	{
 		/* 1080x2340 @ 60Hz */
@@ -1390,7 +1402,7 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_FHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
@@ -1420,14 +1432,14 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_FHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 		},
 		.te2_timing = {
 			.rising_edge = 0,
 			.falling_edge = 48,
 		},
-		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 };
 
@@ -1453,7 +1465,7 @@ static const struct exynos_panel_mode nt37290_lp_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_WQHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
 		}
@@ -1479,7 +1491,7 @@ static const struct exynos_panel_mode nt37290_lp_modes[] = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
 			.bpc = 8,
-			NT37290_DSC_FHD_CONFIG,
+			NT37290_DSC_CONFIG,
 			.underrun_param = &underrun_param,
 			.is_lp_mode = true,
 		}

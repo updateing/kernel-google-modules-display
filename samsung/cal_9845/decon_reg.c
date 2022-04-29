@@ -2281,7 +2281,7 @@ void decon_reg_get_crc_data(u32 id, u32 crc_data[3])
 	crc_data[2] = dsimif_read(id, DSIMIF_CRC_DATA_B(id));
 }
 
-void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en, bool dqe_en)
+void __decon_dump(struct drm_printer *p, u32 id, struct decon_regs *regs, bool dsc_en, bool dqe_en)
 {
 	int i;
 	void __iomem *main_regs = regs->regs;
@@ -2290,58 +2290,58 @@ void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en, bool dqe_en)
 	void __iomem *wincon_regs = regs->wincon_regs;
 
 	/* decon_main */
-	cal_log_info(id, "\n=== DECON%d_MAIN SFR DUMP ===\n", id);
-	dpu_print_hex_dump(main_regs, main_regs + 0x0000, 0x344);
-	dpu_print_hex_dump(main_regs, main_regs + 0x400, 0x300);
+	cal_drm_printf(p, id, "\n=== DECON%d_MAIN SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, main_regs, main_regs + 0x0000, 0x344);
+	dpu_print_hex_dump(p, main_regs, main_regs + 0x400, 0x300);
 	/* shadow */
-	cal_log_info(id, "=== DECON%d_MAIN SHADOW SFR DUMP ===\n", id);
-	dpu_print_hex_dump(main_regs, main_regs + SHADOW_OFFSET, 0x2B0);
+	cal_drm_printf(p, id, "=== DECON%d_MAIN SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, main_regs, main_regs + SHADOW_OFFSET, 0x2B0);
 
 	/* decon_win & decon_wincon : 6EA */
 	for (i = 0; i < 6; i++) {
-		cal_log_info(id, "\n=== DECON_WIN%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(win_regs, win_regs + WIN_OFFSET(i), 0x20);
-		cal_log_info(id, "=== DECON_WINCON%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(wincon_regs, wincon_regs + WIN_OFFSET(i),
+		cal_drm_printf(p, id, "\n=== DECON_WIN%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, win_regs, win_regs + WIN_OFFSET(i), 0x20);
+		cal_drm_printf(p, id, "=== DECON_WINCON%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, wincon_regs, wincon_regs + WIN_OFFSET(i),
 				0x4);
 		/* shadow */
-		cal_log_info(id, "=== DECON_WIN%d SHADOW SFR DUMP ===\n", i);
-		dpu_print_hex_dump(win_regs,
+		cal_drm_printf(p, id, "=== DECON_WIN%d SHADOW SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, win_regs,
 				win_regs + WIN_OFFSET(i) + SHADOW_OFFSET, 0x20);
-		cal_log_info(id, "=== DECON_WINCON%d SHADOW SFR DUMP ===\n", i);
-		dpu_print_hex_dump(wincon_regs,
+		cal_drm_printf(p, id, "=== DECON_WINCON%d SHADOW SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, wincon_regs,
 				wincon_regs + WIN_OFFSET(i) + SHADOW_OFFSET,
 				0x4);
 	}
 
 	/* dsimif : 2EA */
 	for (i = 0; i < 2; i++) {
-		cal_log_info(id, "\n=== DECON_SUB.DSIMIF%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "\n=== DECON_SUB.DSIMIF%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i), 0x10);
-		dpu_print_hex_dump(sub_regs,
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i) + 0x80, 0x10);
 		/* shadow */
-		cal_log_info(id, "= DECON_SUB.DSIMIF%d SHADOW SFR DUMP =\n", i);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "= DECON_SUB.DSIMIF%d SHADOW SFR DUMP =\n", i);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i) + SHADOW_OFFSET,
 				0x10);
-		dpu_print_hex_dump(sub_regs,
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i) + SHADOW_OFFSET +
 				0x80, 0x10);
 	}
 
 	/* dpif : 2EA */
 	for (i = 0; i < 2; i++) {
-		cal_log_info(id, "\n=== DECON_SUB.DPIF%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(sub_regs, sub_regs + DPIF_OFFSET(i), 0x4);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "\n=== DECON_SUB.DPIF%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, sub_regs, sub_regs + DPIF_OFFSET(i), 0x4);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DPIF_OFFSET(i) + 0x80, 0x10);
 		/* shadow */
-		cal_log_info(id, "= DECON_SUB.DPIF%d SHADOW SFR DUMP =\n", i);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "= DECON_SUB.DPIF%d SHADOW SFR DUMP =\n", i);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DPIF_OFFSET(i) + SHADOW_OFFSET, 0x4);
-		dpu_print_hex_dump(sub_regs,
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DPIF_OFFSET(i) + SHADOW_OFFSET +
 				0x80, 0x10);
 	}
@@ -2349,20 +2349,20 @@ void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en, bool dqe_en)
 	/* dsc : 3EA */
 	if (dsc_en) {
 		for (i = 0; i < 3; i++) {
-			cal_log_info(id, "\n= DECON_SUB.DSC%d SFR DUMP =\n", i);
-			dpu_print_hex_dump(sub_regs,
+			cal_drm_printf(p, id, "\n= DECON_SUB.DSC%d SFR DUMP =\n", i);
+			dpu_print_hex_dump(p, sub_regs,
 					sub_regs + DSC_OFFSET(i), 0x88);
 			/* shadow */
-			cal_log_info(id, "=== DECON_SUB.DSC%d SHADOW SFR DUMP ===\n",
+			cal_drm_printf(p, id, "=== DECON_SUB.DSC%d SHADOW SFR DUMP ===\n",
 					i);
-			dpu_print_hex_dump(sub_regs,
+			dpu_print_hex_dump(p, sub_regs,
 					sub_regs + DSC_OFFSET(i) +
 					SHADOW_OFFSET, 0x88);
 		}
 	}
 
 	if (dqe_en)
-		dqe_dump(id);
+		dqe_dump(p, id);
 }
 
 u32 decon_reg_get_rsc_ch(u32 id)

@@ -380,8 +380,21 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	/* HBM IRC setting */
 	if (test_bit(FEAT_IRC_OFF, changed_feat)) {
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0x9B, 0x92);
-		val = test_bit(FEAT_IRC_OFF, spanel->feat) ? 0x01 : 0x21;
-		EXYNOS_DCS_BUF_ADD(ctx, 0x92, val);
+		if (test_bit(FEAT_IRC_OFF, spanel->feat)) {
+			EXYNOS_DCS_BUF_ADD(ctx, 0x92, 0x01);
+			if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
+				/* IR compensation SP setting */
+				EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xF3, 0x68);
+				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0x20, 0x1E, 0x0C, 0x82, 0x82, 0x78);
+			}
+		} else {
+			EXYNOS_DCS_BUF_ADD(ctx, 0x92, 0x21);
+			if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
+				/* IR compensation SP setting */
+				EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xF3, 0x68);
+				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0x0A, 0x0F, 0x0A, 0x0A, 0x0A, 0x0A);
+			}
+		}
 	}
 	/* HBM ELVSS setting */
 	if (ctx->panel_rev <= PANEL_REV_EVT1_1 && test_bit(FEAT_OP_NS, changed_feat)) {
@@ -1114,7 +1127,7 @@ static void s6e3hc4_get_panel_rev(struct exynos_panel *ctx, u32 id)
 {
 	/* extract command 0xDB */
 	u8 build_code = (id & 0xFF00) >> 8;
-	u8 rev = ((build_code & 0xE0) >> 3) | (build_code & 0x03);
+	u8 rev = ((build_code & 0xE0) >> 3) | ((build_code & 0x0C) >> 2);
 
 	exynos_panel_get_panel_rev(ctx, rev);
 }

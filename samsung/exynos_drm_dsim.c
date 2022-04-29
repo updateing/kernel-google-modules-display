@@ -24,6 +24,7 @@
 #include <drm/drm_vblank.h>
 
 #include <linux/clk.h>
+#include <linux/console.h>
 #include <linux/gpio/consumer.h>
 #include <linux/irq.h>
 #include <linux/of_address.h>
@@ -148,8 +149,11 @@ static struct drm_crtc *drm_encoder_get_old_crtc(struct drm_encoder *encoder,
 static void dsim_dump(struct dsim_device *dsim)
 {
 	struct dsim_regs regs;
+	struct drm_printer p = console_set_on_cmdline ?
+		drm_debug_printer("[drm]") : drm_info_printer(dsim->dev);
 
-	dsim_info(dsim, "=== DSIM SFR DUMP ===\n");
+	drm_printf(&p, "%s[%d]: === DSIM SFR DUMP ===\n",
+		dsim->dev->driver->name, dsim->id);
 
 	if (dsim->state != DSIM_STATE_HSCLKEN)
 		return;
@@ -158,7 +162,7 @@ static void dsim_dump(struct dsim_device *dsim)
 	regs.ss_regs = dsim->res.ss_reg_base;
 	regs.phy_regs = dsim->res.phy_regs;
 	regs.phy_regs_ex = dsim->res.phy_regs_ex;
-	__dsim_dump(dsim->id, &regs);
+	__dsim_dump(&p, dsim->id, &regs);
 }
 
 static int dsim_phy_power_on(struct dsim_device *dsim)
