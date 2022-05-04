@@ -414,7 +414,7 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 				win_config->state = DPU_WIN_STATE_DISABLED;
 			}
 
-			if (exynos_crtc->rcd_plane_mask == 0) {
+			if ((new_crtc_state->plane_mask & exynos_crtc->rcd_plane_mask) == 0) {
 				win_config = &decon->bts.rcd_win_config.win;
 				win_config->state = DPU_WIN_STATE_DISABLED;
 			}
