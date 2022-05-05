@@ -28,7 +28,7 @@ filegroup(
         "samsung/panel/Kbuild",
     ]) + [
         "//private/google-modules/display/include:headers",
-        "//private/google-modules/soc-modules:{}".format(soc_headers),
+        "//private/google-modules/soc/gs:{}".format(soc_headers),
     ],
     outs = [
         "samsung/exynos-drm.ko",
@@ -39,12 +39,12 @@ filegroup(
         "samsung/panel/panel-samsung-s6e3hc3.ko",
         "samsung/panel/panel-samsung-sofef01.ko",
     ],
-    kernel_build = "//private/google-modules/soc-modules:{}".format(kernel_build),
+    kernel_build = "//private/google-modules/soc/gs:{}".format(kernel_build),
     kernel_module_deps = [
-        "//private/google-modules/soc-modules:{}".format(soc),
+        "//private/google-modules/soc/gs:{}".format(soc),
     ],
     visibility = [
-        "//private/google-modules/soc-modules:__pkg__",
+        "//private/google-modules/soc/gs:__pkg__",
     ],
 ) for kernel_build, soc, soc_headers in [
     ("slider", "gs101_soc", "gs101_soc_headers"),

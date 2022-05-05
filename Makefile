@@ -26,7 +26,7 @@ EXTRA_CFLAGS += -DCONFIG_DRM_LEGACY=1
 
 EXTRA_CFLAGS += -Werror
 
-include $(KERNEL_SRC)/../private/google-modules/soc-modules/Makefile.include
+include $(KERNEL_SRC)/../private/google-modules/soc/gs/Makefile.include
 
 modules modules_install headers_install clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) W=1 \
