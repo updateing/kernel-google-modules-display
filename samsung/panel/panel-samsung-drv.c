@@ -1795,7 +1795,7 @@ static void exynos_panel_connector_atomic_commit(
 		return;
 
 	mutex_lock(&ctx->mode_lock);
-	if (exynos_panel_func->commit_done)
+	if (exynos_panel_func->commit_done && !ctx->current_mode->exynos_mode.is_lp_mode)
 		exynos_panel_func->commit_done(ctx);
 	mutex_unlock(&ctx->mode_lock);
 
