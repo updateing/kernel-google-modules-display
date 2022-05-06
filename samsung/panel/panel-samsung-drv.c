@@ -1689,7 +1689,7 @@ static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mod
 
 static void exynos_panel_pre_commit_properties(
 				struct exynos_panel *ctx,
-				const struct exynos_drm_connector_state *conn_state)
+				struct exynos_drm_connector_state *conn_state)
 {
 	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
@@ -1699,9 +1699,19 @@ static void exynos_panel_pre_commit_properties(
 	if (!conn_state->pending_update_flags)
 		return;
 
+	dev_info(ctx->dev, "%s: mipi_sync(0x%lx) pending_update_flags(0x%x)\n", __func__,
+		conn_state->mipi_sync, conn_state->pending_update_flags);
 	DPU_ATRACE_BEGIN(__func__);
 	mipi_sync = conn_state->mipi_sync &
 		(MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM | MIPI_CMD_SYNC_BL);
+
+	if ((conn_state->mipi_sync & (MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM)) &&
+		ctx->current_mode->exynos_mode.is_lp_mode) {
+		conn_state->pending_update_flags &=
+			~(HBM_FLAG_LHBM_UPDATE | HBM_FLAG_GHBM_UPDATE | HBM_FLAG_BL_UPDATE);
+		dev_warn(ctx->dev, "%s: avoid LHBM/GHBM/BL updates during lp mode\n",
+			__func__);
+	}
 
 	if (mipi_sync) {
 		exynos_panel_check_mipi_sync_timing(conn_state->base.crtc,
