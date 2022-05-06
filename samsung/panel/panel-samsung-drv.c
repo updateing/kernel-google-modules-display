@@ -941,6 +941,9 @@ static ssize_t serial_number_show(struct device *dev,
 	if (!ctx->initialized)
 		return -EPERM;
 
+	if (!strcmp(ctx->panel_id, ""))
+		return -EINVAL;
+
 	return snprintf(buf, PAGE_SIZE, "%s\n", ctx->panel_id);
 }
 
