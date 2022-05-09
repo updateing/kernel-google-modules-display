@@ -1171,18 +1171,20 @@ static int dpp_init_resources(struct dpp_device *dpp)
 		disable_irq(dpp->dpp_irq);
 	}
 
-	i = of_property_match_string(np, "reg-names", "scl_coef");
-	if (of_address_to_resource(np, i, &res)) {
-		dpp_err(dpp, "failed to get scl_coef resource\n");
-		return -EINVAL;
+	if (test_bit(DPP_ATTR_SCL_COEF, &dpp->attr)) {
+		i = of_property_match_string(np, "reg-names", "scl_coef");
+		if (of_address_to_resource(np, i, &res)) {
+			dpp_err(dpp, "failed to get scl_coef resource\n");
+			return -EINVAL;
+		}
+		dpp->regs.scl_coef_base_regs = of_iomap(np, i);
+		if (!dpp->regs.scl_coef_base_regs) {
+			dpp_err(dpp, "failed to remap SCL COEF SFR region\n");
+			return -EINVAL;
+		}
+		dpp_regs_desc_init(dpp->regs.scl_coef_base_regs, res.start, "scl_coef", REGS_SCL_COEF,
+				dpp->id);
 	}
-	dpp->regs.scl_coef_base_regs = of_iomap(np, i);
-	if (!dpp->regs.scl_coef_base_regs) {
-		dpp_err(dpp, "failed to remap SCL COEF SFR region\n");
-		return -EINVAL;
-	}
-	dpp_regs_desc_init(dpp->regs.scl_coef_base_regs, res.start, "scl_coef", REGS_SCL_COEF,
-			dpp->id);
 
 	if (test_bit(DPP_ATTR_SRAMC, &dpp->attr)) {
 		i = of_property_match_string(np, "reg-names", "sramc");

@@ -51,6 +51,7 @@ enum dpp_attr {
 	DPP_ATTR_ODMA		= 17,
 	DPP_ATTR_DPP		= 18,
 	DPP_ATTR_SRAMC		= 19,
+	DPP_ATTR_SCL_COEF	= 21,
 };
 
 enum dpp_csc_defs {
