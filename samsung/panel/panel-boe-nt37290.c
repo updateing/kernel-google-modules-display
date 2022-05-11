@@ -1210,10 +1210,6 @@ static void nt37290_set_osc2_clk_khz(struct exynos_panel *ctx, unsigned int clk_
 	if (!pmode)
 		return;
 
-	/* don't change OSC2 clock in AOD mode */
-	if (pmode->exynos_mode.is_lp_mode)
-		return;
-
 	for (i = 0; i < num_clk; i++) {
 		if (clk_khz == osc2_clk_data[i].clk_khz) {
 			idx = i;
@@ -1230,9 +1226,19 @@ static void nt37290_set_osc2_clk_khz(struct exynos_panel *ctx, unsigned int clk_
 		spanel->hw_osc2_clk_idx = idx;
 		ctx->osc2_clk_khz = clk_khz;
 
-		/* trigger update since OSC2 clock is changed */
-		nt37290_update_panel_feat(ctx, pmode, true);
-		dev_dbg(ctx->dev, "OSC2 clock is changed to %u (idx %d)\n", clk_khz, idx);
+		/**
+		 * Update the clock only when panel is in normal state. For other
+		 * states, the value will be saved and applied when the state is
+		 * changed to normal.
+		 */
+		if (ctx->panel_state == PANEL_STATE_NORMAL) {
+			/* trigger update since OSC2 clock is changed */
+			nt37290_update_panel_feat(ctx, pmode, true);
+			dev_dbg(ctx->dev, "%s: %u (idx %d)\n", __func__, clk_khz, idx);
+		} else {
+			dev_dbg(ctx->dev, "%s: pending change for %u (idx %d)\n",
+				__func__, clk_khz, idx);
+		}
 	}
 }
 

@@ -1390,9 +1390,6 @@ static ssize_t osc2_clk_khz_store(struct device *dev, struct device_attribute *a
 	unsigned int osc2_clk_khz;
 	int ret;
 
-	if (!is_panel_active(ctx))
-		return -EPERM;
-
 	if (!funcs || !funcs->set_osc2_clk_khz)
 		return -EOPNOTSUPP;
 
@@ -1414,9 +1411,6 @@ static ssize_t osc2_clk_khz_show(struct device *dev, struct device_attribute *at
 {
 	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
-
-	if (!is_panel_active(ctx))
-		return -EPERM;
 
 	return scnprintf(buf, PAGE_SIZE, "%u\n", ctx->osc2_clk_khz);
 }
