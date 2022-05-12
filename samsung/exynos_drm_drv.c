@@ -404,6 +404,7 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 	struct drm_plane_state *new_plane_state;
 	int i, ret, err = 0;
 	struct drm_printer p = drm_info_printer(dev->dev);
+	long tmo = msecs_to_jiffies(EXYNOS_DRM_WAIT_FENCE_TIMEOUT_MS);
 
 	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
 		struct dma_fence *fence = new_plane_state->fence;
@@ -412,11 +413,25 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 			continue;
 
 		WARN_ON(!new_plane_state->fb);
-		ret = dma_fence_wait_timeout(fence, pre_swap,
-			msecs_to_jiffies(EXYNOS_DRM_WAIT_FENCE_TIMEOUT_MS));
+		ret = dma_fence_wait_timeout(fence, pre_swap, tmo);
 		if (ret == 0) {
+			struct drm_crtc *crtc = new_plane_state->crtc;
+
 			pr_err("%s: timeout of waiting for fence, name:%s idx:%d\n",
 				__func__, plane->name ? : "NA", plane->index);
+			if (crtc) {
+				struct exynos_drm_crtc_state *exynos_crtc_state;
+				struct drm_crtc_state *crtc_state;
+
+				crtc_state = drm_atomic_get_crtc_state(state, crtc);
+				if (IS_ERR(crtc_state) || !crtc_state->enable || !crtc_state->active)
+					continue;
+				exynos_crtc_state = to_exynos_crtc_state(crtc_state);
+				if (!exynos_crtc_state->skip_update) {
+					exynos_crtc_state->skip_update = true;
+					pr_warn("%s: skip frame update at %s\n", __func__, crtc->name);
+				}
+			}
 			print_drm_plane_state_info(&p, new_plane_state);
 
 			spin_lock_irq(fence->lock);
@@ -434,6 +449,7 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 				drm_printf(&p, "fence: err=%d\n", fence->error);
 			spin_unlock_irq(fence->lock);
 
+			tmo = 0;
 			err = -ETIMEDOUT;
 		} else if (ret < 0) {
 			pr_warn("%s: error of waiting for dma fence, ret=%d\n", __func__, ret);
