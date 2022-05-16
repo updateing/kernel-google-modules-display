@@ -120,11 +120,11 @@ static const u8 freq_update[] = { 0xF7, 0x0F };
 
 static const struct exynos_dsi_cmd s6e3hc4_sleepin_cmds[] = {
 	/* SP back failure workaround on EVT */
-	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
+	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
 	EXYNOS_DSI_CMD(sleep_in, 100),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x0D, 0xFE),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xFE, 0x02),
-	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
+	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_sleepin);
 
@@ -142,10 +142,10 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00),
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x25),
 	/* AOD timing */
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x3D, 0xF6),
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xAF, 0xB1),
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x41, 0xF6),
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xB3),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x3D, 0xF6),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xAF, 0xB1),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x41, 0xF6),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xB3),
 	EXYNOS_DSI_CMD0(freq_update),
 	/* AOD low mode setting */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x01, 0x7D, 0x94),
@@ -793,12 +793,12 @@ static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
 }
 
 static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
-	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
+	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x0D, 0xFE),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xFE, 0x00),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x01, 0x37, 0x90),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x90, 0x00),
-	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1)),
+	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
 
 	/* Enable TE*/
 	EXYNOS_DSI_CMD_SEQ(0x35),
@@ -871,6 +871,10 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, is_fhd ? 0x0D : 0x0C);
+	if (ctx->panel_rev >= PANEL_REV_EVT1_1 && ctx->panel_rev <= PANEL_REV_DVT1_1) {
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xFD, 0x95);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x95, 0x80, 0x44, 0x08, 0x81, 0x10, 0x17, 0x74);
+	}
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 
 	s6e3hc4_update_panel_feat(ctx, pmode, true);
@@ -1428,7 +1432,7 @@ const struct brightness_capability s6e3hc4_brightness_capability = {
 			.max = 1000,
 		},
 		.level = {
-			.min = 2252,
+			.min = 2457,
 			.max = 4095,
 		},
 		.percentage = {
@@ -1443,6 +1447,7 @@ const struct exynos_panel_desc samsung_s6e3hc4 = {
 	.max_brightness = 3949,
 	.dft_brightness = 1023,
 	.brt_capability = &s6e3hc4_brightness_capability,
+	.dbv_extra_frame = true,
 	/* supported HDR format bitmask : 1(DOLBY_VISION), 2(HDR10), 3(HLG) */
 	.hdr_formats = BIT(2) | BIT(3),
 	.max_luminance = 10000000,

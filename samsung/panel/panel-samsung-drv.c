@@ -675,6 +675,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->self_refresh_active = false;
 	ctx->panel_idle_vrefresh = 0;
 	ctx->current_binned_lp = NULL;
+	ctx->cabc_mode = CABC_OFF;
 
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func) {
@@ -939,6 +940,9 @@ static ssize_t serial_number_show(struct device *dev,
 
 	if (!ctx->initialized)
 		return -EPERM;
+
+	if (!strcmp(ctx->panel_id, ""))
+		return -EINVAL;
 
 	return snprintf(buf, PAGE_SIZE, "%s\n", ctx->panel_id);
 }
@@ -1672,9 +1676,23 @@ static void exynos_panel_set_dimming(struct exynos_panel *ctx, bool dimming_on)
 	mutex_unlock(&ctx->mode_lock);
 }
 
+static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mode cabc_mode)
+{
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+	if (!funcs || !funcs->set_cabc_mode)
+		return;
+
+	mutex_lock(&ctx->mode_lock);
+	if (cabc_mode != ctx->cabc_mode)
+		funcs->set_cabc_mode(ctx, cabc_mode);
+
+	mutex_unlock(&ctx->mode_lock);
+}
+
 static void exynos_panel_pre_commit_properties(
 				struct exynos_panel *ctx,
-				const struct exynos_drm_connector_state *conn_state)
+				struct exynos_drm_connector_state *conn_state)
 {
 	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
@@ -1684,9 +1702,19 @@ static void exynos_panel_pre_commit_properties(
 	if (!conn_state->pending_update_flags)
 		return;
 
+	dev_info(ctx->dev, "%s: mipi_sync(0x%lx) pending_update_flags(0x%x)\n", __func__,
+		conn_state->mipi_sync, conn_state->pending_update_flags);
 	DPU_ATRACE_BEGIN(__func__);
 	mipi_sync = conn_state->mipi_sync &
 		(MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM | MIPI_CMD_SYNC_BL);
+
+	if ((conn_state->mipi_sync & (MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM)) &&
+		ctx->current_mode->exynos_mode.is_lp_mode) {
+		conn_state->pending_update_flags &=
+			~(HBM_FLAG_LHBM_UPDATE | HBM_FLAG_GHBM_UPDATE | HBM_FLAG_BL_UPDATE);
+		dev_warn(ctx->dev, "%s: avoid LHBM/GHBM/BL updates during lp mode\n",
+			__func__);
+	}
 
 	if (mipi_sync) {
 		exynos_panel_check_mipi_sync_timing(conn_state->base.crtc,
@@ -1737,19 +1765,21 @@ static void exynos_panel_pre_commit_properties(
 	if (mipi_sync)
 		exynos_dsi_dcs_write_buffer_force_batch_end(dsi);
 
-	if ((MIPI_CMD_SYNC_GHBM & conn_state->mipi_sync)) {
+	if (((MIPI_CMD_SYNC_GHBM | MIPI_CMD_SYNC_BL) & conn_state->mipi_sync)
+	    && !(MIPI_CMD_SYNC_LHBM & conn_state->mipi_sync)
+	    && ctx->desc->dbv_extra_frame) {
 		/**
-		 * panel needs one extra VSYNC period to apply GHBM. The frame
+		 * panel needs one extra VSYNC period to apply GHBM/dbv. The frame
 		 * update should be delayed.
 		 */
-		DPU_ATRACE_BEGIN("ghbm_wait");
+		DPU_ATRACE_BEGIN("dbv_wait");
 		if (!drm_crtc_vblank_get(conn_state->base.crtc)) {
 			drm_crtc_wait_one_vblank(conn_state->base.crtc);
 			drm_crtc_vblank_put(conn_state->base.crtc);
 		} else {
-			pr_warn("%s failed to get vblank for ghbm wait\n", __func__);
+			pr_warn("%s failed to get vblank for dbv wait\n", __func__);
 		}
-		DPU_ATRACE_END("ghbm_wait");
+		DPU_ATRACE_END("dbv_wait");
 	}
 
 	if (ghbm_updated)
@@ -1780,7 +1810,7 @@ static void exynos_panel_connector_atomic_commit(
 		return;
 
 	mutex_lock(&ctx->mode_lock);
-	if (exynos_panel_func->commit_done)
+	if (exynos_panel_func->commit_done && !ctx->current_mode->exynos_mode.is_lp_mode)
 		exynos_panel_func->commit_done(ctx);
 	mutex_unlock(&ctx->mode_lock);
 
@@ -2505,6 +2535,59 @@ static ssize_t hbm_mode_show(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(hbm_mode);
+
+static ssize_t cabc_mode_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+	u32 cabc_mode;
+	int ret;
+
+	if (!is_panel_active(ctx)) {
+		dev_err(ctx->dev, "panel is not enabled\n");
+		return -EPERM;
+	}
+
+	ret = kstrtouint(buf, 0, &cabc_mode);
+	if (ret || (cabc_mode > CABC_MOVIE_MODE)) {
+		dev_err(ctx->dev, "invalid cabc_mode value");
+		return -EINVAL;
+	}
+
+	exynos_panel_set_cabc(ctx, cabc_mode);
+
+	return count;
+}
+
+static ssize_t cabc_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+	const char *mode;
+
+	switch (ctx->cabc_mode) {
+	case CABC_OFF:
+		mode = "OFF";
+		break;
+	case CABC_UI_MODE:
+		mode = "UI";
+		break;
+	case CABC_STILL_MODE:
+		mode = "STILL";
+		break;
+	case CABC_MOVIE_MODE:
+		mode = "MOVIE";
+		break;
+	default:
+		dev_err(ctx->dev, "unknown CABC mode : %d\n", ctx->cabc_mode);
+		return -EINVAL;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", mode);
+}
+
+static DEVICE_ATTR_RW(cabc_mode);
 
 static ssize_t dimming_on_store(struct device *dev,
 			       struct device_attribute *attr,
@@ -3660,6 +3743,11 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	if (ret)
 		dev_err(ctx->dev, "unable to create bl_device_groups groups\n");
 
+	if (exynos_panel_func && exynos_panel_func->set_cabc_mode) {
+		ret = sysfs_create_file(&ctx->bl->dev.kobj, &dev_attr_cabc_mode.attr);
+		if (ret)
+			dev_err(ctx->dev, "unable to create cabc_mode\n");
+	}
 	exynos_panel_handoff(ctx);
 
 	ret = mipi_dsi_attach(dsi);
@@ -3699,6 +3787,7 @@ int exynos_panel_remove(struct mipi_dsi_device *dsi)
 	drm_bridge_remove(&ctx->bridge);
 
 	sysfs_remove_groups(&ctx->bl->dev.kobj, bl_device_groups);
+	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_cabc_mode.attr);
 	devm_backlight_device_unregister(ctx->dev, ctx->bl);
 
 	return 0;

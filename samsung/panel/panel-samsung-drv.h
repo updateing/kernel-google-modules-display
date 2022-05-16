@@ -49,12 +49,14 @@
 #define PANEL_REV_PROTO1	BIT(0)
 #define PANEL_REV_PROTO1_1	BIT(1)
 #define PANEL_REV_PROTO1_2	BIT(2)
-#define PANEL_REV_EVT1		BIT(3)
-#define PANEL_REV_EVT1_1	BIT(4)
-#define PANEL_REV_EVT1_2	BIT(5)
-#define PANEL_REV_DVT1		BIT(6)
-#define PANEL_REV_DVT1_1	BIT(7)
-#define PANEL_REV_PVT		BIT(8)
+#define PANEL_REV_PROTO2	BIT(3)
+#define PANEL_REV_EVT1		BIT(4)
+#define PANEL_REV_EVT1_1	BIT(5)
+#define PANEL_REV_EVT1_2	BIT(6)
+#define PANEL_REV_EVT2		BIT(7)
+#define PANEL_REV_DVT1		BIT(8)
+#define PANEL_REV_DVT1_1	BIT(9)
+#define PANEL_REV_PVT		BIT(10)
 #define PANEL_REV_LATEST	BIT(31)
 #define PANEL_REV_ALL		(~0)
 #define PANEL_REV_GE(rev)	(~((rev) - 1))
@@ -128,6 +130,13 @@ enum exynos_panel_idle_mode {
 enum exynos_panel_te2_opt {
 	TE2_OPT_CHANGEABLE,
 	TE2_OPT_FIXED,
+};
+
+enum exynos_cabc_mode {
+	CABC_OFF = 0,
+	CABC_UI_MODE,
+	CABC_STILL_MODE,
+	CABC_MOVIE_MODE,
 };
 
 struct exynos_panel;
@@ -217,6 +226,15 @@ struct exynos_panel_funcs {
 	 */
 	void (*set_dimming_on)(struct exynos_panel *exynos_panel,
 				 bool dimming_on);
+
+	/**
+	 * @set_cabc_mode:
+	 *
+	 * This callback is used to implement panel specific logic for cabc mode
+	 * enablement. If this is not defined, it means that panel does not
+	 * support cabc.
+	 */
+	void (*set_cabc_mode)(struct exynos_panel *exynos_panel, enum exynos_cabc_mode mode);
 
 	/**
 	 * @set_local_hbm_mode:
@@ -457,6 +475,8 @@ struct exynos_panel_desc {
 	u32 max_brightness;
 	u32 min_brightness;
 	u32 dft_brightness; /* default brightness */
+	/* extra frame is needed to apply brightness change if it's not at next VSYNC */
+	bool dbv_extra_frame;
 	bool is_partial;
 	bool is_panel_idle_supported;
 	const struct brightness_capability *brt_capability;
@@ -559,6 +579,7 @@ struct exynos_panel {
 	bool dimming_on;
 	/* indicates the LCD backlight is controlled by DCS */
 	bool bl_ctrl_dcs;
+	enum exynos_cabc_mode cabc_mode;
 	struct backlight_device *bl;
 	struct mutex mode_lock;
 	struct mutex bl_state_lock;
