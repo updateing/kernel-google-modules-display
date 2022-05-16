@@ -15,6 +15,7 @@
 
 #include <drm/drm_encoder.h>
 #include <drm/drm_connector.h>
+#include <linux/extcon.h>
 
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
@@ -41,6 +42,12 @@ enum dp_state {
 	DP_STATE_RUN,
 };
 
+enum hotplug_state {
+	EXYNOS_HPD_UNPLUG = 0,
+	EXYNOS_HPD_PLUG,
+	EXYNOS_HPD_IRQ,
+};
+
 struct dp_resources {
 	int aux_ch_mux_gpio;
 	int irq;
@@ -57,8 +64,19 @@ struct dp_device {
 	struct device *dev;
 	struct dp_resources res;
 
+	struct mutex hpd_lock;
+
+	/* HPD State */
+	enum hotplug_state hpd_current_state;
+	struct mutex hpd_state_lock;
+
 	/* DP Driver State */
 	enum dp_state state;
+
+	/* PDIC / ExtCon */
+	struct extcon_dev *edev;
+	struct notifier_block dp_typec_nb;
+	int notifier_registered;
 };
 
 static inline struct dp_device *get_dp_drvdata(void)

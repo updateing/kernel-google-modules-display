@@ -30,9 +30,28 @@ static inline struct dp_device *encoder_to_dp(struct drm_encoder *e)
 	return container_of(e, struct dp_device, encoder);
 }
 
+static enum hotplug_state dp_get_hpd_state(struct dp_device *dp)
+{
+	enum hotplug_state hpd_current_state;
+
+	mutex_lock(&dp->hpd_state_lock);
+	hpd_current_state = dp->hpd_current_state;
+	mutex_unlock(&dp->hpd_state_lock);
+
+	return hpd_current_state;
+}
+
+static void dp_set_hpd_state(struct dp_device *dp, enum hotplug_state hpd_current_state)
+{
+	mutex_lock(&dp->hpd_state_lock);
+	dp->hpd_current_state = hpd_current_state;
+	mutex_unlock(&dp->hpd_state_lock);
+}
+
 static void dp_init_info(struct dp_device *dp)
 {
 	dp->state = DP_STATE_INIT;
+	dp->hpd_current_state = EXYNOS_HPD_UNPLUG;
 	dp->output_type = EXYNOS_DISPLAY_TYPE_DP0_SST1;
 }
 
@@ -42,6 +61,79 @@ static void dp_enable(struct drm_encoder *encoder)
 
 static void dp_disable(struct drm_encoder *encoder)
 {
+}
+
+/* ExtCon Handshaking Functions */
+static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
+{
+	if (dp_get_hpd_state(dp) == state) {
+		dp_debug(dp, "DP HPD is same state (%x): Skip\n", state);
+		return;
+	}
+
+	mutex_lock(&dp->hpd_lock);
+
+	if (state == EXYNOS_HPD_PLUG) {
+		dp_info(dp, "DP HPD changed to EXYNOS_HPD_PLUG\n");
+		dp_set_hpd_state(dp, state);
+	} else if (state == EXYNOS_HPD_UNPLUG) {
+		dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
+		dp_set_hpd_state(dp, state);
+	} else { /* state == EXYNOS_HPD_IRQ */
+	}
+
+	mutex_unlock(&dp->hpd_lock);
+}
+
+static int usb_typec_dp_notification(struct notifier_block *nb,
+				     unsigned long action, void *data)
+{
+	struct dp_device *dp = container_of(nb, struct dp_device, dp_typec_nb);
+	union extcon_property_value property = { 0 };
+	int ret;
+
+	if (action == 1) {
+		ret = extcon_get_property(dp->edev, EXTCON_DISP_DP, EXTCON_PROP_DISP_HPD, &property);
+		if (!ret) {
+			if (property.intval == 1) {
+				dp_info(dp, "%s: USB Type-C is HPD PLUG status\n", __func__);
+
+				if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)
+					dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
+				else
+					dp_warn(dp, "%s: HPD is already set\n", __func__);
+			} else {
+				dp_info(dp, "%s: USB Type-C is HPD UNPLUG status\n", __func__);
+
+				if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
+					dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
+			}
+		} else
+			dp_err(dp, "%s: extcon_get_property() is failed\n", __func__);
+	} else {
+		dp_info(dp, "%s: USB Type-C is not in display ALT mode\n", __func__);
+
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
+			dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
+	}
+
+	return NOTIFY_OK;
+}
+
+static void dp_register_extcon_notifier(void)
+{
+	struct dp_device *dp = get_dp_drvdata();
+	int ret;
+
+	if (!dp->notifier_registered) {
+		dp->dp_typec_nb.notifier_call = usb_typec_dp_notification;
+		ret = extcon_register_notifier(dp->edev, EXTCON_DISP_DP, &dp->dp_typec_nb);
+		if (ret < 0)
+			dp_err(dp, "failed to register PDIC Notifier\n");
+
+		dp->notifier_registered = 1;
+		dp_debug(dp, "PDIC Notifier has been registered\n");
+	}
 }
 
 /* DP DRM Connector Helper Functions */
@@ -153,6 +245,8 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 
 	dp_info(dp, "DP Driver has been binded\n");
 
+	dp_register_extcon_notifier();
+
 	return ret;
 }
 
@@ -175,6 +269,11 @@ static int dp_parse_dt(struct dp_device *dp, struct device *dev)
 {
 	if (IS_ERR_OR_NULL(dev->of_node)) {
 		dp_err(dp, "no device tree information\n");
+		return -EINVAL;
+	}
+
+	if (!of_property_read_bool(dev->of_node, "extcon")) {
+		dp_err(dp, "no extcon in device tree\n");
 		return -EINVAL;
 	}
 
@@ -267,10 +366,24 @@ static int dp_probe(struct platform_device *pdev)
 
 	dma_set_mask(dev, DMA_BIT_MASK(32));
 
+	mutex_init(&dp->hpd_lock);
+	mutex_init(&dp->hpd_state_lock);
+
+	/* Register callback to ExtCon */
+	dp->edev = extcon_get_edev_by_phandle(dev, 0);
+	if (IS_ERR_OR_NULL(dp->edev)) {
+		dp_err(dp, "error while retrieving extcon dev\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
 	pm_runtime_enable(dev);
 
 	dp_info(dp, "DP Driver has been probed.\n");
 	return component_add(dp->dev, &dp_component_ops);
+
+err:
+	return ret;
 }
 
 static int dp_remove(struct platform_device *pdev)
@@ -278,6 +391,9 @@ static int dp_remove(struct platform_device *pdev)
 	struct dp_device *dp = platform_get_drvdata(pdev);
 
 	pm_runtime_disable(&pdev->dev);
+
+	mutex_destroy(&dp->hpd_lock);
+	mutex_destroy(&dp->hpd_state_lock);
 
 	dp_info(dp, "DP Driver has been removed\n");
 	return 0;
