@@ -888,14 +888,22 @@ static int nt37290_disable(struct drm_panel *panel)
 }
 
 /**
- * struct brightness_data - nits and DBV in each brightness band
+ * struct brightness_data - nits, DBV, and coefficients in each brightness band
  *
  * @nits: brightness in nits.
  * @level: brightness in DBV.
+ *
+ * @coef_a: coefficient a in the equation of a nonlinear curve
+ * @coef_b: coefficient b in the equation of a nonlinear curve
+ * @coef_c: coefficient c in the equation of a nonlinear curve
  */
 struct brightness_data {
 	u16 nits;
 	u16 level;
+
+	s64 coef_a;
+	s64 coef_b;
+	s64 coef_c;
 };
 
 /**
@@ -905,12 +913,19 @@ struct brightness_data {
  * @num_of_hbm_bands: number of brightness bands in hbm.
  * @normal_band_data: pointer to brightness data in normal bands.
  * @num_of_normal_bands: number of brightness bands in normal mode.
+ *
+ * @nonlinear_range_data: pointer to nonlinear data in all ranges. If hbm_band_data
+ *                        and normal_band_data are not defined, this should be specified.
+ * @num_of_nonlinear_ranges: number of nonlinear brightness ranges.
  */
 struct brightness_settings {
 	const struct brightness_data * const hbm_band_data;
 	const unsigned int num_of_hbm_bands;
 	const struct brightness_data * const normal_band_data;
 	const unsigned int num_of_normal_bands;
+
+	const struct brightness_data * const nonlinear_range_data;
+	const unsigned int num_of_nonlinear_ranges;
 };
 
 static const struct brightness_data evt1_1_hbm_band_data[] = {
@@ -928,6 +943,26 @@ static const struct brightness_data evt1_1_normal_band_data[] = {
 	{ .nits = 25, .level = 512 },   /* band 6 */
 	{ .nits = 5, .level = 256 },    /* band 7 */
 	{ .nits = 2, .level = 3 },      /* band 8 */
+};
+
+/**
+ * All coefficients are multiplied by 10^6 to have sufficient accuracy.
+ * For example, the original equation of range 0 is:
+ *
+ * y = 0.0001123*x^2 - 0.06496*x - 611.79
+ */
+static const struct brightness_data dvt1_range_data[] = {
+	/* nits, level, coef_a, coef_b, coef_c*/
+	{ 1000, 4094, 112, -64960, -611790000 }, /* range 0: HBM ~ band 0 */
+	{ 600, 3584, 271, -1227200, 1520800000 }, /* range 1: band 0 ~ band 1 */
+	{ 300, 3072, 72, -213700, 276570000 }, /* range 2: band 1 ~ band 2 */
+	{ 200, 2560, 53, -87800, 77395000 }, /* range 3: band 2 ~ band 3 */
+	{ 120, 2048, 26, -17300, 45440000 }, /* range 4: band 3 ~ band 4 */
+	{ 80, 1536, 28, -12700, 34007000 }, /* range 5: band 4 ~ band 5 */
+	{ 50, 1024, 20, 16300, 11355000 }, /* range 6: band 5 ~ band 6 */
+	{ 25, 512, 186, -68900, 10625000 }, /* range 7: band 6 ~ band 7 */
+	{ 5, 256, 17, 7293, 1989200 }, /* range 8: band 7 ~ band 8 */
+	{ 2, 3 }, /* range 9: band 8 */
 };
 
 static const struct brightness_settings evt1_1_br_settings = {
@@ -955,6 +990,11 @@ static const struct brightness_settings evt1_br_settings = {
 	.num_of_normal_bands = ARRAY_SIZE(evt1_normal_band_data),
 };
 
+static const struct brightness_settings dvt1_br_settings = {
+	.nonlinear_range_data = dvt1_range_data,
+	.num_of_nonlinear_ranges = ARRAY_SIZE(dvt1_range_data),
+};
+
 /**
  * linear_interpolation - linear interpolation for given x
  * @x1: x coordinate
@@ -966,8 +1006,7 @@ static const struct brightness_settings evt1_br_settings = {
  * Given x, do linear interpolation according to x1, x2, y1, and y2.
  * Return a new value after calculation. Return negative if the inputs are invalid.
  */
-
-static inline u16 linear_interpolation(x1, x2, y1, y2, x)
+static inline u64 linear_interpolation(u64 x1, u64 x2, u64 y1, u64 y2, u64 x)
 {
 	if (x == x1)
 		return y1;
@@ -975,6 +1014,37 @@ static inline u16 linear_interpolation(x1, x2, y1, y2, x)
 		return y2;
 	else
 		return (y1 + DIV_ROUND_CLOSEST((x - x1) * (y2 - y1), x2 - x1));
+}
+
+/**
+ * nonlinear_calculation - nonlinear calculation for given y
+ * @a: coefficient a in the equation
+ * @b: coefficient b in the equation
+ * @c: coefficient c in the equation
+ * @y: y coordinate
+ * @x: pointer of x coordinate
+ *
+ * Given y, do the calculation for equation y = a*x^2 + b*x + c for a nonlinear curve.
+ * The x can be obtained by int_sqrt(((y - c) / a) + (b / a / 2)^2) - b / a / 2
+ * Only positive square root is considered for x. Return negative while invalid.
+ */
+static inline int nonlinear_calculation(s64 a, s64 b, s64 c, s64 y, s64 *x)
+{
+	s64 p, q, r;
+
+	if (!a)
+		return -EINVAL;
+
+	p = DIV_ROUND_CLOSEST(y - c, a);
+	q = DIV_ROUND_CLOSEST(b * b, a * a * 4);
+	r = DIV_ROUND_CLOSEST(b, a * 2);
+
+	if ((p + q) < 0)
+		return -EINVAL;
+
+	*x = int_sqrt(p + q) - r;
+
+	return 0;
 }
 
 static u16 nt37290_convert_to_evt1_1_nonlinear_br(struct exynos_panel *ctx, u16 br)
@@ -1030,6 +1100,68 @@ static u16 nt37290_convert_to_evt1_br(struct exynos_panel *ctx, u16 br)
 	return level;
 }
 
+static u16 nt37290_convert_to_dvt1_nonlinear_br(struct exynos_panel *ctx, u16 br)
+{
+	u16 i, range = 0;
+	u16 num_range = dvt1_br_settings.num_of_nonlinear_ranges;
+	u16 min_br = dvt1_br_settings.nonlinear_range_data[num_range - 1].level;
+	u16 max_br = dvt1_br_settings.nonlinear_range_data[0].level;
+	const u64 x1 = min_br * 100000;
+	const u64 x2 = max_br * 100000;
+	const u64 y1 = (dvt1_br_settings.nonlinear_range_data[num_range - 1].nits) * 100000;
+	const u64 y2 = (dvt1_br_settings.nonlinear_range_data[0].nits) * 100000;
+	u64 x;
+	s64 y, a, b, c, level = br;
+	int ret;
+
+	if (br <= min_br || br >= max_br) {
+		dev_dbg(ctx->dev, "%s: level %u\n", __func__, br);
+		return br;
+	}
+
+	/**
+	 * x is level (DBV), y is brightness (nits). Multiplied by 10^5 to
+	 * have sufficient accuracy without overflow.
+	 */
+	x = br * 100000;
+	y = linear_interpolation(x1, x2, y1, y2, x);
+	/**
+	 * Multiplied by 10 to have the same accuracy as nonlinear
+	 * coefficients without overflow for data type long. */
+	y *= 10;
+
+	/* find the range for the calculated nits (y) */
+	for (i = 1; i < num_range; i++) {
+		u64 nits = dvt1_br_settings.nonlinear_range_data[i].nits * 1000000;
+
+		if (y > nits) {
+			range = i - 1;
+			break;
+		}
+	}
+
+	/**
+	 * level is DBV, y is brightness (nits). The coefficients are varied
+	 * according to different ranges.
+	 */
+	a = dvt1_br_settings.nonlinear_range_data[range].coef_a;
+	b = dvt1_br_settings.nonlinear_range_data[range].coef_b;
+	c = dvt1_br_settings.nonlinear_range_data[range].coef_c;
+	ret = nonlinear_calculation(a, b, c, y, &level);
+	if (ret || level < min_br || level > max_br) {
+		dev_warn(ctx->dev, "%s: failed to convert for brightness %u, ret %d\n",
+			 __func__, br, ret);
+		if (!ret)
+			br = (level < min_br) ? min_br : max_br;
+		return br;
+	}
+
+	dev_dbg(ctx->dev, "%s: nits %lld, range %u, level %u->%lld\n",
+		__func__, DIV_ROUND_CLOSEST(y, 1000000), range, br, level);
+
+	return level;
+}
+
 static int nt37290_set_brightness(struct exynos_panel *ctx, u16 br)
 {
 	u16 brightness;
@@ -1050,7 +1182,9 @@ static int nt37290_set_brightness(struct exynos_panel *ctx, u16 br)
 		return exynos_dcs_set_brightness(ctx, 0);
 	}
 
-	if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
+	if (ctx->panel_rev >= PANEL_REV_DVT1) {
+		spanel->hw_dbv = nt37290_convert_to_dvt1_nonlinear_br(ctx, br);
+	} else if (ctx->panel_rev == PANEL_REV_EVT1_1) {
 		if (br <= evt1_1_br_settings.normal_band_data[0].level)
 			spanel->hw_dbv = nt37290_convert_to_evt1_1_nonlinear_br(ctx, br);
 	} else {
