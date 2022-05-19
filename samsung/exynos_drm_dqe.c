@@ -57,10 +57,10 @@ exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 	if (dqe->force_atc_config.dirty) {
 		if (dqe->force_atc_config.en) {
 			dqe_reg_set_atc(id, &dqe->force_atc_config);
-			dqe->force_atc_config.dirty = false;
 		} else {
 			dqe_reg_set_atc(id, NULL);
 		}
+		dqe->force_atc_config.dirty = false;
 	}
 
 	if (dqe->verbose_atc)
