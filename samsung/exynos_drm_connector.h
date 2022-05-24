@@ -69,6 +69,8 @@ struct exynos_display_dsc {
 	unsigned int slice_height;
 
 	const struct drm_dsc_config *cfg;
+
+	unsigned int delay_reg_init_us;
 };
 
 struct exynos_display_partial {

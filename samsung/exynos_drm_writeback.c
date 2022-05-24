@@ -68,6 +68,7 @@ static const struct of_device_id wb_of_match[] = {
 		/* TODO : check odma, wbmux, decon_win restriction */
 		.data = &dpp_drv_data,
 	},
+	{ /* sentinel */ },
 };
 
 static int writeback_get_modes(struct drm_connector *connector)

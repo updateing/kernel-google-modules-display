@@ -17,6 +17,7 @@
 
 #include <decon_cal.h>
 #include <dqe_cal.h>
+#include <trace/dpu_trace.h>
 #ifdef __linux__
 #include "../exynos_drm_decon.h"
 #include <linux/of_address.h>
@@ -1377,11 +1378,13 @@ static void dsc_reg_set_encoder(u32 id, struct decon_config *config,
 	}
 }
 
-static int dsc_reg_init(u32 id, struct decon_config *config, u32 overlap_w,
+int decon_dsc_reg_init(u32 id, struct decon_config *config, u32 overlap_w,
 		u32 swrst)
 {
 	u32 dsc_id;
 	struct decon_dsc dsc_enc;
+
+	DPU_ATRACE_BEGIN(__func__);
 
 	/* Basically, all SW-resets in DPU are not necessary */
 	if (swrst) {
@@ -1394,6 +1397,8 @@ static int dsc_reg_init(u32 id, struct decon_config *config, u32 overlap_w,
 	decon_reg_config_data_path_size(id, dsc_enc.width_per_enc,
 			config->image_height, overlap_w, &dsc_enc,
 			&config->dsc, config->mode.dsi_mode);
+
+	DPU_ATRACE_END(__func__);
 
 	return 0;
 }
@@ -1429,8 +1434,9 @@ static void decon_reg_configure_lcd(u32 id, struct decon_config *config)
 	decon_reg_set_data_path(id, config);
 
 	if (config->dsc.enabled) {
-		/* call decon_reg_config_data_path_size () inside */
-		dsc_reg_init(id, config, overlap_w, 0);
+		if (!config->dsc.delay_reg_init_us)
+			/* call decon_reg_config_data_path_size () inside */
+			decon_dsc_reg_init(id, config, overlap_w, 0);
 	} else {
 		decon_reg_config_data_path_size(id, config->image_width,
 				config->image_height, overlap_w, NULL,
@@ -2157,7 +2163,7 @@ void decon_reg_set_mres(u32 id, struct decon_config *config)
 			config->image_width, config->image_height);
 
 	if (config->dsc.enabled)
-		dsc_reg_init(id, config, overlap_w, 0);
+		decon_dsc_reg_init(id, config, overlap_w, 0);
 	else
 		decon_reg_config_data_path_size(id, config->image_width,
 				config->image_height, overlap_w, NULL,
