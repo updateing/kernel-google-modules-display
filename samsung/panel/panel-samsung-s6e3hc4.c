@@ -117,14 +117,16 @@ static const u8 display_off[] = { 0x28 };
 static const u8 display_on[] = { 0x29 };
 static const u8 sleep_in[] = { 0x10 };
 static const u8 freq_update[] = { 0xF7, 0x0F };
+static const u8 nop[] = { 0x00 };
 
 static const struct exynos_dsi_cmd s6e3hc4_sleepin_cmds[] = {
 	/* SP back failure workaround on EVT */
+	EXYNOS_DSI_CMD(sleep_in, 10),
 	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
-	EXYNOS_DSI_CMD(sleep_in, 100),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x0D, 0xFE),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xFE, 0x02),
 	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
+	EXYNOS_DSI_CMD(nop, 100),
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_sleepin);
 
@@ -142,10 +144,10 @@ static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00),
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x25),
 	/* AOD timing */
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x3D, 0xF6),
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xAF, 0xB1),
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x41, 0xF6),
-	EXYNOS_DSI_CMD_SEQ(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xB3),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x3D, 0xF6),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xAF, 0xB1),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x41, 0xF6),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xB3),
 	EXYNOS_DSI_CMD0(freq_update),
 	/* AOD low mode setting */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x01, 0x7D, 0x94),
@@ -799,6 +801,7 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x01, 0x37, 0x90),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x90, 0x00),
 	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
+	EXYNOS_DSI_CMD(nop, 120),
 
 	/* Enable TE*/
 	EXYNOS_DSI_CMD_SEQ(0x35),
@@ -860,10 +863,7 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 	EXYNOS_PPS_WRITE_BUF(ctx, is_fhd ? FHD_PPS_SETTING : WQHD_PPS_SETTING);
 
 	if (needs_reset) {
-		u32 delay = 120;
-
-		if (ctx->panel_rev & PANEL_REV_LT(PANEL_REV_DVT1))
-			delay += 10;
+		u32 delay = 10;
 
 		EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, delay, MIPI_DCS_EXIT_SLEEP_MODE);
 		exynos_panel_send_cmd_set(ctx, &s6e3hc4_init_cmd_set);
@@ -1432,7 +1432,7 @@ const struct brightness_capability s6e3hc4_brightness_capability = {
 			.max = 1000,
 		},
 		.level = {
-			.min = 2252,
+			.min = 2457,
 			.max = 4095,
 		},
 		.percentage = {

@@ -941,6 +941,9 @@ static ssize_t serial_number_show(struct device *dev,
 	if (!ctx->initialized)
 		return -EPERM;
 
+	if (!strcmp(ctx->panel_id, ""))
+		return -EINVAL;
+
 	return snprintf(buf, PAGE_SIZE, "%s\n", ctx->panel_id);
 }
 
@@ -1387,9 +1390,6 @@ static ssize_t osc2_clk_khz_store(struct device *dev, struct device_attribute *a
 	unsigned int osc2_clk_khz;
 	int ret;
 
-	if (!is_panel_active(ctx))
-		return -EPERM;
-
 	if (!funcs || !funcs->set_osc2_clk_khz)
 		return -EOPNOTSUPP;
 
@@ -1411,9 +1411,6 @@ static ssize_t osc2_clk_khz_show(struct device *dev, struct device_attribute *at
 {
 	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
-
-	if (!is_panel_active(ctx))
-		return -EPERM;
 
 	return scnprintf(buf, PAGE_SIZE, "%u\n", ctx->osc2_clk_khz);
 }
@@ -3257,12 +3254,23 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		mutex_unlock(&ctx->mode_lock);
 	} else {
 		if (crtc_state && crtc_state->mode_changed &&
-		    drm_atomic_crtc_effectively_active(crtc_state))
+		    drm_atomic_crtc_effectively_active(crtc_state)) {
+			if (ctx->desc->delay_dsc_reg_init_us) {
+				struct exynos_drm_connector_state *exynos_conn_state =
+							to_exynos_connector_state(conn_state);
+				struct exynos_display_mode *exynos_mode =
+							&exynos_conn_state->exynos_mode;
+
+				exynos_mode->dsc.delay_reg_init_us =
+							ctx->desc->delay_dsc_reg_init_us;
+			}
+
 			ctx->panel_state = PANEL_STATE_MODESET;
-		else if (ctx->force_power_on)
+		} else if (ctx->force_power_on) {
 			ctx->panel_state = PANEL_STATE_BLANK;
-		else
+		} else {
 			ctx->panel_state = PANEL_STATE_OFF;
+		}
 
 		drm_panel_disable(&ctx->panel);
 	}
