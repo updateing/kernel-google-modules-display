@@ -15,6 +15,7 @@
 
 #include <drm/drm_encoder.h>
 #include <drm/drm_connector.h>
+#include <drm/drm_dp_helper.h>
 #include <linux/extcon.h>
 
 #include "exynos_drm_drv.h"
@@ -51,6 +52,32 @@ enum hotplug_state {
 	EXYNOS_HPD_IRQ,
 };
 
+struct dp_link {
+	u8  revision;
+	u32  link_rate;
+	u8  num_lanes;
+	bool enhanced_frame;
+};
+
+struct dp_host {
+	u32 link_rate;
+	u8   num_lanes;
+	u8   support_tps;
+	bool fast_training;
+	bool enhanced_frame;
+	bool ssc;
+	bool scrambler;
+};
+
+struct dp_sink {
+	u32  link_rate;
+	u8   num_lanes;
+	u8   support_tps;
+	bool fast_training;
+	bool enhanced_frame;
+	bool ssc;
+};
+
 struct dp_resources {
 	int aux_ch_mux_gpio;
 	int irq;
@@ -61,6 +88,7 @@ struct dp_resources {
 struct dp_device {
 	struct drm_encoder encoder;
 	struct drm_connector connector;
+	struct drm_dp_aux dp_aux;
 
 	enum exynos_drm_output_type output_type;
 
@@ -79,6 +107,11 @@ struct dp_device {
 
 	/* DP Driver State */
 	enum dp_state state;
+
+	/* DP Capabilities */
+	struct dp_link link;
+	struct dp_host host;
+	struct dp_sink sink;
 
 	/* PDIC / ExtCon */
 	struct extcon_dev *edev;

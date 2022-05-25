@@ -25,9 +25,16 @@
 struct dp_device *dp_drvdata;
 EXPORT_SYMBOL(dp_drvdata);
 
+#define DP_SUPPORT_TPS(_v) BIT((_v) - 1)
+
 static inline struct dp_device *encoder_to_dp(struct drm_encoder *e)
 {
 	return container_of(e, struct dp_device, encoder);
+}
+
+static inline struct dp_device *dp_aux_to_dp(struct drm_dp_aux *a)
+{
+	return container_of(a, struct dp_device, dp_aux);
 }
 
 static enum hotplug_state dp_get_hpd_state(struct dp_device *dp)
@@ -53,6 +60,67 @@ static void dp_init_info(struct dp_device *dp)
 	dp->state = DP_STATE_INIT;
 	dp->hpd_current_state = EXYNOS_HPD_UNPLUG;
 	dp->output_type = EXYNOS_DISPLAY_TYPE_DP0_SST1;
+}
+
+static void dp_fill_host_caps(struct dp_device *dp)
+{
+	dp->host.num_lanes = MAX_LANE_CNT;
+	dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1);
+	dp->host.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2) |
+			       DP_SUPPORT_TPS(3) | DP_SUPPORT_TPS(4);
+	dp->host.fast_training = false;
+	dp->host.enhanced_frame = true;
+	dp->host.scrambler = true;
+	dp->host.ssc = false;
+}
+
+
+// Callback function for DRM DP Helper
+static ssize_t dp_aux_transfer(struct drm_dp_aux *dp_aux, struct drm_dp_aux_msg *msg)
+{
+	struct dp_device * dp = dp_aux_to_dp(dp_aux);
+	int ret;
+
+	switch (msg->request) {
+	case DP_AUX_NATIVE_WRITE:
+		ret = dp_hw_write_dpcd_burst(msg->address, msg->size, msg->buffer);
+		break;
+	case DP_AUX_NATIVE_READ:
+		ret = dp_hw_read_dpcd_burst(msg->address, msg->size, msg->buffer);
+		break;
+	default:
+		dp_err(dp, "unsupported DP Request(0x%X)\n", msg->request);
+		return -EINVAL;
+	}
+
+	if (ret)
+		msg->reply = DP_AUX_NATIVE_REPLY_NACK;
+	else {
+		msg->reply = DP_AUX_NATIVE_REPLY_ACK;
+		ret = msg->size;
+	}
+
+	// Should be return size or error code
+	return ret;
+}
+
+
+//------------------------------------------------------------------------------
+//
+static int dp_check_dp_sink(struct dp_device *dp)
+{
+	int sink_count = drm_dp_read_sink_count(&dp->dp_aux);
+
+	if (sink_count < 0) {
+		dp_err(dp, "failed to read DP Sink count\n");
+		return sink_count;
+	} else if (sink_count > 2) {
+		// Now, only 1 DP Sink should be supported.
+		dp_err(dp, "DP sink count is %d\n", sink_count);
+		return -EPERM;
+	}
+
+	return 0;
 }
 
 static void dp_enable(struct drm_encoder *encoder)
@@ -81,8 +149,33 @@ static void dp_work_hpd_plug(struct work_struct *work)
 		dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
 		usleep_range(10000, 11000);
 
+		if (dp_check_dp_sink(dp) < 0) {
+			dp_err(dp, "failed to check DP Sink status\n");
+			goto HPD_FAIL;
+		}
+
 		mutex_unlock(&dp->hpd_lock);
 	}
+
+	return;
+
+HPD_FAIL:
+	dp_err(dp, "HPD FAIL Check CCIC or USB!!\n");
+	dp_set_hpd_state(dp, EXYNOS_HPD_UNPLUG);
+	dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
+
+	dp_hw_deinit();
+	pm_relax(dp->dev);
+
+	dp_init_info(dp);
+	pm_runtime_put_sync(dp->dev);
+	dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
+		 atomic_read(&dp->dev->power.usage_count));
+
+	/* in error case, add delay to avoid very short interval reconnection */
+	msleep(300);
+
+	mutex_unlock(&dp->hpd_lock);
 }
 
 static void dp_work_hpd_unplug(struct work_struct *work)
@@ -287,6 +380,15 @@ static int dp_create_connector(struct drm_encoder *encoder)
 	return 0;
 }
 
+static int dp_create_dp_aux(struct dp_device *dp)
+{
+	drm_dp_aux_init(&dp->dp_aux);
+	dp->dp_aux.dev = dp->dev;
+	dp->dp_aux.transfer = dp_aux_transfer;
+
+	return 0;
+}
+
 static int dp_bind(struct device *dev, struct device *master, void *data)
 {
 	struct drm_encoder *encoder = dev_get_drvdata(dev);
@@ -311,6 +413,13 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 		return ret;
 	}
 
+	ret = dp_create_dp_aux(dp);
+	if (ret) {
+		dp_err(dp, "failed to create dp_aux ret = %d\n", ret);
+		return ret;
+	}
+
+	dp_fill_host_caps(dp);
 	dp_info(dp, "DP Driver has been binded\n");
 
 	dp_register_extcon_notifier();

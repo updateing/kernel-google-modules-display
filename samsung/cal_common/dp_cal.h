@@ -72,6 +72,8 @@ enum dp_aux_ch_cmd_status {
 
 /* Display HW enum definition */
 // Link Config
+#define MAX_LANE_CNT 4
+
 enum dp_link_rate_type {
 	LINK_RATE_RBR	= 0,	// DP_LINK_BW_1_62
 	LINK_RATE_HBR,		// DP_LINK_BW_2_7
