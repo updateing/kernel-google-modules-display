@@ -74,9 +74,6 @@ static const struct of_device_id decon_driver_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, decon_driver_dt_match);
 
-static void decon_mode_update_bts(struct decon_device *decon,
-				const struct drm_display_mode *mode,
-				const unsigned int vblank_usec);
 static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 				    struct drm_crtc_state *old_crtc_state);
 static int decon_request_te_irq(struct exynos_drm_crtc *exynos_crtc,
@@ -881,6 +878,7 @@ static void _decon_enable(struct decon_device *decon)
 	decon_enable_irqs(decon);
 }
 
+#if IS_ENABLED(CONFIG_EXYNOS_BTS)
 static void decon_mode_update_bts(struct decon_device *decon,
 				const struct drm_display_mode *mode,
 				const unsigned int vblank_usec)
@@ -904,7 +902,6 @@ static void decon_mode_update_bts(struct decon_device *decon,
 	atomic_set(&decon->bts.delayed_update, 0);
 }
 
-#if IS_ENABLED(CONFIG_EXYNOS_BTS)
 static void decon_seamless_mode_bts_update(struct decon_device *decon,
 					const struct drm_display_mode *mode,
 					const unsigned int vblank_usec)
@@ -965,9 +962,6 @@ void decon_mode_bts_pre_update(struct decon_device *decon,
 	decon->bts.ops->calc_bw(decon);
 	decon->bts.ops->update_bw(decon, false);
 }
-#else
-void decon_mode_bts_pre_update(struct decon_device *decon,
-				const struct drm_crtc_state *crtc_state) { }
 #endif
 
 static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
