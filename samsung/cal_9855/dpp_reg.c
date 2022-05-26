@@ -19,7 +19,6 @@
 #include <dpp_cal.h>
 
 #include "regs-dpp.h"
-#include "dpp_cal_internal.h"
 
 /****************** RCD CAL functions ******************/
 static void rcd_reg_set_sw_reset(u32 id)

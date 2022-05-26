@@ -357,6 +357,14 @@ struct decon_dsc {
 	unsigned char *dec_pps_t;
 };
 
+#ifdef CONFIG_SOC_GS201
+void decon_reg_set_rcd_enable_internal(u32 id, bool en);
+void decon_reg_update_req_cgc_internal(u32 id);
+#else
+static inline void decon_reg_set_rcd_enable_internal(u32 id, bool en) {}
+static inline void decon_reg_update_req_cgc_internal(u32 id) {}
+#endif
+
 void decon_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 		enum decon_regs_type type, unsigned int id);
 
@@ -411,7 +419,11 @@ void decon_reg_get_crc_data(u32 id, u32 crc_data[3]);
 /* For DQE configuration */
 void decon_reg_set_dqe_enable(u32 id, bool en);
 void decon_reg_update_req_dqe(u32 id);
-void decon_reg_update_req_cgc(u32 id);
+static inline void decon_reg_update_req_cgc(u32 id)
+{
+	decon_reg_update_req_cgc_internal(id);
+}
+
 
 /* DPU hw limitation check */
 struct decon_device;
@@ -436,7 +448,10 @@ void __decon_unmap_regs(struct decon_device *decon);
 bool is_decon_using_ch(u32 id, u32 rsc_ch, u32 ch);
 bool is_decon_using_win(u32 id, u32 rsc_win, u32 win);
 
-void decon_reg_set_rcd_enable(u32 dqe_id, bool en);
+static inline void decon_reg_set_rcd_enable(u32 dqe_id, bool en)
+{
+	decon_reg_set_rcd_enable_internal(dqe_id, en);
+}
 void decon_reg_set_drm_write_protected(u32 id, bool protected);
 /*********************************************************************/
 

@@ -29,6 +29,10 @@
 #define LINEAR_MATRIX_COEFFS_CNT	9
 #define LINEAR_MATRIX_OFFSETS_CNT	3
 
+#define DQE_CGC_CON			(0x1800)
+#define CGC_EN(_v)			((_v) << 0)
+#define CGC_EN_MASK			(1 << 0)
+
 enum dqe_version {
 	DQE_V1, 		/* GS101(9845) EVT0/A0 */
 	DQE_V2, 		/* GS101(9845) EVT1/B0 */
@@ -170,6 +174,21 @@ struct exynos_atc {
 	__u8 lt_calc_ab_shift;
 };
 
+#ifdef CONFIG_SOC_GS201
+static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en);
+static inline void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id);
+static inline int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us);
+static inline void dqe_reg_set_histogram_pos_internal(u32 id,
+		enum exynos_prog_pos histogram_pos);
+#else
+/* Stubs for non-gs201 SoCs */
+static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
+static inline void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id) {return;}
+static inline int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us) {return 0;}
+static inline void dqe_reg_set_histogram_pos_internal(u32 id,
+		enum exynos_prog_pos histogram_pos) {return;}
+#endif
+
 void dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 			enum dqe_version ver, u32 dqe_id);
 void dqe_reg_init(u32 dqe_id, u32 width, u32 height);
@@ -198,12 +217,28 @@ void dqe_reg_set_histogram_weights(u32 dqe_id, struct histogram_weights *weights
 void dqe_reg_set_histogram_threshold(u32 dqe_id, u32 threshold);
 void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state);
 void dqe_reg_get_histogram_bins(u32 dqe_id, struct histogram_bins *bins);
-void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_prog_pos pos);
+static inline void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_prog_pos pos)
+{
+	dqe_reg_set_histogram_pos_internal(dqe_id, pos);
+}
 void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height);
 void dqe_dump(struct drm_printer *p, u32 dqe_id);
-void dqe_reg_set_rcd_en(u32 dqe_id, bool en);
+static inline void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
+{
+	dqe_reg_set_rcd_en_internal(dqe_id, en);
+}
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected);
-void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id);
-void dqe_reg_set_cgc_en(u32 dqe_id, bool en);
-void dqe_reg_wait_cgc_dma_done(u32 dqe_id, u32 timeout_us);
+static inline void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id)
+{
+	dqe_reg_set_cgc_coef_dma_req_internal(dqe_id);
+}
+static inline void dqe_reg_set_cgc_en(u32 dqe_id, bool en)
+{
+	cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_EN(en), CGC_EN_MASK);
+}
+static inline void dqe_reg_wait_cgc_dma_done(u32 dqe_id, u32 timeout_us)
+{
+	dqe_reg_wait_cgc_dma_done_internal(dqe_id, timeout_us);
+}
+
 #endif /* __SAMSUNG_DQE_CAL_H__ */

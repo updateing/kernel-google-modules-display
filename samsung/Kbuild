@@ -6,12 +6,14 @@
 ccflags-y += -I$(srctree)/$(src)/cal_common
 ccflags-$(CONFIG_SOC_ZUMA) += -DCONFIG_DRM_LEGACY=1
 
+ifneq ($(filter y, $(CONFIG_SOC_GS101) $(CONFIG_SOC_GS201)),)
 ccflags-y += -I$(srctree)/$(src)/cal_9845
 exynos-drm-y += cal_9845/decon_reg.o
 exynos-drm-y += cal_9845/dsim_reg.o
 exynos-drm-y += cal_9845/dpp_reg.o
 exynos-drm-y += cal_9845/dqe_reg.o
 exynos-drm-y += cal_9845/hdr_reg.o
+endif
 
 ccflags-$(CONFIG_SOC_GS201) += -I$(srctree)/$(src)/cal_9855
 exynos-drm-$(CONFIG_SOC_GS201) += cal_9855/decon_reg.o

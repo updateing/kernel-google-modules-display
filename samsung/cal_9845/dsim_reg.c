@@ -2488,7 +2488,7 @@ static void __dphy_dump(struct drm_printer *p, u32 id, struct dsim_regs *regs)
 	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x06C0, 0x20);
 }
 #else
-static inline void __dphy_dump(u32 id, struct dsim_regs *regs) { }
+static inline void __dphy_dump(struct drm_printer *p, u32 id, struct dsim_regs *regs) { }
 #endif
 
 void __dsim_dump(struct drm_printer *p, u32 id, struct dsim_regs *regs)

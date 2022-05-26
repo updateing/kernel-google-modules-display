@@ -24,7 +24,6 @@
 
 #include "regs-decon.h"
 #include "regs-dqe.h"
-#include "../cal_9855/decon_cal_internal.h"
 
 enum decon_dsc_id {
 	DECON_DSC_ENC0 = 0x0,
@@ -447,11 +446,6 @@ void decon_reg_set_dqe_enable(u32 id, bool en)
 	decon_write_mask(id, DATA_PATH_CON_0, val, mask);
 }
 
-
-void decon_reg_set_rcd_enable(u32 dqe_id, bool en)
-{
-	decon_reg_set_rcd_enable_internal(dqe_id, en);
-}
 /*
  * Check major configuration of data_path_control
  *    DSCC[7]
@@ -2021,11 +2015,6 @@ void decon_reg_update_req_window(u32 id, u32 win_idx)
 
 	mask = SHD_REG_UP_REQ_WIN(win_idx);
 	decon_write_mask(id, SHD_REG_UP_REQ, ~0, mask);
-}
-
-void decon_reg_update_req_cgc(u32 id)
-{
-	decon_reg_update_req_cgc_internal(id);
 }
 
 void decon_reg_update_req_dqe(u32 id)

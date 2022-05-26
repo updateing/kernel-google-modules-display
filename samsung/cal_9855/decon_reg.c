@@ -18,7 +18,6 @@
 #include <decon_cal.h>
 
 #include "regs-decon.h"
-#include "decon_cal_internal.h"
 #include "../cal_9845/regs-decon.h"
 
 void decon_reg_set_rcd_enable_internal(u32 id, bool en)

@@ -19,7 +19,6 @@
 #include <drm/drm_print.h>
 
 #include "regs-dqe.h"
-#include "../cal_9855/dqe_cal_internal.h"
 
 struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
 
@@ -568,11 +567,6 @@ void dqe_reg_set_histogram_threshold(u32 dqe_id, u32 threshold)
 	hist_write(dqe_id, DQE_HIST_THRESH, threshold);
 }
 
-void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_prog_pos pos)
-{
-	dqe_reg_set_histogram_pos_internal(dqe_id, pos);
-}
-
 void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
 {
 	u32 val = 0;
@@ -634,27 +628,7 @@ void dqe_dump(struct drm_printer *p, u32 dqe_id)
 	dpu_print_hex_dump(p, dqe_regs, dqe_regs + 0x3400, 0x4);
 }
 
-void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
-{
-	dqe_reg_set_rcd_en_internal(dqe_id, en);
-}
-
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected)
 {
 	cal_set_write_protected(&regs_dqe[dqe_id].desc, protected);
-}
-
-void dqe_reg_set_cgc_en(u32 dqe_id, bool en)
-{
-	cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_EN(en), CGC_EN_MASK);
-}
-
-void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id)
-{
-	dqe_reg_set_cgc_coef_dma_req_internal(dqe_id);
-}
-
-void dqe_reg_wait_cgc_dma_done(u32 dqe_id, u32 timeout_us)
-{
-	dqe_reg_wait_cgc_dma_done_internal(dqe_id, timeout_us);
 }
