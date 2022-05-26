@@ -1138,17 +1138,15 @@ static u16 nt37290_convert_to_dvt1_nonlinear_br(struct exynos_panel *ctx, u16 br
 {
 	u16 i, range = 0;
 	u16 num_range = dvt1_br_settings.num_of_nonlinear_ranges;
-	u16 min_br = dvt1_br_settings.nonlinear_range_data[num_range - 1].level;
-	u16 max_br = dvt1_br_settings.nonlinear_range_data[0].level;
-	const u64 x1 = min_br * 100000;
-	const u64 x2 = max_br * 100000;
-	const u64 y1 = (dvt1_br_settings.nonlinear_range_data[num_range - 1].nits) * 100000;
-	const u64 y2 = (dvt1_br_settings.nonlinear_range_data[0].nits) * 100000;
-	u64 x;
+	u16 min_br_nbm = dvt1_br_settings.nonlinear_range_data[num_range - 1].level;
+	u16 max_br_nbm = dvt1_br_settings.nonlinear_range_data[1].level;
+	u16 min_br_hbm = max_br_nbm + 1;
+	u16 max_br_hbm = dvt1_br_settings.nonlinear_range_data[0].level;
+	u64 x1, x2, y1, y2, x;
 	s64 y, a, b, c, level = br;
 	int ret;
 
-	if (br <= min_br || br >= max_br) {
+	if (br <= min_br_nbm || br == max_br_nbm || br >= max_br_hbm) {
 		dev_dbg(ctx->dev, "%s: level %u\n", __func__, br);
 		return br;
 	}
@@ -1157,6 +1155,17 @@ static u16 nt37290_convert_to_dvt1_nonlinear_br(struct exynos_panel *ctx, u16 br
 	 * x is level (DBV), y is brightness (nits). Multiplied by 10^5 to
 	 * have sufficient accuracy without overflow.
 	 */
+	if (br <= max_br_nbm ) {
+		x1 = min_br_nbm * 100000;
+		x2 = max_br_nbm * 100000;
+		y1 = (dvt1_br_settings.nonlinear_range_data[num_range - 1].nits) * 100000;
+		y2 = (dvt1_br_settings.nonlinear_range_data[1].nits) * 100000;
+	} else {
+		x1 = min_br_hbm * 100000;
+		x2 = max_br_hbm * 100000;
+		y1 = (dvt1_br_settings.nonlinear_range_data[1].nits) * 100000;
+		y2 = (dvt1_br_settings.nonlinear_range_data[0].nits) * 100000;
+	}
 	x = br * 100000;
 	y = linear_interpolation(x1, x2, y1, y2, x);
 	/**
@@ -1182,11 +1191,11 @@ static u16 nt37290_convert_to_dvt1_nonlinear_br(struct exynos_panel *ctx, u16 br
 	b = dvt1_br_settings.nonlinear_range_data[range].coef_b;
 	c = dvt1_br_settings.nonlinear_range_data[range].coef_c;
 	ret = nonlinear_calculation(a, b, c, y, &level);
-	if (ret || level < min_br || level > max_br) {
+	if (ret || level < min_br_nbm || level > max_br_hbm) {
 		dev_warn(ctx->dev, "%s: failed to convert for brightness %u, ret %d\n",
 			 __func__, br, ret);
 		if (!ret)
-			br = (level < min_br) ? min_br : max_br;
+			br = (level < min_br_nbm) ? min_br_nbm : max_br_hbm;
 		return br;
 	}
 
