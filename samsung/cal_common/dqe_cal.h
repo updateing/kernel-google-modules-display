@@ -37,6 +37,7 @@ enum dqe_version {
 	DQE_V1, 		/* GS101(9845) EVT0/A0 */
 	DQE_V2, 		/* GS101(9845) EVT1/B0 */
 	DQE_V3, 		/* GS201(9855) */
+	DQE_V4, 		/* ZUMA(9865)  */
 	DQE_VERSION_MAX,
 };
 

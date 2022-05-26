@@ -765,6 +765,8 @@ static enum dqe_version exynos_get_dqe_version(void)
 	dqe_ver = gs_chipid_get_type() ? DQE_V2 : DQE_V1;
 #elif defined(CONFIG_SOC_GS201)
 	dqe_ver = DQE_V3;
+#elif defined(CONFIG_SOC_ZUMA)
+	dqe_ver = DQE_V4;
 #else
 	#error "Unknown DQE version."
 #endif

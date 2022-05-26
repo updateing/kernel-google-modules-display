@@ -23,7 +23,6 @@
 
 #include <exynos_dpp_coef.h>
 #include <exynos_hdr_lut.h>
-#include <cal_config.h>
 #include <dpp_cal.h>
 #include <hdr_cal.h>
 
@@ -39,27 +38,7 @@
 #define DPP_SC_RATIO_4_8	((1 << 20) * 8 / 4)
 #define DPP_SC_RATIO_3_8	((1 << 20) * 8 / 3)
 
-static struct cal_regs_desc regs_dpp[REGS_DPP_TYPE_MAX][REGS_DPP_ID_MAX];
-
-#define dpp_regs_desc(id)			(&regs_dpp[REGS_DPP][id])
-#define dpp_read(id, offset)			\
-	cal_read(dpp_regs_desc(id), offset)
-#define dpp_write(id, offset, val)		\
-	cal_write(dpp_regs_desc(id), offset, val)
-#define dpp_read_mask(id, offset, mask)	\
-	cal_read_mask(dpp_regs_desc(id), offset, mask)
-#define dpp_write_mask(id, offset, val, mask)	\
-	cal_write_mask(dpp_regs_desc(id), offset, val, mask)
-
-#define dma_regs_desc(id)			(&regs_dpp[REGS_DMA][id])
-#define dma_read(id, offset)			\
-	cal_read(dma_regs_desc(id), offset)
-#define dma_write(id, offset, val)		\
-	cal_write(dma_regs_desc(id), offset, val)
-#define dma_read_mask(id, offset, mask)	\
-	cal_read_mask(dma_regs_desc(id), offset, mask)
-#define dma_write_mask(id, offset, val, mask)	\
-	cal_write_mask(dma_regs_desc(id), offset, val, mask)
+struct cal_regs_desc regs_dpp[REGS_DPP_TYPE_MAX][REGS_DPP_ID_MAX];
 
 #define srcl_regs_desc(id)                      (&regs_dpp[REGS_SRAMC][id])
 #define srcl_read(id, offset)                   \
@@ -1141,13 +1120,13 @@ void dma_reg_get_shd_addr(u32 id, u32 shd_addr[], const unsigned long attr)
 			shd_addr[0], shd_addr[1], shd_addr[2], shd_addr[3]);
 }
 
-static void dpp_reg_dump_ch_data(int id, enum dpp_reg_area reg_area,
+static void dpp_reg_dump_ch_data(struct drm_printer *p, int id, enum dpp_reg_area reg_area,
 					const u32 sel[], u32 cnt)
 {
 	/* TODO: This will be implemented in the future */
 }
 
-static void dma_reg_dump_com_debug_regs(int id)
+void dma_reg_dump_com_debug_regs(struct drm_printer *p, int id)
 {
 	static bool checked;
 	const u32 sel_glb[99] = {
@@ -1166,83 +1145,93 @@ static void dma_reg_dump_com_debug_regs(int id)
 		0xC001, 0xC002, 0xC005
 	};
 
-	cal_log_info(id, "%s: checked = %d\n", __func__, checked);
+	cal_drm_printf(p, id, "%s: checked = %d\n", __func__, checked);
 	if (checked)
 		return;
 
-	cal_log_info(id, "-< DMA COMMON DEBUG SFR >-\n");
-	dpp_reg_dump_ch_data(id, REG_AREA_DMA_COM, sel_glb, 99);
+	cal_drm_printf(p, id, "-< DMA COMMON DEBUG SFR >-\n");
+	dpp_reg_dump_ch_data(p, id, REG_AREA_DMA_COM, sel_glb, 99);
 
 	checked = true;
 }
 
-static void dma_reg_dump_debug_regs(int id)
+static void dma_reg_dump_debug_regs(struct drm_printer *p, int id)
 {
 	/* TODO: This will be implemented in the future */
 }
 
-static void dpp_reg_dump_debug_regs(int id)
+static void dpp_reg_dump_debug_regs(struct drm_printer *p, int id)
 {
 	/* TODO: This will be implemented in the future */
 }
 
-static void dma_dump_regs(u32 id, void __iomem *dma_regs)
+static void dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
 {
-	cal_log_info(id, "\n=== DPU_DMA%d SFR DUMP ===\n", id);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0000, 0x144);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0200, 0x8);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0300, 0x24);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0730, 0x4);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0740, 0x4);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0D00, 0x28);
+	cal_drm_printf(p, id, "\n=== DPU_DMA%d SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0000, 0x144);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0200, 0x8);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0300, 0x24);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0730, 0x4);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0740, 0x4);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0D00, 0x28);
 
 	/* L0,2,4 only */
 	if ((id % 2) == 0) {
-		dpu_print_hex_dump(dma_regs, dma_regs + 0x0E00, 0x14);
-		dpu_print_hex_dump(dma_regs, dma_regs + 0x0F00, 0x40);
+		dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0E00, 0x14);
+		dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0F00, 0x40);
 	}
 
-	cal_log_info(id, "=== DPU_DMA%d SHADOW SFR DUMP ===\n", id);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0000 + DMA_SHD_OFFSET, 0x144);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0200 + DMA_SHD_OFFSET, 0x8);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0300 + DMA_SHD_OFFSET, 0x24);
-	dpu_print_hex_dump(dma_regs, dma_regs + 0x0D00 + 0x80, 0x28);
+	cal_drm_printf(p, id, "=== DPU_DMA%d SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0000 + DMA_SHD_OFFSET, 0x144);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0200 + DMA_SHD_OFFSET, 0x8);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0300 + DMA_SHD_OFFSET, 0x24);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0D00 + 0x80, 0x28);
 
 }
 
-static void dpp_dump_regs(u32 id, void __iomem *regs, unsigned long attr)
+void rcd_dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
 {
-	cal_log_info(id, "=== DPP%d SFR DUMP ===\n", id);
-	dpu_print_hex_dump(regs, regs + 0x0000, 0x64);
+	/* TODO: This will be implemented in the future */
+}
+
+void cgc_dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
+{
+	/* TODO: This will be implemented in the future */
+}
+
+static void dpp_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, unsigned long attr)
+{
+	cal_drm_printf(p, id, "=== DPP%d SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs + 0x0000, 0x64);
 	if (id % 2) {
 		/* L1,3,5 only */
-		dpu_print_hex_dump(regs, regs + 0x0200, 0xC);
+		dpu_print_hex_dump(p, regs, regs + 0x0200, 0xC);
 		// skip coef : 0x210 ~ 0x56C
-		dpu_print_hex_dump(regs, regs + 0x0570, 0x30);
+		dpu_print_hex_dump(p, regs, regs + 0x0570, 0x30);
 	}
 
-	cal_log_info(id, "=== DPP%d SHADOW SFR DUMP ===\n", id);
-	dpu_print_hex_dump(regs, regs + DPP_COM_SHD_OFFSET, 0x64);
+	cal_drm_printf(p, id, "=== DPP%d SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs + DPP_COM_SHD_OFFSET, 0x64);
 	if (id % 2) {
 		/* L1,3,5 only */
-		dpu_print_hex_dump(regs, regs + 0x0200 + DPP_SCL_SHD_OFFSET,
+		dpu_print_hex_dump(p, regs, regs + 0x0200 + DPP_SCL_SHD_OFFSET,
 				0xC);
 		// skip coef : (0x210 ~ 0x56C) + DPP_SCL_SHD_OFFSET
-		dpu_print_hex_dump(regs, regs + 0x0570 + DPP_SCL_SHD_OFFSET,
+		dpu_print_hex_dump(p, regs, regs + 0x0570 + DPP_SCL_SHD_OFFSET,
 				0x30);
 	}
 }
 
-void __dpp_dump(u32 id, void __iomem *regs, void __iomem *dma_regs,
+void __dpp_dump(struct drm_printer *p, u32 id, void __iomem *regs, void __iomem *dma_regs,
 		unsigned long attr)
 {
-	dma_reg_dump_com_debug_regs(id);
+	dma_reg_dump_com_debug_regs(p, id);
 
-	dma_dump_regs(id, dma_regs);
-	dma_reg_dump_debug_regs(id);
+	dma_dump_regs(p, id, dma_regs);
+	dma_reg_dump_debug_regs(p, id);
 
-	dpp_dump_regs(id, regs, attr);
-	dpp_reg_dump_debug_regs(id);
+	dpp_dump_regs(p, id, regs, attr);
+	dpp_reg_dump_debug_regs(p, id);
 }
 
 int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr)

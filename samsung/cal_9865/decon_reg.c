@@ -54,68 +54,7 @@ enum decon_win_alpha_sel {
 	ALPHA_MULT_SRC_SEL_AB = 3,
 };
 
-static struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
-
-#define decon_regs_desc(id)			(&regs_decon[REGS_DECON][id])
-#define decon_read(id, offset)			\
-	cal_read(decon_regs_desc(id), offset)
-#define decon_write(id, offset, val)		\
-	cal_write(decon_regs_desc(id), offset, val)
-#define decon_read_mask(id, offset, mask)	\
-	cal_read_mask(decon_regs_desc(id), offset, mask)
-#define decon_write_mask(id, offset, val, mask)	\
-	cal_write_mask(decon_regs_desc(id), offset, val, mask)
-
-#define win_regs_desc(id)			\
-	(&regs_decon[REGS_DECON_WIN][id])
-#define win_read(id, offset)			\
-	cal_read(win_regs_desc(id), offset)
-#define win_write(id, offset, val)		\
-	cal_write(win_regs_desc(id), offset, val)
-#define win_read_mask(id, offset, mask)		\
-	cal_read_mask(win_regs_desc(id), offset, mask)
-#define win_write_mask(id, offset, val, mask)	\
-	cal_write_mask(win_regs_desc(id), offset, val, mask)
-
-#define wincon_regs_desc(id)				\
-	(&regs_decon[REGS_DECON_WINCON][id])
-#define wincon_read(id, offset)				\
-	cal_read(wincon_regs_desc(id), offset)
-#define wincon_write(id, offset, val)			\
-	cal_write(wincon_regs_desc(id), offset, val)
-#define wincon_read_mask(id, offset, mask)		\
-	cal_read_mask(wincon_regs_desc(id), offset, mask)
-#define wincon_write_mask(id, offset, val, mask)	\
-	cal_write_mask(wincon_regs_desc(id), offset, val, mask)
-
-#define sub_regs_desc(id)			\
-	(&regs_decon[REGS_DECON_SUB][id])
-#define dsimif_read(id, offset)			\
-	cal_read(sub_regs_desc(id), offset)
-#define dsimif_write(id, offset, val)		\
-	cal_write(sub_regs_desc(id), offset, val)
-#define dsimif_read_mask(id, offset, mask)		\
-	cal_read_mask(sub_regs_desc(id), offset, mask)
-#define dsimif_write_mask(id, offset, val, mask)	\
-	cal_write_mask(sub_regs_desc(id), offset, val, mask)
-
-#define dpif_read(id, offset)			\
-	cal_read(sub_regs_desc(id), offset)
-#define dpif_write(id, offset, val)			\
-	cal_write(sub_regs_desc(id), offset, val)
-#define dpif_read_mask(id, offset, mask)		\
-	cal_read_mask(sub_regs_desc(id), offset, mask)
-#define dpif_write_mask(id, offset, val, mask)	\
-	cal_write_mask(sub_regs_desc(id), offset, val, mask)
-
-#define dsc_read(id, offset)			\
-	cal_read(sub_regs_desc(id), offset)
-#define dsc_write(id, offset, val)			\
-	cal_write(sub_regs_desc(id), offset, val)
-#define dsc_read_mask(id, offset, mask)		\
-	cal_read_mask(sub_regs_desc(id), offset, mask)
-#define dsc_write_mask(id, offset, val, mask)	\
-	cal_write_mask(sub_regs_desc(id), offset, val, mask)
+struct cal_regs_desc regs_decon[REGS_DECON_TYPE_MAX][REGS_DECON_ID_MAX];
 
 void decon_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 		enum decon_regs_type type, unsigned int id)
@@ -1986,6 +1925,11 @@ int decon_reg_wait_update_done_and_mask(u32 id, struct decon_mode *mode,
 	return result;
 }
 
+bool decon_reg_is_idle(u32 id)
+{
+	return decon_read_mask(id, GLOBAL_CON, GLOBAL_CON_IDLE_STATUS) != 0;
+}
+
 int decon_reg_wait_idle_status_timeout(u32 id, unsigned long timeout)
 {
 	u32 val;
@@ -2169,7 +2113,7 @@ void decon_reg_get_crc_data(u32 id, u32 crc_data[3])
 	crc_data[2] = dsimif_read(id, DSIMIF_CRC_DATA_B(id));
 }
 
-void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en)
+void __decon_dump(struct drm_printer *p, u32 id, struct decon_regs *regs, bool dsc_en, bool dqe_en)
 {
 	int i;
 	void __iomem *main_regs = regs->regs;
@@ -2178,58 +2122,58 @@ void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en)
 	void __iomem *wincon_regs = regs->wincon_regs;
 
 	/* decon_main */
-	cal_log_info(id, "\n=== DECON%d_MAIN SFR DUMP ===\n", id);
-	dpu_print_hex_dump(main_regs, main_regs + 0x0000, 0x344);
-	dpu_print_hex_dump(main_regs, main_regs + 0x400, 0x300);
+	cal_drm_printf(p, id, "\n=== DECON%d_MAIN SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, main_regs, main_regs + 0x0000, 0x344);
+	dpu_print_hex_dump(p, main_regs, main_regs + 0x400, 0x300);
 	/* shadow */
-	cal_log_info(id, "=== DECON%d_MAIN SHADOW SFR DUMP ===\n", id);
-	dpu_print_hex_dump(main_regs, main_regs + SHADOW_OFFSET, 0x2B0);
+	cal_drm_printf(p, id, "=== DECON%d_MAIN SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, main_regs, main_regs + SHADOW_OFFSET, 0x2B0);
 
 	/* decon_win & decon_wincon : 6EA */
 	for (i = 0; i < 6; i++) {
-		cal_log_info(id, "\n=== DECON_WIN%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(win_regs, win_regs + WIN_OFFSET(i), 0x20);
-		cal_log_info(id, "=== DECON_WINCON%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(wincon_regs, wincon_regs + WIN_OFFSET(i),
+		cal_drm_printf(p, id, "\n=== DECON_WIN%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, win_regs, win_regs + WIN_OFFSET(i), 0x20);
+		cal_drm_printf(p, id, "=== DECON_WINCON%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, wincon_regs, wincon_regs + WIN_OFFSET(i),
 				0x4);
 		/* shadow */
-		cal_log_info(id, "=== DECON_WIN%d SHADOW SFR DUMP ===\n", i);
-		dpu_print_hex_dump(win_regs,
+		cal_drm_printf(p, id, "=== DECON_WIN%d SHADOW SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, win_regs,
 				win_regs + WIN_OFFSET(i) + SHADOW_OFFSET, 0x20);
-		cal_log_info(id, "=== DECON_WINCON%d SHADOW SFR DUMP ===\n", i);
-		dpu_print_hex_dump(wincon_regs,
+		cal_drm_printf(p, id, "=== DECON_WINCON%d SHADOW SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, wincon_regs,
 				wincon_regs + WIN_OFFSET(i) + SHADOW_OFFSET,
 				0x4);
 	}
 
 	/* dsimif : 2EA */
 	for (i = 0; i < 2; i++) {
-		cal_log_info(id, "\n=== DECON_SUB.DSIMIF%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "\n=== DECON_SUB.DSIMIF%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i), 0x10);
-		dpu_print_hex_dump(sub_regs,
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i) + 0x80, 0x10);
 		/* shadow */
-		cal_log_info(id, "= DECON_SUB.DSIMIF%d SHADOW SFR DUMP =\n", i);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "= DECON_SUB.DSIMIF%d SHADOW SFR DUMP =\n", i);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i) + SHADOW_OFFSET,
 				0x10);
-		dpu_print_hex_dump(sub_regs,
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DSIMIF_OFFSET(i) + SHADOW_OFFSET +
 				0x80, 0x10);
 	}
 
 	/* dpif : 2EA */
 	for (i = 0; i < 2; i++) {
-		cal_log_info(id, "\n=== DECON_SUB.DPIF%d SFR DUMP ===\n", i);
-		dpu_print_hex_dump(sub_regs, sub_regs + DPIF_OFFSET(i), 0x4);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "\n=== DECON_SUB.DPIF%d SFR DUMP ===\n", i);
+		dpu_print_hex_dump(p, sub_regs, sub_regs + DPIF_OFFSET(i), 0x4);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DPIF_OFFSET(i) + 0x80, 0x10);
 		/* shadow */
-		cal_log_info(id, "= DECON_SUB.DPIF%d SHADOW SFR DUMP =\n", i);
-		dpu_print_hex_dump(sub_regs,
+		cal_drm_printf(p, id, "= DECON_SUB.DPIF%d SHADOW SFR DUMP =\n", i);
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DPIF_OFFSET(i) + SHADOW_OFFSET, 0x4);
-		dpu_print_hex_dump(sub_regs,
+		dpu_print_hex_dump(p, sub_regs,
 				sub_regs + DPIF_OFFSET(i) + SHADOW_OFFSET +
 				0x80, 0x10);
 	}
@@ -2237,19 +2181,20 @@ void __decon_dump(u32 id, struct decon_regs *regs, bool dsc_en)
 	/* dsc : 3EA */
 	if (dsc_en) {
 		for (i = 0; i < 3; i++) {
-			cal_log_info(id, "\n= DECON_SUB.DSC%d SFR DUMP =\n", i);
-			dpu_print_hex_dump(sub_regs,
+			cal_drm_printf(p, id, "\n= DECON_SUB.DSC%d SFR DUMP =\n", i);
+			dpu_print_hex_dump(p, sub_regs,
 					sub_regs + DSC_OFFSET(i), 0x88);
 			/* shadow */
-			cal_log_info(id, "=== DECON_SUB.DSC%d SHADOW SFR DUMP ===\n",
+			cal_drm_printf(p, id, "=== DECON_SUB.DSC%d SHADOW SFR DUMP ===\n",
 					i);
-			dpu_print_hex_dump(sub_regs,
+			dpu_print_hex_dump(p, sub_regs,
 					sub_regs + DSC_OFFSET(i) +
 					SHADOW_OFFSET, 0x88);
 		}
 	}
 
-	dqe_dump();
+	if (dqe_en)
+		dqe_dump(p, id);
 }
 
 u32 decon_reg_get_rsc_ch(u32 id)
