@@ -4,9 +4,13 @@ load("//build/kernel/kleaf:kernel.bzl", "kernel_module")
 
 filegroup(
     name = "headers",
-    srcs = glob([
-        "samsung/**/*.h",
-    ]),
+    srcs = [
+        "exynos_drm_connector.h",
+        "panel/panel-common.h",
+        "panel/panel-samsung-drv.h",
+        "//private/google-modules/display/include:headers",
+        "//private/google-modules/display/samsung/include:headers",
+    ],
     visibility = [
         "//private/devices/google:__subpackages__",
         "//private/google-modules/touch:__subpackages__",
@@ -16,29 +20,29 @@ filegroup(
 kernel_module(
     name = "display.samsung",
     srcs = glob([
-        "samsung/**/*.c",
-        "samsung/**/*.h",
+        "**/*.c",
+        "**/*.h",
         "Kbuild",
-        "samsung/Kbuild",
-        "samsung/panel/Kbuild",
+        "panel/Kbuild",
     ]) + [
         "//private/google-modules/display/include:headers",
+        "//private/google-modules/display/samsung:headers",
         "//private/google-modules/hdcp/samsung:headers",
         "//private/google-modules/soc/gs:gs_soc_headers",
     ],
     outs = [
-        "samsung/exynos-drm.ko",
-        "samsung/panel/panel-boe-nt37290.ko",
-        "samsung/panel/panel-common.ko",
-        "samsung/panel/panel-samsung-drv.ko",
-        "samsung/panel/panel-samsung-emul.ko",
-        "samsung/panel/panel-samsung-s6e3fc3.ko",
-        "samsung/panel/panel-samsung-s6e3fc3-p10.ko",
-        "samsung/panel/panel-samsung-s6e3hc2.ko",
-        "samsung/panel/panel-samsung-s6e3hc3.ko",
-        "samsung/panel/panel-samsung-s6e3hc3-c10.ko",
-        "samsung/panel/panel-samsung-s6e3hc4.ko",
-        "samsung/panel/panel-samsung-sofef01.ko",
+        "exynos-drm.ko",
+        "panel/panel-boe-nt37290.ko",
+        "panel/panel-common.ko",
+        "panel/panel-samsung-drv.ko",
+        "panel/panel-samsung-emul.ko",
+        "panel/panel-samsung-s6e3fc3.ko",
+        "panel/panel-samsung-s6e3fc3-p10.ko",
+        "panel/panel-samsung-s6e3hc2.ko",
+        "panel/panel-samsung-s6e3hc3.ko",
+        "panel/panel-samsung-s6e3hc3-c10.ko",
+        "panel/panel-samsung-s6e3hc4.ko",
+        "panel/panel-samsung-sofef01.ko",
     ],
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
     visibility = [

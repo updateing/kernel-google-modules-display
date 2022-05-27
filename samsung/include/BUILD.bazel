@@ -7,6 +7,7 @@ filegroup(
     ]),
     visibility = [
         "//private/devices/google:__subpackages__",
-        "//private/google-modules/display/samsung:__subpackages__",
+        "//private/google-modules/display/samsung:__pkg__",
+        "//private/google-modules/touch:__subpackages__",
     ],
 )
