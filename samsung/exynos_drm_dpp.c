@@ -383,6 +383,9 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 		config->comp_type = COMP_TYPE_NONE;
 	}
 
+	config->is_lossy = has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0) |
+			SBWC_FORMAT_MOD_LOSSY, fb->modifier) ? true : false;
+
 	config->format = fb->format->format;
 	config->standard = state->standard;
 	config->transfer = state->transfer;
