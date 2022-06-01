@@ -16,9 +16,17 @@
 #include <cal_config.h>
 #include <exynos_panel.h>
 
+#ifdef CONFIG_SOC_ZUMA
+#define MAX_WIN_PER_DECON	14
+#else
 #define MAX_WIN_PER_DECON	6
+#endif
 #define MAX_DECON_CNT		3
+#ifdef CONFIG_SOC_ZUMA
+#define MAX_AXI_PORT		2
+#else
 #define MAX_AXI_PORT		3
+#endif
 #define BTS_DFS_MAX		7 /* DPU DVFS Level */
 
 #define DECON_BLENDING_PREMULT		0

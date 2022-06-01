@@ -18,11 +18,14 @@
 
 #include "../exynos_drm_format.h"
 
-#ifdef CONFIG_SOC_GS201
-/* RDMA + ODMA + RCD */
+#if defined(CONFIG_SOC_ZUMA)
+/* 14xRDMA + 2xODMA + 2xRCD */
+#define MAX_DPP_CNT		18
+#elif defined(CONFIG_SOC_GS201)
+/* 6xRDMA + 1xODMA + 2xRCD */
 #define MAX_DPP_CNT		9
 #else
-/* RDMA + ODMA */
+/* 6xRDMA + 1xODMA */
 #define MAX_DPP_CNT		7
 #endif
 
@@ -102,6 +105,34 @@ struct dpp_regs {
 	void __iomem *rcd_base_regs;
 };
 
+#ifdef CONFIG_SOC_ZUMA
+enum dpp_regs_id {
+	REGS_DPP0_ID = 0,
+	REGS_DPP1_ID,
+	REGS_DPP2_ID,
+	REGS_DPP3_ID,
+	REGS_DPP4_ID,
+	REGS_DPP5_ID,
+	REGS_DPP6_ID,
+	/*
+	 * Layer7 is not exist as a real HW.
+	 * But, it is needed to match ID.
+	 */
+	REGS_DPP7_ID,
+	REGS_DPP8_ID,
+	REGS_DPP9_ID,
+	REGS_DPP10_ID,
+	REGS_DPP11_ID,
+	REGS_DPP12_ID,
+	REGS_DPP13_ID,
+	REGS_DPP14_ID,
+	REGS_RCD0_ID,
+	REGS_RCD1_ID,
+	REGS_WB0_ID,
+	REGS_WB1_ID,
+	REGS_DPP_ID_MAX
+};
+#else
 enum dpp_regs_id {
 	REGS_DPP0_ID = 0,
 	REGS_DPP1_ID,
@@ -116,6 +147,7 @@ enum dpp_regs_id {
 	REGS_CGC1_ID,
 	REGS_DPP_ID_MAX
 };
+#endif
 
 enum dpp_regs_type {
 	REGS_DMA = 0,
