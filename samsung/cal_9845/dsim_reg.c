@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * dpu30/cal_9845/dsim_reg.c
+ * cal_9845/dsim_reg.c
  *
  * Copyright (c) 2019 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
@@ -530,7 +530,7 @@ static void dsim_reg_set_dphy_param_dither(u32 id, const struct stdphy_pms *dphy
 
 	/* FEED_EN */
 	val = ((dphy_pms->feed_en) ? ~0 : 0) | ((dphy_pms->fout_mask) ? ~0 : 0);
-	mask = DSIM_PHY_DITHER_FEED_EN | DSIM_PHY_DITHER_FOUT_MASK;
+	mask = DSIM_PHY_DITHER_FEED_EN_MASK | DSIM_PHY_DITHER_FOUT_MASK;
 	dsim_phy_write_mask(id, DSIM_PHY_PLL_CON2, val, mask);
 }
 
@@ -978,7 +978,7 @@ static void dsim_reg_set_vt_htiming1(u32 id, u32 hfp_period, u32 hbp_period)
 	dsim_write(id, DSIM_VT_HTIMING1, val);
 }
 
-static void dsim_reg_set_hperiod(u32 id, struct dsim_reg_config *config,
+static void dsim_reg_set_hperiod(u32 id, const struct dsim_reg_config *config,
 		struct dsim_clks *clks)
 {
 	u32 vclk,  wclk;
@@ -1394,6 +1394,12 @@ static void dsim_reg_set_vstatus_int(u32 id, u32 vstatus)
 			DSIM_VIDEO_TIMER_VSTATUS_INTR_SEL_MASK);
 }
 
+static void dsim_reg_set_vt_sync_mode(u32 id, bool sync_mode)
+{
+	dsim_write_mask(id, DSIM_VIDEO_TIMER, sync_mode,
+			DSIM_VIDEO_TIMER_SYNC_MODE);
+}
+
 static void dsim_reg_set_bist_te_interval(u32 id, u32 interval)
 {
 	u32 val = DSIM_BIST_CTRL0_BIST_TE_INTERVAL(interval);
@@ -1598,9 +1604,6 @@ static void dsim_reg_set_config(u32 id, struct dsim_reg_config *config,
 
 	dsim_reg_enable_dsc(id, config->dsc.enabled);
 
-	if (config->mode == DSIM_COMMAND_MODE)
-		dsim_reg_enable_shadow(id, 0);
-
 	if (config->mode == DSIM_VIDEO_MODE) {
 		dsim_reg_disable_hsa(id, 0);
 		dsim_reg_disable_hbp(id, 0);
@@ -1632,6 +1635,7 @@ static void dsim_reg_set_config(u32 id, struct dsim_reg_config *config,
 	} else if (config->mode == DSIM_VIDEO_MODE) {
 		dsim_reg_set_vt_compensate(id, config->vt_compensation);
 		dsim_reg_set_vstatus_int(id, DSIM_VSYNC);
+		dsim_reg_set_vt_sync_mode(id, config->dual_dsi);
 	}
 }
 
@@ -2161,8 +2165,9 @@ void dsim_reg_set_vrr_config(u32 id, const struct dsim_reg_config *config,
 		idx = config->mres_mode;
 		dsim_reg_set_cm_underrun_lp_ref(id, config->cmd_underrun_cnt[idx]);
 		dsim_reg_set_cmd_ctrl(id, config, clks);
+	} else if (config->mode == DSIM_VIDEO_MODE) {
+		dsim_reg_set_hperiod(id, config, clks);
 	}
-	/* TODO: handle video mode panel */
 }
 
 /* Exit ULPS mode and set clocks and lanes */
@@ -2450,53 +2455,55 @@ void dsim_reg_set_dphy_freq_hopping(u32 id, u32 p, u32 m, u32 k, u32 en)
 }
 
 #ifndef CONFIG_BOARD_EMULATOR
-static void __dphy_dump(u32 id, struct dsim_regs *regs)
+static void __dphy_dump(struct drm_printer *p, u32 id, struct dsim_regs *regs)
 {
-	cal_log_info(id, "=== DSIM %d DPHY SFR DUMP ===\n", id);
+	cal_drm_printf(p, id, "=== DSIM %d DPHY SFR DUMP ===\n", id);
 	/* DPHY dump */
 	/* BIAS */
-	cal_log_info(id, "-[BIAS]-\n");
-	dpu_print_hex_dump(regs->phy_regs_ex,
+	cal_drm_printf(p, id, "-[BIAS]-\n");
+	dpu_print_hex_dump(p, regs->phy_regs_ex,
 			regs->phy_regs_ex + 0x0000, 0x14);
 	/* PLL */
-	cal_log_info(id, "-[PLL : offset + 0x100]-\n");
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x0000, 0x44);
+	cal_drm_printf(p, id, "-[PLL : offset + 0x100]-\n");
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x0000, 0x44);
 	/* MC */
-	cal_log_info(id, "-[MC : offset + 0x100]-\n");
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x0200, 0x48);
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x02E0, 0x10);
+	cal_drm_printf(p, id, "-[MC : offset + 0x100]-\n");
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x0200, 0x48);
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x02E0, 0x10);
 	/* MD0 */
-	cal_log_info(id, "-[CMD 0 : offset + 0x100]-\n");
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x0300, 0x70);
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x03E0, 0x40);
+	cal_drm_printf(p, id, "-[CMD 0 : offset + 0x100]-\n");
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x0300, 0x70);
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x03E0, 0x40);
 	/* MD1 */
-	cal_log_info(id, "-[CMD 1 : offset + 0x100]-\n");
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x0400, 0x70);
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x04C0, 0x40);
+	cal_drm_printf(p, id, "-[CMD 1 : offset + 0x100]-\n");
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x0400, 0x70);
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x04C0, 0x40);
 	/* MD2 */
-	cal_log_info(id, "-[CMD 2 : offset + 0x100]-\n");
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x0500, 0x70);
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x05C0, 0x40);
+	cal_drm_printf(p, id, "-[CMD 2 : offset + 0x100]-\n");
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x0500, 0x70);
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x05C0, 0x40);
 	/* MD3 */
-	cal_log_info(id, "-[MD 3 : offset + 0x100]-\n");
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x0600, 0x48);
-	dpu_print_hex_dump(regs->phy_regs, regs->phy_regs + 0x06C0, 0x20);
+	cal_drm_printf(p, id, "-[MD 3 : offset + 0x100]-\n");
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x0600, 0x48);
+	dpu_print_hex_dump(p, regs->phy_regs, regs->phy_regs + 0x06C0, 0x20);
 }
 #else
 static inline void __dphy_dump(u32 id, struct dsim_regs *regs) { }
 #endif
 
-void __dsim_dump(u32 id, struct dsim_regs *regs)
+void __dsim_dump(struct drm_printer *p, u32 id, struct dsim_regs *regs)
 {
 	/* change to updated register read mode (meaning: SHADOW in DECON) */
-	cal_log_info(id, "=== DSIM %d LINK SFR DUMP ===\n", id);
+	cal_drm_printf(p, id, "=== DSIM %d LINK SFR DUMP(applied to hw) ===\n", id);
 	dsim_reg_enable_shadow_read(id, 0);
-	dpu_print_hex_dump(regs->regs, regs->regs + 0x0000, 0x124);
+	dpu_print_hex_dump(p, regs->regs, regs->regs + 0x0000, 0x124);
 
-	__dphy_dump(id, regs);
+	__dphy_dump(p, id, regs);
 
 	/* restore to avoid size mismatch (possible config error at DECON) */
+	cal_drm_printf(p, id, "=== DSIM %d LINK SFR DUMP ===\n", id);
 	dsim_reg_enable_shadow_read(id, 1);
+	dpu_print_hex_dump(p, regs->regs, regs->regs + 0x0000, 0x124);
 }
 
 int dsim_dphy_diag_mask_from_range(uint8_t start, uint8_t end, uint32_t *mask)

@@ -44,6 +44,8 @@ exynos_drm_plane_duplicate_state(struct drm_plane *plane)
 		drm_property_blob_get(copy->gm);
 	if (copy->tm)
 		drm_property_blob_get(copy->tm);
+	if (copy->block)
+		drm_property_blob_get(copy->block);
 
 	__drm_atomic_helper_plane_duplicate_state(plane, &copy->base);
 	return &copy->base;
@@ -58,6 +60,7 @@ static void exynos_drm_plane_destroy_state(struct drm_plane *plane,
 	drm_property_blob_put(old_exynos_state->oetf_lut);
 	drm_property_blob_put(old_exynos_state->gm);
 	drm_property_blob_put(old_exynos_state->tm);
+	drm_property_blob_put(old_exynos_state->block);
 	__drm_atomic_helper_plane_destroy_state(old_state);
 	kfree(old_exynos_state);
 }
@@ -146,6 +149,10 @@ static int exynos_drm_plane_set_property(struct drm_plane *plane,
 		ret = exynos_drm_replace_property_blob_from_id(
 				state->plane->dev, &exynos_state->tm,
 				val, sizeof(struct hdr_tm_data));
+	} else if (property == exynos_plane->props.block) {
+		ret = exynos_drm_replace_property_blob_from_id(
+				state->plane->dev, &exynos_state->block,
+				val, sizeof(struct decon_win_rect));
 	} else {
 		return -EINVAL;
 	}
@@ -186,6 +193,8 @@ static int exynos_drm_plane_get_property(struct drm_plane *plane,
 		*val = (exynos_state->gm) ? exynos_state->gm->base.id : 0;
 	else if (property == exynos_plane->props.tm)
 		*val = (exynos_state->tm) ? exynos_state->tm->base.id : 0;
+	else if (property == exynos_plane->props.block)
+		*val = (exynos_state->block) ? exynos_state->block->base.id : 0;
 	else
 		return -EINVAL;
 
@@ -220,6 +229,47 @@ static int exynos_drm_plane_late_register(struct drm_plane *plane)
 	return exynos_drm_debugfs_plane_add(exynos_plane);
 }
 
+static int
+exynos_drm_check_format_modifier(u32 format, u64 modifier)
+{
+	if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_COLORMAP, modifier))
+		return 0;
+
+	/* allow rest of the modifiers to support content protection */
+	modifier &= ~DRM_FORMAT_MOD_PROTECTION;
+
+	if (!modifier ||
+	    has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), modifier) ||
+	    has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), modifier))
+		return 0;
+
+	/* TODO: is DRM_FORMAT_MOD_SAMSUNG_YUV_8_2_SPLIT and DRM_FORMAT_MOD_LINEAR
+	 * supported??
+	 */
+
+	DRM_ERROR("not supported modifier(0x%llx)\n", modifier);
+	return -EOPNOTSUPP;
+}
+
+static int
+exynos_drm_plane_check_format(struct exynos_drm_plane_state *state)
+{
+	struct drm_framebuffer *fb = state->base.fb;
+
+	if (!fb || !fb->modifier || !fb->format)
+		return 0;
+
+	return exynos_drm_check_format_modifier(fb->format->format, fb->modifier);
+}
+
+static bool
+exynos_drm_plane_format_mod_supported_per_plane(struct drm_plane *plane,
+						uint32_t format,
+						uint64_t modifier)
+{
+	return exynos_drm_check_format_modifier(format, modifier) == 0;
+}
+
 static struct drm_plane_funcs exynos_plane_funcs = {
 	.update_plane		= drm_atomic_helper_update_plane,
 	.disable_plane		= drm_atomic_helper_disable_plane,
@@ -231,36 +281,8 @@ static struct drm_plane_funcs exynos_plane_funcs = {
 	.atomic_get_property	= exynos_drm_plane_get_property,
 	.atomic_print_state	= exynos_drm_plane_print_state,
 	.late_register		= exynos_drm_plane_late_register,
+	.format_mod_supported	= exynos_drm_plane_format_mod_supported_per_plane,
 };
-
-static int
-exynos_drm_plane_check_format(struct exynos_drm_plane_state *state)
-{
-	struct drm_framebuffer *fb = state->base.fb;
-
-	if (!fb)
-		return 0;
-
-	if (fb->modifier) {
-		uint64_t modifier = fb->modifier;
-
-		if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_COLORMAP, modifier))
-			return 0;
-
-		/* allow rest of the modifiers to support content protection */
-		modifier &= ~DRM_FORMAT_MOD_PROTECTION;
-
-		if (!modifier ||
-		    has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), modifier) ||
-		    has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), modifier))
-			return 0;
-
-		DRM_ERROR("not supported modifier(0x%llx)\n", fb->modifier);
-		return -ENOTSUPP;
-	}
-
-	return 0;
-}
 
 static void
 exynos_plane_update_hdr_params(struct exynos_drm_plane_state *exynos_state)
@@ -318,6 +340,7 @@ static int exynos_plane_atomic_check(struct drm_plane *plane,
 	if (!state->crtc || !state->fb)
 		return 0;
 
+	decon = to_exynos_crtc(state->crtc)->ctx;
 	new_crtc_state = drm_atomic_get_new_crtc_state(state->state,
 							state->crtc);
 
@@ -337,7 +360,6 @@ static int exynos_plane_atomic_check(struct drm_plane *plane,
 	if (ret)
 		return ret;
 
-	decon = to_exynos_crtc(state->crtc)->ctx;
 	if (decon->partial && new_exynos_crtc_state->needs_reconfigure)
 		exynos_partial_reconfig_coords(decon->partial, state,
 				&new_exynos_crtc_state->partial_region);
@@ -668,6 +690,23 @@ exynos_drm_plane_create_tm_property(struct exynos_drm_plane *exynos_plane)
 	return 0;
 }
 
+static int
+exynos_drm_plane_create_block_property(struct exynos_drm_plane *exynos_plane)
+{
+	struct drm_plane *plane = &exynos_plane->base;
+	struct drm_device *dev = plane->dev;
+	struct drm_property *prop;
+
+	prop = drm_property_create(dev, DRM_MODE_PROP_BLOB, "block", 0);
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&plane->base, prop, 0);
+	exynos_plane->props.block = prop;
+
+	return 0;
+}
+
 int exynos_plane_init(struct drm_device *dev,
 		      struct exynos_drm_plane *exynos_plane, unsigned int index,
 		      const struct exynos_drm_plane_config *config)
@@ -692,9 +731,18 @@ int exynos_plane_init(struct drm_device *dev,
 
 	exynos_plane->index = index;
 
-	drm_plane_create_alpha_property(plane);
-	drm_plane_create_blend_mode_property(plane, supported_modes);
-	drm_plane_create_zpos_property(plane, config->zpos, 0, MAX_PLANE - 1);
+	if (!test_bit(DPP_ATTR_RCD, &dpp->attr)) {
+		drm_plane_create_alpha_property(plane);
+		drm_plane_create_blend_mode_property(plane, supported_modes);
+		drm_plane_create_zpos_property(plane, config->zpos, 0, MAX_PLANE - 1);
+		exynos_drm_plane_create_standard_property(exynos_plane);
+		exynos_drm_plane_create_transfer_property(exynos_plane);
+		exynos_drm_plane_create_range_property(exynos_plane);
+		exynos_drm_plane_create_colormap_property(exynos_plane);
+	} else {
+		drm_plane_create_zpos_immutable_property(plane, MAX_PLANE);
+		exynos_drm_plane_create_block_property(exynos_plane);
+	}
 
 	if (test_bit(DPP_ATTR_ROT, &dpp->attr))
 		drm_plane_create_rotation_property(plane, DRM_MODE_ROTATE_0,
@@ -718,10 +766,6 @@ int exynos_plane_init(struct drm_device *dev,
 		exynos_drm_plane_create_tm_property(exynos_plane);
 
 	exynos_drm_plane_create_restriction_property(exynos_plane);
-	exynos_drm_plane_create_standard_property(exynos_plane);
-	exynos_drm_plane_create_transfer_property(exynos_plane);
-	exynos_drm_plane_create_range_property(exynos_plane);
-	exynos_drm_plane_create_colormap_property(exynos_plane);
 
 	return 0;
 }
