@@ -58,8 +58,8 @@ enum dpp_attr {
 	DPP_ATTR_DPP		= 18,
 	DPP_ATTR_SRAMC		= 19,
 	DPP_ATTR_RCD		= 20,
-	DPP_ATTR_HDR_COMM	= 20,
 	DPP_ATTR_SCL_COEF	= 21,
+	DPP_ATTR_HDR_COMM	= 22,
 };
 
 enum dpp_csc_defs {
