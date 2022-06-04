@@ -384,17 +384,17 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0x9B, 0x92);
 		if (test_bit(FEAT_IRC_OFF, spanel->feat)) {
 			EXYNOS_DCS_BUF_ADD(ctx, 0x92, 0x01);
-			if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
+			if (ctx->panel_rev >= PANEL_REV_DVT1) {
 				/* IR compensation SP setting */
 				EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xF3, 0x68);
 				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0x20, 0x1E, 0x0C, 0x82, 0x82, 0x78);
 			}
 		} else {
 			EXYNOS_DCS_BUF_ADD(ctx, 0x92, 0x21);
-			if (ctx->panel_rev >= PANEL_REV_EVT1_1) {
+			if (ctx->panel_rev >= PANEL_REV_DVT1) {
 				/* IR compensation SP setting */
 				EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0xF3, 0x68);
-				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0x0A, 0x0F, 0x0A, 0x0A, 0x0A, 0x0A);
+				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A);
 			}
 		}
 	}
@@ -813,6 +813,8 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	/* Enable SP */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x00, 0x58, 0x69),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x69, 0x01),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0xB0, 0x02, 0xF3, 0x68),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0x68, 0x09, 0X09, 0X09, 0x0A, 0x0A, 0x0A),
 	/* FFC: 165 Mhz, 1% tolerance */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x36, 0xC5),
 	EXYNOS_DSI_CMD_SEQ(0xC5, 0x11, 0x10, 0x50, 0x05, 0x4E, 0x74),
