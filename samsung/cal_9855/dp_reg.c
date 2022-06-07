@@ -45,6 +45,38 @@ void dp_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 	cal_regs_desc_set(regs_dp, regs, start, name, type, id);
 }
 
+u32 phy_tune_parameters[4][4][5] = {
+	/* {amp, post, pre, idrv, accdrv} */
+	{
+		/* Swing Level_0 */
+		{ 0x22, 0x10, 0x42, 0x82, 0x00 }, /* Pre-emphasis Level_0 */
+		{ 0x26, 0x15, 0x42, 0x82, 0x00 }, /* Pre-emphasis Level_1 */
+		{ 0x26, 0x17, 0x43, 0x82, 0x00 }, /* Pre-emphasis Level_2 */
+		{ 0x2B, 0x1C, 0x43, 0x83, 0x30 }, /* Pre-emphasis Level_3 */
+	},
+	{
+		/* Swing Level_1 */
+		{ 0x26, 0x10, 0x42, 0x82, 0x00 }, /* Pre-emphasis Level_0 */
+		{ 0x2B, 0x14, 0x42, 0x83, 0x30 }, /* Pre-emphasis Level_1 */
+		{ 0x2B, 0x18, 0x43, 0x83, 0x30 }, /* Pre-emphasis Level_2 */
+		{ 0x2B, 0x18, 0x43, 0x83, 0x30 }, /* Pre-emphasis Level_3 */
+	},
+	{
+		/* Swing Level_2 */
+		{ 0x2A, 0x10, 0x42, 0x83, 0x30 }, /* Pre-emphasis Level_0 */
+		{ 0x2B, 0x17, 0x43, 0x83, 0x38 }, /* Pre-emphasis Level_1 */
+		{ 0x2B, 0x17, 0x43, 0x83, 0x38 }, /* Pre-emphasis Level_2 */
+		{ 0x2B, 0x17, 0x43, 0x83, 0x38 }, /* Pre-emphasis Level_3 */
+	},
+	{
+		/* Swing Level_3 */
+		{ 0x2B, 0x10, 0x43, 0x83, 0x30 }, /* Pre-emphasis Level_0 */
+		{ 0x2B, 0x10, 0x43, 0x83, 0x30 }, /* Pre-emphasis Level_1 */
+		{ 0x2B, 0x10, 0x43, 0x83, 0x30 }, /* Pre-emphasis Level_2 */
+		{ 0x2B, 0x10, 0x43, 0x83, 0x30 }, /* Pre-emphasis Level_3 */
+	},
+};
+
 /*
  * USBDP Combo PHY Control Functions
  */
@@ -195,6 +227,61 @@ static void dpphy_reg_set_ssc(u32 en)
 }
 
 /* USBDP PHY TRSV Registers */
+static void dpphy_reg_set_lane0_tx_level(u32 amp_lvl, u32 pre_emp_lvl)
+{
+	dp_phy_write(SST1, TRSV_REG0204,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][0]);
+	dp_phy_write(SST1, TRSV_REG0205,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][1]);
+	dp_phy_write(SST1, TRSV_REG0206,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][2]);
+	dp_phy_write(SST1, TRSV_REG0207,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][3]);
+	dp_phy_write(SST1, TRSV_REG0208,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][4]);
+}
+
+static void dpphy_reg_set_lane1_tx_level(u32 amp_lvl, u32 pre_emp_lvl)
+{
+	dp_phy_write(SST1, TRSV_REG0404,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][0]);
+	dp_phy_write(SST1, TRSV_REG0405,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][1]);
+	dp_phy_write(SST1, TRSV_REG0406,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][2]);
+	dp_phy_write(SST1, TRSV_REG0407,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][3]);
+	dp_phy_write(SST1, TRSV_REG0408,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][4]);
+}
+
+static void dpphy_reg_set_lane2_tx_level(u32 amp_lvl, u32 pre_emp_lvl)
+{
+	dp_phy_write(SST1, TRSV_REG0604,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][0]);
+	dp_phy_write(SST1, TRSV_REG0605,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][1]);
+	dp_phy_write(SST1, TRSV_REG0606,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][2]);
+	dp_phy_write(SST1, TRSV_REG0607,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][3]);
+	dp_phy_write(SST1, TRSV_REG0608,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][4]);
+}
+
+static void dpphy_reg_set_lane3_tx_level(u32 amp_lvl, u32 pre_emp_lvl)
+{
+	dp_phy_write(SST1, TRSV_REG0804,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][0]);
+	dp_phy_write(SST1, TRSV_REG0805,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][1]);
+	dp_phy_write(SST1, TRSV_REG0806,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][2]);
+	dp_phy_write(SST1, TRSV_REG0807,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][3]);
+	dp_phy_write(SST1, TRSV_REG0808,
+		     phy_tune_parameters[amp_lvl][pre_emp_lvl][4]);
+}
 
 /* USBDP PHY functions */
 static void dpphy_reg_init(struct dp_hw_config *hw_config)
@@ -319,6 +406,11 @@ static void dp_hw_set_initial_common_funcs(void)
 }
 
 // System SST1 Function Enable Configuration
+static void dp_reg_set_sst1_video_func_en(u32 en)
+{
+	dp_write_mask(SST1, SYSTEM_SST1_FUNCTION_ENABLE,
+		      SST1_VIDEO_FUNC_EN_SET(en), SST1_VIDEO_FUNC_EN_MASK);
+}
 
 // System Miscellaneous Control Configuration
 
@@ -495,6 +587,17 @@ static void dp_reg_aux_ch_received_buf(u8 *buf, u32 length)
 
 /* PCS (Scrambler/Encoder/FEC) Control Registers */
 // PCS Control
+static void dp_reg_set_training_pattern(dp_training_pattern pattern)
+{
+	dp_write_mask(SST1, PCS_CONTROL, LINK_TRAINING_PATTERN_SET(pattern),
+		      LINK_TRAINING_PATTERN_MASK);
+}
+
+static void dp_reg_set_scramble_bypass(u32 en)
+{
+	dp_write_mask(SST1, PCS_CONTROL, SCRAMBLE_BYPASS_SET(en),
+		      SCRAMBLE_BYPASS_MASK);
+}
 
 // PCS Lane Control
 static void dp_reg_set_lane_map(u32 lane0, u32 lane1, u32 lane2, u32 lane3)
@@ -552,11 +655,21 @@ static void dp_hw_set_lane_map_config(struct dp_hw_config *hw_config)
 }
 
 // PCS Test Pattern Control
+static void dp_reg_set_quality_pattern(u32 en)
+{
+	dp_write_mask(SST1, PCS_TEST_PATTERN_CONTROL,
+		      LINK_QUALITY_PATTERN_SET(en), LINK_QUALITY_PATTERN_MASK);
+}
 
 /* HDCP Control Registers */
 
 /* SST1 Control Registers */
 // SST1 Main
+static void dp_reg_set_enhanced_mode(u32 en)
+{
+	dp_write_mask(SST1, SST1_MAIN_CONTROL, ENHANCED_MODE_SET(en),
+		      ENHANCED_MODE_MASK);
+}
 
 // SST1 Interrupts
 
@@ -739,6 +852,40 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 	cal_log_debug(0, "set interrupts\n");
 }
 
+void dp_hw_reinit(struct dp_hw_config *hw_config)
+{
+	dp_reg_set_txclk_osc();
+	cal_log_debug(0, "set system clk to OSC: Mux(%u)\n",
+		      dp_reg_get_gfmux_status());
+
+	/* USBDP PHY Re-initialization */
+	dpphy_reg_init(hw_config);
+	cal_log_debug(0, "reconfig USBDP Combo PHY\n");
+
+	/* Wait for PHY PLL Lock */
+	dp_reg_wait_phy_pll_lock();
+	cal_log_debug(0, "locked PHY PLL\n");
+
+	dp_reg_set_txclk_txclk();
+	cal_log_debug(0, "set system clk to TX: Mux(%u)\n",
+		      dp_reg_get_gfmux_status());
+
+	/* Set Lane Map Configuration */
+	dp_reg_set_lane_count(hw_config->num_lanes);
+	dp_reg_set_aux_pn(hw_config->orient_type);
+	dp_hw_set_lane_map_config(hw_config);
+	cal_log_debug(0, "set lane count & map\n");
+
+	/* Set System Common Functions Enable */
+	dp_reg_set_pcs_func_en(1);
+	cal_log_debug(0, "set common function\n");
+
+	/* Set Single-Stream Transport Functions Enable */
+	dp_reg_set_enhanced_mode(hw_config->enhanced_mode ? 1 : 0);
+	dp_reg_set_sst1_video_func_en(1);
+	cal_log_debug(0, "set sst function\n");
+}
+
 void dp_hw_deinit(void)
 {
 	dp_hw_set_common_interrupt(0);
@@ -746,4 +893,101 @@ void dp_hw_deinit(void)
 	dp_reg_set_txclk_osc();
 	cal_log_debug(0, "set system clk to OSC: Mux(%u)\n",
 		      dp_reg_get_gfmux_status());
+}
+
+void dp_hw_set_training_pattern(dp_training_pattern pattern)
+{
+	dp_reg_set_quality_pattern(0);
+	dp_reg_set_training_pattern(pattern);
+
+	if (pattern == NORAMAL_DATA || pattern == TRAINING_PATTERN_4)
+		dp_reg_set_scramble_bypass(0);
+	else
+		dp_reg_set_scramble_bypass(1);
+}
+
+void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config,
+					u8 *voltage, u8 *pre_emphasis)
+{
+	switch (hw_config->pin_type) {
+	case PIN_TYPE_A:
+		if (hw_config->orient_type == PLUG_NORMAL) {
+			dpphy_reg_set_lane0_tx_level(voltage[1],
+						     pre_emphasis[1]);
+			dpphy_reg_set_lane1_tx_level(voltage[2],
+						     pre_emphasis[2]);
+			dpphy_reg_set_lane2_tx_level(voltage[3],
+						     pre_emphasis[3]);
+			dpphy_reg_set_lane3_tx_level(voltage[0],
+						     pre_emphasis[0]);
+		} else {
+			dpphy_reg_set_lane0_tx_level(voltage[0],
+						     pre_emphasis[0]);
+			dpphy_reg_set_lane1_tx_level(voltage[3],
+						     pre_emphasis[3]);
+			dpphy_reg_set_lane2_tx_level(voltage[2],
+						     pre_emphasis[2]);
+			dpphy_reg_set_lane3_tx_level(voltage[1],
+						     pre_emphasis[1]);
+		}
+		break;
+
+	case PIN_TYPE_B:
+		if (hw_config->orient_type == PLUG_NORMAL) {
+			dpphy_reg_set_lane2_tx_level(voltage[0],
+						     pre_emphasis[0]);
+			dpphy_reg_set_lane3_tx_level(voltage[1],
+						     pre_emphasis[1]);
+		} else {
+			dpphy_reg_set_lane0_tx_level(voltage[1],
+						     pre_emphasis[1]);
+			dpphy_reg_set_lane1_tx_level(voltage[0],
+						     pre_emphasis[0]);
+		}
+		break;
+
+	case PIN_TYPE_C:
+	case PIN_TYPE_E:
+		if (hw_config->orient_type == PLUG_NORMAL) {
+			cal_log_info(0, "%s: Type_E & Plug_Normal\n", __func__);
+			dpphy_reg_set_lane0_tx_level(voltage[2],
+						     pre_emphasis[2]);
+			dpphy_reg_set_lane1_tx_level(voltage[3],
+						     pre_emphasis[3]);
+			dpphy_reg_set_lane2_tx_level(voltage[1],
+						     pre_emphasis[1]);
+			dpphy_reg_set_lane3_tx_level(voltage[0],
+						     pre_emphasis[0]);
+		} else {
+			cal_log_info(0, "%s: Type_E & Plug_Flipped\n",
+				     __func__);
+			dpphy_reg_set_lane0_tx_level(voltage[0],
+						     pre_emphasis[0]);
+			dpphy_reg_set_lane1_tx_level(voltage[1],
+						     pre_emphasis[1]);
+			dpphy_reg_set_lane2_tx_level(voltage[3],
+						     pre_emphasis[3]);
+			dpphy_reg_set_lane3_tx_level(voltage[2],
+						     pre_emphasis[2]);
+		}
+		break;
+
+	case PIN_TYPE_D:
+	case PIN_TYPE_F:
+		if (hw_config->orient_type == PLUG_NORMAL) {
+			dpphy_reg_set_lane2_tx_level(voltage[1],
+						     pre_emphasis[1]);
+			dpphy_reg_set_lane3_tx_level(voltage[0],
+						     pre_emphasis[0]);
+		} else {
+			dpphy_reg_set_lane0_tx_level(voltage[0],
+						     pre_emphasis[0]);
+			dpphy_reg_set_lane1_tx_level(voltage[1],
+						     pre_emphasis[1]);
+		}
+		break;
+
+	default:
+		break;
+	}
 }

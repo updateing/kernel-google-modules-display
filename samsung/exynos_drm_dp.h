@@ -67,6 +67,13 @@ struct dp_host {
 	bool enhanced_frame;
 	bool ssc;
 	bool scrambler;
+
+	/* Link Training */
+	u8  volt_swing_max;
+	u8  pre_emphasis_max;
+	u8  vol_swing_level[MAX_LANE_CNT];
+	u8  pre_empha_level[MAX_LANE_CNT];
+	u8  max_reach_value[MAX_LANE_CNT];
 };
 
 struct dp_sink {
@@ -100,6 +107,7 @@ struct dp_device {
 	struct delayed_work hpd_unplug_work;
 
 	struct mutex hpd_lock;
+	struct mutex training_lock;
 
 	/* HPD State */
 	enum hotplug_state hpd_current_state;

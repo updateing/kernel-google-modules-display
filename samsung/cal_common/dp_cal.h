@@ -81,6 +81,14 @@ enum dp_link_rate_type {
 	LINK_RATE_HBR3,		// DP_LINK_BW_8_1
 };
 
+typedef enum {
+	NORAMAL_DATA = 0,
+	TRAINING_PATTERN_1 = 1,
+	TRAINING_PATTERN_2 = 2,
+	TRAINING_PATTERN_3 = 3,
+	TRAINING_PATTERN_4 = 5,
+} dp_training_pattern;
+
 // Interrupts
 enum dp_interrupt_mask {
 	PLL_LOCK_CHG_INT_MASK,
@@ -152,6 +160,8 @@ struct dp_hw_config {
 	enum dp_dynamic_range_type range;
 	enum bit_depth bpc;
 	struct video_timing vtiming;
+	bool enhanced_mode;
+	bool use_fec;
 	bool use_ssc;
 };
 
@@ -166,6 +176,10 @@ int dp_hw_read_dpcd_burst(u32 address, u32 length, u8 *data);
 
 /* DP Hardware Control Interfaces */
 void dp_hw_init(struct dp_hw_config *hw_config);
+void dp_hw_reinit(struct dp_hw_config *hw_config);
 void dp_hw_deinit(void);
+
+void dp_hw_set_training_pattern(dp_training_pattern pattern);
+void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config, u8 *voltage, u8 *pre_emphasis);
 
 #endif /* __SAMSUNG_DP_CAL_H__ */
