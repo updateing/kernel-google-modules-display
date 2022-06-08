@@ -1158,8 +1158,8 @@ unsigned int panel_get_idle_time_delta(struct exynos_panel *ctx)
 	if (idle_mode == IDLE_MODE_ON_INACTIVITY) {
 		delta_ms = ktime_ms_delta(now, ctx->last_mode_set_ts);
 	} else if (idle_mode == IDLE_MODE_ON_SELF_REFRESH) {
-		const ktime_t ts = max(ctx->last_self_refresh_active_ts,
-					ctx->last_mode_set_ts);
+		const ktime_t ts = max3(ctx->last_self_refresh_active_ts,
+					ctx->last_mode_set_ts, ctx->last_panel_idle_set_ts);
 
 		delta_ms = ktime_ms_delta(now, ts);
 	} else {
@@ -1242,6 +1242,10 @@ static ssize_t panel_idle_store(struct device *dev, struct device_attribute *att
 	mutex_lock(&ctx->mode_lock);
 	if (idle_enabled != ctx->panel_idle_enabled) {
 		ctx->panel_idle_enabled = idle_enabled;
+
+		if (idle_enabled)
+			ctx->last_panel_idle_set_ts = ktime_get();
+
 		panel_update_idle_mode_locked(ctx);
 	}
 	mutex_unlock(&ctx->mode_lock);
