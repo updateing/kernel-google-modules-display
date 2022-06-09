@@ -1444,7 +1444,7 @@ const struct brightness_capability s6e3hc4_brightness_capability = {
 
 const struct exynos_panel_desc samsung_s6e3hc4 = {
 	.data_lane_cnt = 4,
-	.max_brightness = 3949,
+	.max_brightness = 4095,
 	.dft_brightness = 1023,
 	.brt_capability = &s6e3hc4_brightness_capability,
 	.dbv_extra_frame = true,
