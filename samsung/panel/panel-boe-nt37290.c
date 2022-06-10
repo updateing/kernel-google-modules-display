@@ -9,6 +9,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <drm/drm_file.h>
 #include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
@@ -718,6 +719,26 @@ static bool nt37290_change_frequency(struct exynos_panel *ctx,
 	return updated;
 }
 
+
+static void nt37290_panel_idle_notification(struct exynos_panel *ctx,
+				u32 display_id, u32 vrefresh, u32 idle_te_vrefresh)
+{
+	char event_string[64];
+	char *envp[] = { event_string, NULL };
+	struct drm_device *dev = ctx->bridge.dev;
+
+	if (vrefresh == idle_te_vrefresh)
+		return;
+
+	if (!dev) {
+		dev_warn(ctx->dev, "%s: drm_device is null\n", __func__);
+	} else {
+		snprintf(event_string, sizeof(event_string),
+			"PANEL_IDLE_ENTER=%u,%u,%u", display_id, vrefresh, idle_te_vrefresh);
+		kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+	}
+}
+
 static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
 {
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
@@ -742,9 +763,14 @@ static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	updated = nt37290_change_frequency(ctx, pmode);
 
 	if (pmode->idle_mode == IDLE_MODE_ON_SELF_REFRESH) {
+		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+
+		if (enable && ctx->panel_idle_vrefresh)
+			nt37290_panel_idle_notification(ctx, 0, vrefresh, 120);
+
 		dev_dbg(ctx->dev, "%s: %s idle (%dHz) for mode %s\n",
 			__func__, enable ? "enter" : "exit",
-			ctx->panel_idle_vrefresh ? : drm_mode_vrefresh(&pmode->mode),
+			ctx->panel_idle_vrefresh ? : vrefresh,
 			pmode->mode.name);
 	}
 

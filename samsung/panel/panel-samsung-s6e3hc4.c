@@ -558,7 +558,7 @@ static void s6e3hc4_update_refresh_mode(struct exynos_panel *ctx,
 	 * Note: when mode is explicitly set, panel performs early exit to get out
 	 * of idle at next vsync, and will not back to idle until not seeing new
 	 * frame traffic for a while. If idle_vrefresh != 0, try best to guess what
-	 * panel_idle_vrefresh will be soon, and s6e3hc3_c10_update_idle_state() in
+	 * panel_idle_vrefresh will be soon, and s6e3hc4_update_idle_state() in
 	 * new frame commit will correct it if the guess is wrong.
 	 */
 	ctx->panel_idle_vrefresh = idle_vrefresh;
@@ -594,6 +594,9 @@ static void s6e3hc4_panel_idle_notification(struct exynos_panel *ctx,
 	char event_string[64];
 	char *envp[] = { event_string, NULL };
 	struct drm_device *dev = ctx->bridge.dev;
+
+	if (vrefresh == idle_te_vrefresh)
+		return;
 
 	if (!dev) {
 		dev_warn(ctx->dev, "%s: drm_device is null\n", __func__);
