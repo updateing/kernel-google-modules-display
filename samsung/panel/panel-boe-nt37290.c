@@ -142,7 +142,7 @@ static const struct exynos_dsi_cmd nt37290_lp_high_cmds[] = {
 static const struct exynos_binned_lp nt37290_binned_lp[] = {
 	BINNED_LP_MODE("off", 0, nt37290_lp_off_cmds),
 	/* rising = 0, falling = 48 */
-	BINNED_LP_MODE_TIMING("low", 80, nt37290_lp_low_cmds, 0, 48),
+	BINNED_LP_MODE_TIMING("low", 360, nt37290_lp_low_cmds, 0, 48),
 	BINNED_LP_MODE_TIMING("high", 3584, nt37290_lp_high_cmds, 0, 48),
 };
 
@@ -1209,29 +1209,34 @@ static int nt37290_set_brightness(struct exynos_panel *ctx, u16 br)
 {
 	u16 brightness;
 	struct nt37290_panel *spanel = to_spanel(ctx);
-
-	if (ctx->current_mode->exynos_mode.is_lp_mode) {
-		const struct exynos_panel_funcs *funcs;
-
-		funcs = ctx->desc->exynos_panel_func;
-		if (funcs && funcs->set_binned_lp)
-			funcs->set_binned_lp(ctx, br);
-		return 0;
-	}
+	const bool lp_mode = ctx->current_mode->exynos_mode.is_lp_mode;
 
 	spanel->hw_dbv = br;
-	if (spanel->hw_dbv == 0) {
+
+	if (!lp_mode && spanel->hw_dbv == 0) {
 		// turn off panel and set brightness directly.
 		return exynos_dcs_set_brightness(ctx, 0);
 	}
 
-	if (ctx->panel_rev >= PANEL_REV_DVT1) {
-		spanel->hw_dbv = nt37290_convert_to_dvt1_nonlinear_br(ctx, br);
-	} else if (ctx->panel_rev == PANEL_REV_EVT1_1) {
-		if (br <= evt1_1_br_settings.normal_band_data[0].level)
-			spanel->hw_dbv = nt37290_convert_to_evt1_1_nonlinear_br(ctx, br);
-	} else {
-		spanel->hw_dbv = nt37290_convert_to_evt1_br(ctx, br);
+	if (spanel->hw_dbv) {
+		if (ctx->panel_rev >= PANEL_REV_DVT1) {
+			spanel->hw_dbv = nt37290_convert_to_dvt1_nonlinear_br(ctx, br);
+		} else if (ctx->panel_rev == PANEL_REV_EVT1_1) {
+			if (br <= evt1_1_br_settings.normal_band_data[0].level)
+				spanel->hw_dbv =
+					nt37290_convert_to_evt1_1_nonlinear_br(ctx, br);
+		} else {
+			spanel->hw_dbv = nt37290_convert_to_evt1_br(ctx, br);
+		}
+	}
+
+	if (lp_mode) {
+		const struct exynos_panel_funcs *funcs;
+
+		funcs = ctx->desc->exynos_panel_func;
+		if (funcs && funcs->set_binned_lp)
+			funcs->set_binned_lp(ctx, spanel->hw_dbv);
+		return 0;
 	}
 
 	if (ctx->panel_rev >= PANEL_REV_EVT1 && ctx->hbm.local_hbm.enabled) {
