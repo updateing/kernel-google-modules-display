@@ -857,7 +857,7 @@ const struct brightness_capability s6e3fc3_p10_brightness_capability = {
 	},
 	.hbm = {
 		.nits = {
-			.min = 550,
+			.min = 500,
 			.max = 1000,
 		},
 		.level = {
