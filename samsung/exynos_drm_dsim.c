@@ -58,6 +58,8 @@
 #include <regs-dsim.h>
 
 #include <trace/dpu_trace.h>
+#define CREATE_TRACE_POINTS
+#include <trace/panel_trace.h>
 
 #include "exynos_drm_connector.h"
 #include "exynos_drm_crtc.h"
@@ -1996,6 +1998,7 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 		is_last = true;
 	}
 
+	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, is_last);
 	dsim_debug(dsim, "%s last command\n", is_last ? "" : "Not");
 
 	if (is_last) {
@@ -2023,6 +2026,7 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	}
 
 err:
+	trace_dsi_cmd_fifo_status(dsim->total_pend_ph, dsim->total_pend_pl);
 	DPU_ATRACE_END(__func__);
 	return ret;
 }
@@ -2031,16 +2035,18 @@ static int
 dsim_req_read_command(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 {
 	struct mipi_dsi_packet packet;
+	const u8 rx_len = msg->rx_len & 0xff;
 
 	dsim_reg_clear_int(dsim->id, DSIM_INTSRC_SFR_PH_FIFO_EMPTY);
 	reinit_completion(&dsim->ph_wr_comp);
-
+	trace_dsi_tx(MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE, &rx_len, 1, true);
 	/* set the maximum packet size returned */
 	dsim_reg_wr_tx_header(dsim->id, MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE,
 			msg->rx_len, 0, false);
 
 	/* read request */
 	mipi_dsi_create_packet(&packet, msg);
+	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, true);
 	dsim_reg_wr_tx_header(dsim->id, packet.header[0], packet.header[1],
 						packet.header[2], true);
 
@@ -2053,6 +2059,7 @@ dsim_read_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	u32 rx_fifo, rx_size = 0;
 	int i = 0, ret = 0;
 	u8 *rx_buf = msg->rx_buf;
+	const u8 *tx_buf = msg->tx_buf;
 
 	if (msg->rx_len > MAX_RX_FIFO) {
 		dsim_err(dsim, "invalid rx len(%lu) max(%d)\n", msg->rx_len,
@@ -2138,6 +2145,7 @@ dsim_read_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 		} while (!dsim_reg_rx_fifo_is_empty(dsim->id) && --retry_cnt);
 	}
 
+	trace_dsi_rx(tx_buf[0], rx_buf, rx_size);
 	return rx_size;
 }
 
