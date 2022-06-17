@@ -50,6 +50,10 @@ enum plug_orientation {
 #define AUX_DATA_BUF_COUNT 16
 #define AUX_RETRY_COUNT 3
 
+#define MAX_EDID_BLOCK 4
+#define EDID_BLOCK_SIZE 128
+#define EDID_ADDRESS 0x50
+
 enum dp_aux_ch_command_type {
 	I2C_WRITE = 0x4,
 	I2C_READ = 0x5,
@@ -109,6 +113,12 @@ enum dp_interrupt_mask {
 	ALL_INT_MASK
 };
 
+// Video Config
+enum video_mode {
+	VIDEO_MODE_MASTER = 0,
+	VIDEO_MODE_SLAVE,
+};
+
 enum dp_dynamic_range_type {
 	VESA_RANGE = 0,   /* (0 ~ 255) */
 	CEA_RANGE = 1,    /* (16 ~ 235) */
@@ -143,6 +153,36 @@ struct video_timing {
 	enum sync_polarity hsync_polarity;
 };
 
+// BIST Config
+enum bist_pattern_type {
+	// Normal BIST Patterns
+	COLOR_BAR = 0,
+	WGB_BAR,
+	MW_BAR,
+	// CTS BIST Patterns
+	CTS_COLOR_RAMP,
+	CTS_BLACK_WHITE,
+	CTS_COLOR_SQUARE_VESA,
+	CTS_COLOR_SQUARE_CEA,
+};
+
+// InfoFrame
+#define	INFOFRAME_PACKET_TYPE_AVI 0x82		/** Auxiliary Video information InfoFrame */
+#define MAX_INFOFRAME_LENGTH 27
+
+#define AVI_INFOFRAME_VERSION 0x02
+#define AVI_INFOFRAME_LENGTH 0x0D
+#define ACTIVE_FORMAT_INFO_PRESENT (1 << 4)	/* No Active Format Information */
+#define ACTIVE_PORTION_ASPECT_RATIO (0x8 << 0)	/* Same as Picture Aspect Ratio */
+
+struct infoframe {
+	u8 type_code;
+	u8 version_number;
+	u8 length;
+	u8 data[MAX_INFOFRAME_LENGTH];
+};
+
+
 /*
  * DisplayPort HW Configuration Structure Definition
  * It can be used CAL function and driver layer
@@ -163,6 +203,10 @@ struct dp_hw_config {
 	bool enhanced_mode;
 	bool use_fec;
 	bool use_ssc;
+
+	/* BIST Mode */
+	bool bist_mode;
+	enum bist_pattern_type bist_type;
 };
 
 
@@ -173,11 +217,20 @@ void dp_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 /* DPCD (DisplayPort Configuration Data) Read/Write Interfaces */
 int dp_hw_write_dpcd_burst(u32 address, u32 length, u8 *data);
 int dp_hw_read_dpcd_burst(u32 address, u32 length, u8 *data);
+int dp_hw_read_edid(u8 block_cnt, u32 length, u8 *data);
 
 /* DP Hardware Control Interfaces */
 void dp_hw_init(struct dp_hw_config *hw_config);
 void dp_hw_reinit(struct dp_hw_config *hw_config);
 void dp_hw_deinit(void);
+void dp_hw_start(void);
+void dp_hw_stop(void);
+
+void dp_hw_set_video_config(struct dp_hw_config *hw_config);
+int  dp_hw_set_bist_video_config(struct dp_hw_config *hw_config);
+
+void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe);
+void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe);
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern);
 void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config, u8 *voltage, u8 *pre_emphasis);

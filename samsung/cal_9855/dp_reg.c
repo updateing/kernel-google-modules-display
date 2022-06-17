@@ -517,6 +517,13 @@ static void dp_reg_aux_ch_buf_clr(void)
 	dp_write_mask(SST1, AUX_BUFFER_CLEAR, AUX_BUF_CLR, AUX_BUF_CLR_MASK);
 }
 
+static void dp_reg_set_aux_ch_address_only_command(bool en)
+{
+	u32 val = en ? ADDR_ONLY_CMD : NORMAL_AUX_CMD;
+
+	dp_write_mask(SST1, AUX_ADDR_ONLY_COMMAND, val, ADDR_ONLY_CMD_MASK);
+}
+
 static void dp_reg_set_aux_ch_command(enum dp_aux_ch_command_type aux_ch_mode)
 {
 	dp_write_mask(SST1, AUX_REQUEST_CONTROL, REQ_COMM_SET(aux_ch_mode),
@@ -665,6 +672,12 @@ static void dp_reg_set_quality_pattern(u32 en)
 
 /* SST1 Control Registers */
 // SST1 Main
+static void dp_reg_set_video_mode(enum video_mode mode)
+{
+	dp_write_mask(SST1, SST1_MAIN_CONTROL, VIDEO_MODE_SET(mode),
+		      VIDEO_MODE_MASK);
+}
+
 static void dp_reg_set_enhanced_mode(u32 en)
 {
 	dp_write_mask(SST1, SST1_MAIN_CONTROL, ENHANCED_MODE_SET(en),
@@ -672,20 +685,343 @@ static void dp_reg_set_enhanced_mode(u32 en)
 }
 
 // SST1 Interrupts
+static void dp_reg_set_video_interrupt_mask(u32 en, u32 intr_mask)
+{
+	if (en)
+		dp_write_mask(SST1, SST1_INTERRUPT_MASK_SET0, intr_mask,
+			      intr_mask);
+	else
+		dp_write_mask(SST1, SST1_INTERRUPT_MASK_SET0, 0, intr_mask);
+}
+
+static void dp_hw_set_video_interrupt(u32 en)
+{
+	// Mask all video interrupts
+	dp_reg_set_video_interrupt_mask(0, ~0);
+
+	if (en)
+		dp_reg_set_video_interrupt_mask(
+			en, VSC_SDP_TX_INCOMPLETE_MASK |
+				    MAPI_FIFO_UNDER_FLOW_MASK | VSYNC_DET_MASK);
+}
 
 // SST1 Video M/N Value
+static void dp_reg_set_mn_value(u32 mvid, u32 nvid)
+{
+	dp_write(SST1, SST1_MVID_MASTER_MODE, mvid);
+	dp_write(SST1, SST1_NVID_MASTER_MODE, nvid);
+}
+
+static void dp_reg_set_mn_config(u32 strm_clk, u32 ls_clk)
+{
+	dp_write_mask(SST1, SST1_MVID_SFR_CONFIGURE, strm_clk,
+		      MNVID_SFR_CONFIG_MASK);
+	dp_write_mask(SST1, SST1_NVID_SFR_CONFIGURE, ls_clk,
+		      MNVID_SFR_CONFIG_MASK);
+}
+
+static u32 dp_get_ls_clk(struct dp_hw_config *hw_config)
+{
+	/* DP LS(Link Symbol) clocks are 162 / 270 / 540 / 810 MHz in DP Spec */
+	if (hw_config->link_rate == LINK_RATE_HBR3)
+		return 810000000; // 810 MHz
+	else if (hw_config->link_rate == LINK_RATE_HBR2)
+		return 540000000; // 540 MHz
+	else if (hw_config->link_rate == LINK_RATE_HBR)
+		return 270000000; // 270 MHz
+	else /* LINK_RATE_RBR or others */
+		return 162000000; // 162 MHz
+}
+
+static void dp_reg_set_video_clock(struct dp_hw_config *hw_config)
+{
+	u32 strm_clk = hw_config->vtiming.clock; // KHz Unit
+	u32 ls_clk = dp_get_ls_clk(hw_config) / 1000; // KHz Unit
+
+	u32 mvid_master = strm_clk / 2;
+	u32 nvid_master = ls_clk;
+
+	dp_reg_set_mn_value(mvid_master, nvid_master);
+	dp_reg_set_mn_config(strm_clk, ls_clk);
+}
 
 // SST1 Active Symbol SW Control
+static void dp_reg_set_active_symbol_config_fec_off(u32 integer, u32 fraction,
+						    u32 threshold)
+{
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_INTEGER_FEC_OFF,
+		      ACTIVE_SYMBOL_INTEGER_SET(integer),
+		      ACTIVE_SYMBOL_INTEGER_MASK);
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_FRACTION_FEC_OFF,
+		      ACTIVE_SYMBOL_FRACTION_SET(fraction),
+		      ACTIVE_SYMBOL_FRACTION_MASK);
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_THRESHOLD_FEC_OFF,
+		      ACTIVE_SYMBOL_THRESHOLD_SET(threshold),
+		      ACTIVE_SYMBOL_THRESHOLD_MASK);
+}
+
+static void dp_reg_set_active_symbol_config_fec_on(u32 integer, u32 fraction,
+						   u32 threshold)
+{
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_INTEGER_FEC_ON,
+		      ACTIVE_SYMBOL_INTEGER_SET(integer),
+		      ACTIVE_SYMBOL_INTEGER_MASK);
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_FRACTION_FEC_ON,
+		      ACTIVE_SYMBOL_FRACTION_SET(fraction),
+		      ACTIVE_SYMBOL_FRACTION_MASK);
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_THRESHOLD_FEC_ON,
+		      ACTIVE_SYMBOL_THRESHOLD_SET(threshold),
+		      ACTIVE_SYMBOL_THRESHOLD_MASK);
+}
+
+static void dp_reg_set_active_symbol_threshold_sel_fec_off(u32 en)
+{
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_THRESHOLD_SEL_FEC_OFF,
+		      ACTIVE_SYMBOL_THRESHOLD_SEL_SET(en),
+		      ACTIVE_SYMBOL_THRESHOLD_SEL_MASK);
+}
+
+static void dp_reg_set_active_symbol_threshold_sel_fec_on(u32 en)
+{
+	dp_write_mask(SST1, SST1_ACTIVE_SYMBOL_THRESHOLD_SEL_FEC_ON,
+		      ACTIVE_SYMBOL_THRESHOLD_SEL_SET(en),
+		      ACTIVE_SYMBOL_THRESHOLD_SEL_MASK);
+}
+
+#define MULTIPLIER                                                             \
+	10000000000 // It needs to separate integer part and fraction part
+static void dp_reg_set_active_symbol(struct dp_hw_config *hw_config)
+{
+	u32 strm_clk = 0;
+	u32 ls_clk = 0;
+	u32 bpp = 0; /* BPP (Bit Per Pixel) */
+	u32 num_lanes = 0;
+
+	u64 TU_size = 0; /* TU (Transfer Unit) */
+	u32 integer_part = 0;
+	u32 fraction_part = 0;
+	u32 threshold = 0;
+
+	strm_clk = hw_config->vtiming.clock / 1000; // MHz Unit
+	ls_clk = dp_get_ls_clk(hw_config) / 1000000; // MHz Unit
+	bpp = 18 + (u32)(hw_config->bpc) * 6; // 18 is bpp for BPC_6
+	num_lanes = hw_config->num_lanes;
+
+	cal_log_debug(
+		0,
+		"bpp:%u, stream_clk: %u MHz, ls_clk: %u MHz, num_lanes: %u\n",
+		bpp, strm_clk, ls_clk, num_lanes);
+
+	TU_size =
+		((strm_clk * bpp * 32) * MULTIPLIER) / (num_lanes * ls_clk * 8);
+
+	if (hw_config->use_fec) {
+		/* FEC (Forward Error Correction) */
+		TU_size = (TU_size * 1000) / 976;
+		cal_log_debug(0, "TU_size: %llu\n", TU_size);
+
+		integer_part = (u32)(TU_size / MULTIPLIER);
+		fraction_part =
+			(u32)((TU_size - (integer_part * MULTIPLIER)) / 10);
+
+		if (integer_part <= 2)
+			threshold = 7;
+		else if (integer_part > 2 && integer_part <= 5)
+			threshold = 8;
+		else if (integer_part > 5)
+			threshold = 9;
+
+		cal_log_debug(0, "FEC_On(int: %d, frac: %d, thr: %d)\n",
+			      integer_part, fraction_part, threshold);
+
+		dp_reg_set_active_symbol_config_fec_on(
+			integer_part, fraction_part, threshold);
+		dp_reg_set_active_symbol_threshold_sel_fec_on(1);
+	} else {
+		/* No FEC */
+		cal_log_debug(0, "TU_size: %llu\n", TU_size);
+
+		integer_part = (u32)(TU_size / MULTIPLIER);
+		fraction_part =
+			(u32)((TU_size - (integer_part * MULTIPLIER)) / 10);
+
+		if (integer_part <= 2)
+			threshold = 7;
+		else if (integer_part > 2 && integer_part <= 5)
+			threshold = 8;
+		else if (integer_part > 5)
+			threshold = 9;
+
+		cal_log_debug(0, "FEC_Off(int: %d, frac: %d, thr: %d)\n",
+			      integer_part, fraction_part, threshold);
+
+		dp_reg_set_active_symbol_config_fec_off(
+			integer_part, fraction_part, threshold);
+		dp_reg_set_active_symbol_threshold_sel_fec_off(1);
+	}
+}
 
 // SST1 Video Control
+static void dp_reg_set_strm_valid_force(u32 en)
+{
+	dp_write_mask(SST1, SST1_VIDEO_CONTROL, STRM_VALID_CTRL_SET(en),
+		      STRM_VALID_CTRL_MASK);
+	dp_write_mask(SST1, SST1_VIDEO_CONTROL, STRM_VALID_FORCE_SET(en),
+		      STRM_VALID_FORCE_MASK);
+}
+
+static void dp_reg_set_dynamic_range(enum dp_dynamic_range_type type)
+{
+	dp_write_mask(SST1, SST1_VIDEO_CONTROL, DYNAMIC_RANGE_MODE_SET(type),
+		      DYNAMIC_RANGE_MODE_MASK);
+}
+
+static void dp_reg_set_bpc(enum bit_depth bpc)
+{
+	dp_write_mask(SST1, SST1_VIDEO_CONTROL, BPC_SET(bpc), BPC_MASK);
+}
+
+static void dp_reg_set_color_format(enum color_format format)
+{
+	dp_write_mask(SST1, SST1_VIDEO_CONTROL, COLOR_FORMAT_SET(format),
+		      COLOR_FORMAT_MASK);
+}
+
+static void dp_reg_set_video_polarity(struct video_timing *vtiming)
+{
+	dp_write_mask(SST1, SST1_VIDEO_CONTROL,
+		      VSYNC_POLARITY_SET(vtiming->vsync_polarity),
+		      VSYNC_POLARITY_MASK);
+	dp_write_mask(SST1, SST1_VIDEO_CONTROL,
+		      HSYNC_POLARITY_SET(vtiming->hsync_polarity),
+		      HSYNC_POLARITY_MASK);
+}
+
+static void dp_reg_set_video_en(u32 en)
+{
+	dp_write_mask(SST1, SST1_VIDEO_ENABLE, VIDEO_EN_SET(en), VIDEO_EN_MASK);
+}
+
+static void dp_reg_set_video_master_timing_gen(u32 en)
+{
+	dp_write_mask(SST1, SST1_VIDEO_MASTER_TIMING_GEN,
+		      VIDEO_MASTER_TIME_GEN_SET(en),
+		      VIDEO_MASTER_TIME_GEN_MASK);
+}
 
 // SST1 Video Timing
+static void dp_reg_set_video_timing(struct video_timing *vtiming)
+{
+	dp_write(SST1, SST1_VIDEO_HORIZONTAL_TOTAL_PIXELS, vtiming->htotal);
+	dp_write(SST1, SST1_VIDEO_VERTICAL_TOTAL_PIXELS, vtiming->vtotal);
+	dp_write(SST1, SST1_VIDEO_HORIZONTAL_FRONT_PORCH, vtiming->hfp);
+	dp_write(SST1, SST1_VIDEO_HORIZONTAL_BACK_PORCH, vtiming->hbp);
+	dp_write(SST1, SST1_VIDEO_HORIZONTAL_ACTIVE, vtiming->hactive);
+	dp_write(SST1, SST1_VIDEO_VERTICAL_FRONT_PORCH, vtiming->vfp);
+	dp_write(SST1, SST1_VIDEO_VERTICAL_BACK_PORCH, vtiming->vbp);
+	dp_write(SST1, SST1_VIDEO_VERTICAL_ACTIVE, vtiming->vactive);
+}
 
 // SST1 Video BIST Control
+static void dp_reg_set_cts_bist_en(u32 en)
+{
+	dp_write_mask(SST1, SST1_VIDEO_BIST_CONTROL, CTS_BIST_EN_SET(en),
+		      CTS_BIST_EN_MASK);
+}
+
+static void dp_reg_set_cts_bist_type(enum bist_pattern_type type)
+{
+	dp_write_mask(SST1, SST1_VIDEO_BIST_CONTROL, CTS_BIST_TYPE_SET(type),
+		      CTS_BIST_TYPE_MASK);
+}
+
+static void dp_reg_set_video_bist_en(u32 en)
+{
+	dp_write_mask(SST1, SST1_VIDEO_BIST_CONTROL, BIST_EN_SET(en),
+		      BIST_EN_MASK);
+}
+
+static void dp_reg_set_video_bist_width(u32 width)
+{
+	dp_write_mask(SST1, SST1_VIDEO_BIST_CONTROL, BIST_WIDTH_SET(width),
+		      BIST_WIDTH_MASK);
+}
+
+static void dp_reg_set_video_bist_type(enum bist_pattern_type type)
+{
+	dp_write_mask(SST1, SST1_VIDEO_BIST_CONTROL, BIST_TYPE_SET(type),
+		      BIST_TYPE_MASK);
+}
 
 // SST1 Audio Control
 
 // SST1 InfoFrame Control
+static void dp_reg_set_avi_infoframe_update(u32 en)
+{
+	dp_write_mask(SST1, SST1_INFOFRAME_UPDATE_CONTROL,
+		      AVI_INFO_UPDATE_SET(en), AVI_INFO_UPDATE_MASK);
+}
+
+static void dp_reg_set_spd_infoframe_update(u32 en)
+{
+	dp_write_mask(SST1, SST1_INFOFRAME_UPDATE_CONTROL,
+		      SPD_INFO_UPDATE_SET(en), SPD_INFO_UPDATE_MASK);
+}
+
+static void dp_reg_set_avi_infoframe_send(u32 en)
+{
+	dp_write_mask(SST1, SST1_INFOFRAME_SEND_CONTROL, AVI_INFO_SEND_SET(en),
+		      AVI_INFO_SEND_MASK);
+}
+
+static void dp_reg_set_spd_infoframe_send(u32 en)
+{
+	dp_write_mask(SST1, SST1_INFOFRAME_SEND_CONTROL, SPD_INFO_SEND_SET(en),
+		      SPD_INFO_SEND_MASK);
+}
+
+static void dp_reg_set_spd_infoframe_packet_type(u8 type_code)
+{
+	dp_write_mask(SST1, SST1_INFOFRAME_SPD_PACKET_TYPE,
+		      SPD_TYPE_SET(type_code), SPD_TYPE_MASK);
+}
+
+static void dp_reg_set_infoframe_data(u32 offset, u8 *packet_data,
+				      u32 max_byte_size)
+{
+	u32 data_word;
+	u32 byte_index = 0, word_index, shift_index;
+
+	for (word_index = 0; word_index < (max_byte_size - 1);
+	     word_index += 4) {
+		data_word = 0;
+
+		for (shift_index = 0; shift_index < 32; shift_index += 8)
+			data_word |= packet_data[byte_index++] << shift_index;
+
+		dp_write(SST1, offset + word_index, data_word);
+	}
+
+	data_word = 0;
+	for (shift_index = 0; (byte_index < max_byte_size && shift_index < 32);
+	     shift_index += 8)
+		data_word |= packet_data[byte_index++] << shift_index;
+	dp_write(SST1, offset + word_index, data_word);
+}
+
+static void dp_reg_set_avi_infoframe_data(u8 *packet_data)
+{
+	dp_reg_set_infoframe_data(SST1_INFOFRAME_AVI_PACKET_DATA_SET0,
+				  packet_data,
+				  MAX_AVI_INFOFRAME_DATA_BYTE_SIZE);
+}
+
+static void dp_reg_set_spd_infoframe_data(u8 *packet_data)
+{
+	dp_reg_set_infoframe_data(SST1_INFOFRAME_SPD_PACKET_DATA_SET0,
+				  packet_data,
+				  MAX_SPD_INFOFRAME_DATA_BYTE_SIZE);
+}
 
 //---------------------------------------
 /* DPCD (DisplayPort Configuration Data) Read/Write Interfaces through AUX channel */
@@ -799,6 +1135,99 @@ int dp_hw_read_dpcd_burst(u32 address, u32 length, u8 *data)
 	return ret;
 }
 
+// Need to revisit here
+#define DDC_SEGMENT_ADDR 0x30
+int dp_hw_read_edid(u8 block_cnt, u32 length, u8 *data)
+{
+	u32 i, buf_length, length_calculation;
+	int ret;
+	int retry_cnt = AUX_RETRY_COUNT;
+	u8 offset = (block_cnt & 1) * EDID_BLOCK_SIZE;
+
+	while (retry_cnt > 0) {
+		dp_reg_aux_ch_buf_clr();
+		dp_reg_aux_defer_ctrl(1);
+		dp_reg_set_aux_reply_timeout();
+		dp_reg_set_aux_ch_address_only_command(false);
+
+		/* for 3,4 block */
+		if (block_cnt > 1) {
+			u8 segment = 1;
+
+			cal_log_warn(0, "read block%d\n", block_cnt);
+			dp_reg_set_aux_ch_command(I2C_WRITE);
+			dp_reg_set_aux_ch_address(DDC_SEGMENT_ADDR);
+			dp_reg_set_aux_ch_length(1);
+			dp_reg_aux_ch_send_buf(&segment, 1);
+			ret = dp_reg_set_aux_ch_operation_enable();
+			if (ret)
+				cal_log_err(0, "sending segment failed\n");
+		}
+
+		dp_reg_set_aux_ch_command(I2C_WRITE);
+		dp_reg_set_aux_ch_address(EDID_ADDRESS);
+		dp_reg_set_aux_ch_length(1);
+		dp_reg_aux_ch_send_buf(&offset, 1);
+		ret = dp_reg_set_aux_ch_operation_enable();
+
+		cal_log_debug(0, "EDID address command in EDID read\n");
+
+		if (ret == 0) {
+			dp_reg_set_aux_ch_command(I2C_READ);
+			length_calculation = length;
+
+			for (i = 0; i < length; i += AUX_DATA_BUF_COUNT) {
+				if (length_calculation >= AUX_DATA_BUF_COUNT) {
+					buf_length = AUX_DATA_BUF_COUNT;
+					length_calculation -=
+						AUX_DATA_BUF_COUNT;
+				} else {
+					buf_length =
+						length % AUX_DATA_BUF_COUNT;
+					length_calculation = 0;
+				}
+
+				dp_reg_set_aux_ch_length(buf_length);
+				dp_reg_aux_ch_buf_clr();
+				ret = dp_reg_set_aux_ch_operation_enable();
+
+				if (ret == 0) {
+					dp_reg_aux_ch_received_buf(
+						data + ((i /
+							 AUX_DATA_BUF_COUNT) *
+							AUX_DATA_BUF_COUNT),
+						buf_length);
+					cal_log_debug(
+						0,
+						"AUX buffer read count = %d in EDID read\n",
+						i);
+				} else {
+					cal_log_debug(
+						0,
+						"AUX buffer read fail in EDID read\n");
+					break;
+				}
+			}
+		}
+
+		if (ret == 0) {
+			dp_reg_set_aux_ch_address_only_command(true);
+			ret = dp_reg_set_aux_ch_operation_enable();
+			dp_reg_set_aux_ch_address_only_command(false);
+
+			cal_log_debug(
+				0, "2nd address only request in EDID read\n");
+		}
+
+		if (ret == 0)
+			break;
+
+		retry_cnt--;
+	}
+
+	return ret;
+}
+
 /* DP Hardware Control Interfaces */
 void dp_hw_init(struct dp_hw_config *hw_config)
 {
@@ -893,6 +1322,76 @@ void dp_hw_deinit(void)
 	dp_reg_set_txclk_osc();
 	cal_log_debug(0, "set system clk to OSC: Mux(%u)\n",
 		      dp_reg_get_gfmux_status());
+}
+
+void dp_hw_start(void)
+{
+	dp_hw_set_video_interrupt(1);
+	dp_reg_set_video_en(1);
+}
+
+void dp_hw_stop(void)
+{
+	dp_hw_set_video_interrupt(0);
+	dp_reg_set_video_en(0);
+}
+
+void dp_hw_set_video_config(struct dp_hw_config *hw_config)
+{
+	dp_reg_set_dynamic_range(hw_config->range);
+	dp_reg_set_bpc(hw_config->bpc);
+	dp_reg_set_color_format(COLOR_RGB);
+	dp_reg_set_video_polarity(&hw_config->vtiming);
+	dp_reg_set_video_timing(&hw_config->vtiming);
+	dp_reg_set_video_clock(hw_config);
+	dp_reg_set_active_symbol(hw_config);
+	dp_reg_set_video_master_timing_gen(1);
+	dp_reg_set_video_mode(VIDEO_MODE_MASTER);
+}
+
+int dp_hw_set_bist_video_config(struct dp_hw_config *hw_config)
+{
+	if (!hw_config->bist_mode)
+		return -EINVAL;
+
+	dp_reg_set_strm_valid_force(1);
+
+	if (hw_config->bist_type < CTS_COLOR_RAMP) {
+		// Normal BIST Mode
+		dp_hw_set_video_config(hw_config);
+
+		if (hw_config->bist_type == COLOR_BAR)
+			dp_reg_set_video_bist_width(0);
+		dp_reg_set_video_bist_type(hw_config->bist_type);
+		dp_reg_set_video_bist_en(1);
+	} else {
+		// CTS BIST Mode
+		hw_config->range =
+			(hw_config->bist_type == CTS_COLOR_SQUARE_CEA) ?
+				CEA_RANGE :
+				VESA_RANGE;
+		dp_hw_set_video_config(hw_config);
+
+		dp_reg_set_cts_bist_type(hw_config->bist_type - CTS_COLOR_RAMP);
+		dp_reg_set_cts_bist_en(1);
+	}
+
+	return 0;
+}
+
+void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe)
+{
+	dp_reg_set_avi_infoframe_data(avi_infoframe.data);
+	dp_reg_set_avi_infoframe_update(1);
+	dp_reg_set_avi_infoframe_send(1);
+}
+
+void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe)
+{
+	dp_reg_set_spd_infoframe_packet_type(spd_infoframe.type_code);
+	dp_reg_set_spd_infoframe_data(spd_infoframe.data);
+	dp_reg_set_spd_infoframe_update(1);
+	dp_reg_set_spd_infoframe_send(1);
 }
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern)

@@ -76,6 +76,7 @@ struct dp_host {
 	u8  max_reach_value[MAX_LANE_CNT];
 };
 
+#define SINK_NAME_LEN	14	/* monitor name */
 struct dp_sink {
 	u32  link_rate;
 	u8   num_lanes;
@@ -83,6 +84,12 @@ struct dp_sink {
 	bool fast_training;
 	bool enhanced_frame;
 	bool ssc;
+
+	/* From EDID */
+	char sink_name[SINK_NAME_LEN];
+	u8   edid_manufacturer[4];
+	u32  edid_product;
+	u32  edid_serial;
 };
 
 struct dp_resources {
@@ -106,6 +113,7 @@ struct dp_device {
 	struct delayed_work hpd_plug_work;
 	struct delayed_work hpd_unplug_work;
 
+	struct mutex cmd_lock;
 	struct mutex hpd_lock;
 	struct mutex training_lock;
 
@@ -116,6 +124,12 @@ struct dp_device {
 	/* DP Driver State */
 	enum dp_state state;
 
+	/* DRM Mode */
+	int cur_mode_vic; /* VIC number of cur_mode */
+	struct drm_display_mode cur_mode;
+	struct drm_display_mode pref_mode;
+	bool fail_safe;
+
 	/* DP Capabilities */
 	struct dp_link link;
 	struct dp_host host;
@@ -125,6 +139,9 @@ struct dp_device {
 	struct extcon_dev *edev;
 	struct notifier_block dp_typec_nb;
 	int notifier_registered;
+
+	/* BIST */
+	bool bist_used;
 
 	/* DP HW Configurations */
 	struct dp_hw_config hw_config;

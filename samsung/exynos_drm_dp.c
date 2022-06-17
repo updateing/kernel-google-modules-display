@@ -15,6 +15,7 @@
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
+#include <video/videomode.h>
 
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_state_helper.h>
@@ -61,6 +62,7 @@ static void dp_init_info(struct dp_device *dp)
 	dp->state = DP_STATE_INIT;
 	dp->hpd_current_state = EXYNOS_HPD_UNPLUG;
 	dp->output_type = EXYNOS_DISPLAY_TYPE_DP0_SST1;
+	dp->bist_used = false;
 }
 
 static u32 dp_get_max_link_rate(struct dp_device *dp)
@@ -156,6 +158,15 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *dp_aux,
 
 	// Should be return size or error code
 	return ret;
+}
+
+// Callback function for DRM EDID Helper
+static int dp_get_edid_block(void *data, u8 *edid, unsigned int block,
+			     size_t length)
+{
+	dp_hw_read_edid(block, length, edid);
+
+	return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -676,12 +687,270 @@ static int dp_link_down(struct dp_device *dp)
 	return 0;
 }
 
+static enum bit_depth dp_get_bpc(struct dp_device *dp)
+{
+	struct drm_connector *connector = &dp->connector;
+	struct drm_display_info *display_info = &connector->display_info;
+
+	if (display_info->bpc == 8)
+		return BPC_8;
+	else if (display_info->bpc == 10)
+		return BPC_10;
+	else
+		return BPC_6;
+}
+
+static void dp_set_video_timing(struct dp_device *dp)
+{
+	struct videomode vm;
+
+	drm_display_mode_to_videomode(&dp->cur_mode, &vm);
+
+	dp->hw_config.vtiming.clock = dp->cur_mode.clock;
+
+	dp->hw_config.vtiming.htotal = dp->cur_mode.htotal;
+	dp->hw_config.vtiming.vtotal = dp->cur_mode.vtotal;
+	dp->hw_config.vtiming.hfp = vm.hfront_porch;
+	dp->hw_config.vtiming.hbp = vm.hback_porch;
+	dp->hw_config.vtiming.hactive = vm.hactive;
+	dp->hw_config.vtiming.vfp = vm.vfront_porch;
+	dp->hw_config.vtiming.vbp = vm.vback_porch;
+	dp->hw_config.vtiming.vactive = vm.vactive;
+
+	dp->hw_config.vtiming.vsync_polarity =
+		(dp->cur_mode.flags & DRM_MODE_FLAG_NVSYNC) ? SYNC_NEGATIVE :
+							      SYNC_POSITIVE;
+	dp->hw_config.vtiming.hsync_polarity =
+		(dp->cur_mode.flags & DRM_MODE_FLAG_NHSYNC) ? SYNC_NEGATIVE :
+							      SYNC_POSITIVE;
+}
+
+static u8 dp_get_vic(struct dp_device *dp)
+{
+	dp->cur_mode_vic = drm_match_cea_mode(&dp->cur_mode);
+	return dp->cur_mode_vic;
+}
+
+static int dp_make_avi_infoframe_data(struct dp_device *dp,
+				      struct infoframe *avi_infoframe)
+{
+	int i;
+
+	avi_infoframe->type_code = INFOFRAME_PACKET_TYPE_AVI;
+	avi_infoframe->version_number = AVI_INFOFRAME_VERSION;
+	avi_infoframe->length = AVI_INFOFRAME_LENGTH;
+
+	for (i = 0; i < AVI_INFOFRAME_LENGTH; i++)
+		avi_infoframe->data[i] = 0x00;
+
+	avi_infoframe->data[0] |= ACTIVE_FORMAT_INFO_PRESENT;
+	avi_infoframe->data[1] |= ACTIVE_PORTION_ASPECT_RATIO;
+	avi_infoframe->data[3] = dp_get_vic(dp);
+
+	return 0;
+}
+
+static int dp_set_avi_infoframe(struct dp_device *dp)
+{
+	struct infoframe avi_infoframe;
+
+	dp_make_avi_infoframe_data(dp, &avi_infoframe);
+	dp_hw_send_avi_infoframe(avi_infoframe);
+
+	return 0;
+}
+
+static int dp_make_spd_infoframe_data(struct infoframe *spd_infoframe)
+{
+	spd_infoframe->type_code = 0x83;
+	spd_infoframe->version_number = 0x1;
+	spd_infoframe->length = 25;
+
+	strncpy(&spd_infoframe->data[0], "SEC.GED", 8);
+
+	return 0;
+}
+
+static int dp_set_spd_infoframe(void)
+{
+	struct infoframe spd_infoframe;
+
+	memset(&spd_infoframe, 0, sizeof(spd_infoframe));
+	dp_make_spd_infoframe_data(&spd_infoframe);
+	dp_hw_send_spd_infoframe(spd_infoframe);
+
+	return 0;
+}
+
 static void dp_enable(struct drm_encoder *encoder)
 {
+	struct dp_device *dp = encoder_to_dp(encoder);
+
+	mutex_lock(&dp->cmd_lock);
+
+	dp->hw_config.bpc = dp_get_bpc(dp);
+	dp->hw_config.range = VESA_RANGE;
+	dp_set_video_timing(dp);
+
+	if (dp->bist_used) {
+		dp->hw_config.bist_mode = true;
+		dp->hw_config.bist_type = COLOR_BAR;
+
+		dp_hw_set_bist_video_config(&dp->hw_config);
+	}
+
+	dp_set_avi_infoframe(dp);
+	dp_set_spd_infoframe();
+
+	dp_hw_start();
+	dp_info(dp, "enabled DP as cur_mode = %s@%d\n", dp->cur_mode.name,
+		drm_mode_vrefresh(&dp->cur_mode));
+
+	dp->state = DP_STATE_RUN;
+	dp_info(dp, "%s: DP State changed to RUN\n", __func__);
+
+	mutex_unlock(&dp->cmd_lock);
 }
 
 static void dp_disable(struct drm_encoder *encoder)
 {
+	struct dp_device *dp = encoder_to_dp(encoder);
+
+	mutex_lock(&dp->cmd_lock);
+
+	if (dp->state == DP_STATE_RUN) {
+		dp_hw_stop();
+		dp_info(dp, "disabled DP\n");
+
+		dp->state = DP_STATE_ON;
+		dp_info(dp, "%s: DP State changed to ON\n", __func__);
+	} else
+		dp_info(dp, "%s: DP State is not RUN\n", __func__);
+
+	mutex_unlock(&dp->cmd_lock);
+}
+
+// For BIST
+static void dp_parse_edid(struct dp_device *dp, struct edid *edid)
+{
+	u8 *edid_vendor = dp->sink.edid_manufacturer;
+	u32 edid_prod_id = 0;
+
+	edid_vendor[0] = ((edid->mfg_id[0] & 0x7c) >> 2) + '@';
+	edid_vendor[1] = (((edid->mfg_id[0] & 0x3) << 3) |
+			  ((edid->mfg_id[1] & 0xe0) >> 5)) +
+			 '@';
+	edid_vendor[2] = (edid->mfg_id[1] & 0x1f) + '@';
+
+	edid_prod_id |= EDID_PRODUCT_ID(edid);
+
+	dp->sink.edid_product = edid_prod_id;
+	dp->sink.edid_serial = edid->serial;
+
+	drm_edid_get_monitor_name(edid, dp->sink.sink_name, SINK_NAME_LEN);
+
+	dp_info(dp, "Sink Manufacturer: %s\n", dp->sink.edid_manufacturer);
+	dp_info(dp, "Sink Product: %x\n", dp->sink.edid_product);
+	dp_info(dp, "Sink Serial: %x\n", dp->sink.edid_serial);
+	dp_info(dp, "Sink Name: %s\n", dp->sink.sink_name);
+}
+
+static void dp_clean_drm_modes(struct dp_device *dp)
+{
+	struct drm_display_mode *mode, *t;
+	struct drm_connector *connector = &dp->connector;
+
+	memset(&dp->cur_mode, 0, sizeof(struct drm_display_mode));
+	memset(&dp->pref_mode, 0, sizeof(struct drm_display_mode));
+
+	list_for_each_entry_safe (mode, t, &connector->probed_modes, head) {
+		list_del(&mode->head);
+		drm_mode_destroy(connector->dev, mode);
+	}
+}
+
+static const struct drm_display_mode mode_vga[1] = {
+	/* 1 - 640x480@60Hz 4:3 */
+	{
+		DRM_MODE("640x480", DRM_MODE_TYPE_DRIVER, 25175, 640, 656, 752,
+			 800, 0, 480, 490, 492, 525, 0,
+			 DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC),
+		.picture_aspect_ratio = HDMI_PICTURE_ASPECT_4_3,
+	}
+};
+
+static void dp_mode_set_fail_safe(struct dp_device *dp)
+{
+	dp->hw_config.bpc = BPC_6;
+	drm_mode_copy(&dp->cur_mode, mode_vga);
+	dp->fail_safe = true;
+}
+
+static bool dp_find_prefer_mode(struct dp_device *dp)
+{
+	struct drm_display_mode *mode, *t;
+	struct drm_connector *connector = &dp->connector;
+	bool found = false;
+
+	list_for_each_entry_safe (mode, t, &connector->probed_modes, head) {
+		if ((mode->type & DRM_MODE_TYPE_PREFERRED)) {
+			dp_info(dp,
+				"pref: %s@%d, type: %d, stat: %d, ratio: %d\n",
+				mode->name, drm_mode_vrefresh(mode), mode->type,
+				mode->status, mode->picture_aspect_ratio);
+			drm_mode_copy(&dp->pref_mode, mode);
+			drm_mode_copy(&dp->cur_mode, mode);
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		dp_info(dp, "there are no valid mode, fail-safe\n");
+		dp_mode_set_fail_safe(dp);
+	}
+
+	return found;
+}
+
+static void dp_on_by_hpd_plug(struct dp_device *dp)
+{
+	struct drm_connector *connector = &dp->connector;
+	struct drm_device *dev = connector->dev;
+
+	if (dp->bist_used) {
+		/* Parse EDID for BIST video */
+		struct edid *edid =
+			drm_do_get_edid(connector, dp_get_edid_block, dp);
+		int num_modes;
+
+		if (edid) {
+			dp_parse_edid(dp, edid);
+
+			mutex_lock(&dev->mode_config.mutex);
+			dp_clean_drm_modes(dp);
+			num_modes = drm_add_edid_modes(connector, edid);
+			mutex_unlock(&dev->mode_config.mutex);
+			kfree(edid);
+
+			if (num_modes)
+				dp_find_prefer_mode(dp);
+		}
+
+		dp->state = DP_STATE_ON;
+		dp_info(dp, "%s: DP State changed to ON\n", __func__);
+
+		/* Enable BIST video */
+		dp_enable(&dp->encoder);
+	}
+}
+
+static void dp_off_by_hpd_plug(struct dp_device *dp)
+{
+	if (dp->state == DP_STATE_RUN) {
+		/* Disable video */
+		dp_disable(&dp->encoder);
+	}
 }
 
 /* Delayed Works */
@@ -711,6 +980,8 @@ static void dp_work_hpd_plug(struct work_struct *work)
 			dp_err(dp, "failed to DP Link Up\n");
 			goto HPD_FAIL;
 		}
+
+		dp_on_by_hpd_plug(dp);
 
 		mutex_unlock(&dp->hpd_lock);
 	}
@@ -743,6 +1014,7 @@ static void dp_work_hpd_unplug(struct work_struct *work)
 	if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
 		mutex_lock(&dp->hpd_lock);
 
+		dp_off_by_hpd_plug(dp);
 		dp_link_down(dp);
 
 		/* PHY power off */
@@ -752,6 +1024,9 @@ static void dp_work_hpd_unplug(struct work_struct *work)
 		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
 		pm_relax(dp->dev);
+
+		dp->state = DP_STATE_INIT;
+		dp_info(dp, "%s: DP State changed to INIT\n", __func__);
 
 		mutex_unlock(&dp->hpd_lock);
 	}
@@ -1132,6 +1407,7 @@ static int dp_probe(struct platform_device *pdev)
 
 	dma_set_mask(dev, DMA_BIT_MASK(32));
 
+	mutex_init(&dp->cmd_lock);
 	mutex_init(&dp->hpd_lock);
 	mutex_init(&dp->hpd_state_lock);
 	mutex_init(&dp->training_lock);
@@ -1170,6 +1446,7 @@ static int dp_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
+	mutex_destroy(&dp->cmd_lock);
 	mutex_destroy(&dp->hpd_lock);
 	mutex_destroy(&dp->hpd_state_lock);
 	mutex_destroy(&dp->training_lock);
