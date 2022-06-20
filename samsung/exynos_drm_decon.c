@@ -687,24 +687,33 @@ static void decon_arm_event_locked(struct exynos_drm_crtc *exynos_crtc)
 	decon->event = event;
 }
 
-#define RESERVED_TIME_FOR_KICKOFF_NS		3500000
+#define VSYNC_PERIOD_VARIANCE_NS		2000000
 static void decon_wait_earliest_process_time(
+		const struct exynos_drm_crtc_state *old_exynos_crtc_state,
 		const struct exynos_drm_crtc_state *new_exynos_crtc_state)
 {
+	const struct drm_crtc_state *old_crtc_state = &old_exynos_crtc_state->base;
+	const struct drm_crtc_state *new_crtc_state = &new_exynos_crtc_state->base;
+	int32_t vrefresh, vsync_period_ns;
 	ktime_t earliest_process_time, now;
 
+	vrefresh = drm_mode_vrefresh(&old_crtc_state->mode);
+	if (vrefresh == 0) {
+		/* decon just be enabled */
+		vrefresh = drm_mode_vrefresh(&new_crtc_state->mode);
+	}
+	vsync_period_ns = mult_frac(1000, 1000 * 1000, vrefresh);
 	if (ktime_compare(new_exynos_crtc_state->expected_present_time,
-				RESERVED_TIME_FOR_KICKOFF_NS) <= 0)
+				vsync_period_ns - VSYNC_PERIOD_VARIANCE_NS) <= 0) {
 		return;
+	}
 
 	earliest_process_time = ktime_sub_ns(new_exynos_crtc_state->expected_present_time,
-					RESERVED_TIME_FOR_KICKOFF_NS);
+					vsync_period_ns - VSYNC_PERIOD_VARIANCE_NS);
 	now = ktime_get();
 
 	if (ktime_after(earliest_process_time, now)) {
-		const struct drm_crtc_state *crtc_state = &new_exynos_crtc_state->base;
-		int32_t vrefresh = drm_mode_vrefresh(&crtc_state->mode);
-		int32_t max_delay_us = mult_frac(10000, 1000, vrefresh);  // 10 * vsync period
+		int32_t max_delay_us = (10 * vsync_period_ns) / 1000;
 		int32_t delay_until_process;
 
 		DPU_ATRACE_BEGIN("wait for earliest present time");
@@ -807,7 +816,7 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 	if (new_exynos_crtc_state->seamless_mode_changed)
 		decon_seamless_mode_set(exynos_crtc, old_crtc_state);
 
-	decon_wait_earliest_process_time(new_exynos_crtc_state);
+	decon_wait_earliest_process_time(old_exynos_crtc_state, new_exynos_crtc_state);
 
 	spin_lock_irqsave(&decon->slock, flags);
 	decon_reg_start(decon->id, &decon->config);

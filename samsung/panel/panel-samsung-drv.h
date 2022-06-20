@@ -601,6 +601,7 @@ struct exynos_panel {
 	ktime_t last_commit_ts;
 	ktime_t last_mode_set_ts;
 	ktime_t last_self_refresh_active_ts;
+	ktime_t last_panel_idle_set_ts;
 	struct delayed_work idle_work;
 
 	/**

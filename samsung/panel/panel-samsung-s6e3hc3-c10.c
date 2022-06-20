@@ -525,6 +525,9 @@ static void s6e3hc3_c10_panel_idle_notification(struct exynos_panel *ctx,
 	char *envp[] = { event_string, NULL };
 	struct drm_device *dev = ctx->bridge.dev;
 
+	if (vrefresh == idle_te_vrefresh)
+		return;
+
 	if (!dev) {
 		dev_warn(ctx->dev, "%s: drm_device is null\n", __func__);
 	} else {
