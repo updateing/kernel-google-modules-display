@@ -33,6 +33,11 @@ static inline struct dp_device *encoder_to_dp(struct drm_encoder *e)
 	return container_of(e, struct dp_device, encoder);
 }
 
+static inline struct dp_device *connector_to_dp(struct drm_connector *c)
+{
+	return container_of(c, struct dp_device, connector);
+}
+
 static inline struct dp_device *dp_aux_to_dp(struct drm_dp_aux *a)
 {
 	return container_of(a, struct dp_device, dp_aux);
@@ -942,14 +947,66 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 
 		/* Enable BIST video */
 		dp_enable(&dp->encoder);
+	} else {
+		dp->state = DP_STATE_ON;
+		dp_info(dp, "%s: DP State changed to ON\n", __func__);
+
+		if (dev) {
+			connector->status = connector_status_connected;
+			dp_info(dp,
+				"call drm_kms_helper_hotplug_event (connected)\n");
+			drm_kms_helper_hotplug_event(dev);
+		}
 	}
+}
+
+static int dp_wait_state_change(struct dp_device *dp, int max_wait_time,
+				enum dp_state state)
+{
+	int ret = 0;
+	int wait_cnt = max_wait_time;
+
+	do {
+		wait_cnt--;
+		usleep_range(1000, 1030);
+	} while ((state != dp->state) && (wait_cnt > 0));
+
+	dp_info(dp, "dp_wait_state_change: time = %d ms, state = %d\n",
+		max_wait_time - wait_cnt, state);
+
+	if (wait_cnt == 0) {
+		dp_err(dp, "dp_wait_state_change: timeout\n");
+		ret = -ETIME;
+	} else
+		ret = wait_cnt;
+
+	return ret;
 }
 
 static void dp_off_by_hpd_plug(struct dp_device *dp)
 {
-	if (dp->state == DP_STATE_RUN) {
-		/* Disable video */
-		dp_disable(&dp->encoder);
+	struct drm_connector *connector = &dp->connector;
+	struct drm_device *dev = connector->dev;
+	int timeout = 0;
+
+	if (dp->state >= DP_STATE_ON) {
+		if (!dp->bist_used) {
+			if (dev) {
+				connector->status =
+					connector_status_disconnected;
+				dp_info(dp,
+					"call drm_kms_helper_hotplug_event (disconnected)\n");
+				drm_kms_helper_hotplug_event(dev);
+			}
+
+			// Wait DRM/KMS Stop
+			timeout = dp_wait_state_change(dp, 3000, DP_STATE_ON);
+			if (timeout == -ETIME) {
+				dp_err(dp, "dp_wait_state_change: timeout for disable\n");
+				dp_disable(&dp->encoder);
+			}
+		} else
+			dp_disable(&dp->encoder); /* for bist video disable */
 	}
 }
 
@@ -1201,7 +1258,11 @@ static const struct drm_connector_funcs dp_connector_funcs = {
 static int dp_detect(struct drm_connector *connector,
 		     struct drm_modeset_acquire_ctx *ctx, bool force)
 {
-	return connector_status_unknown;
+	struct dp_device *dp = connector_to_dp(connector);
+
+	dp_info(dp, "%s: Connector Status = %d\n", __func__, connector->status);
+
+	return (int)connector->status;
 }
 
 static int dp_get_modes(struct drm_connector *connector)
