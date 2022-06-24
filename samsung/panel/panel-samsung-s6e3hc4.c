@@ -1474,6 +1474,7 @@ const struct exynos_panel_desc samsung_s6e3hc4 = {
 	.binned_lp = s6e3hc4_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(s6e3hc4_binned_lp),
 	.is_panel_idle_supported = true,
+	.vrr_switch_duration = 1,
 	.panel_func = &s6e3hc4_drm_funcs,
 	.exynos_panel_func = &s6e3hc4_exynos_funcs,
 };
