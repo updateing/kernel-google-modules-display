@@ -802,7 +802,8 @@ static void dp_enable(struct drm_encoder *encoder)
 		dp->hw_config.bist_type = COLOR_BAR;
 
 		dp_hw_set_bist_video_config(&dp->hw_config);
-	}
+	} else
+		dp_hw_set_video_config(&dp->hw_config);
 
 	dp_set_avi_infoframe(dp);
 	dp_set_spd_infoframe();
@@ -1223,6 +1224,15 @@ static void dp_atomic_mode_set(struct drm_encoder *encoder,
 			       struct drm_crtc_state *crtc_state,
 			       struct drm_connector_state *conn_state)
 {
+	struct dp_device *dp = encoder_to_dp(encoder);
+	struct drm_display_mode *adjusted_mode = &crtc_state->adjusted_mode;
+
+	dp_info(dp, "Mode(" DRM_MODE_FMT ") is requested\n",
+		DRM_MODE_ARG(adjusted_mode));
+
+	if (!drm_mode_equal(&dp->cur_mode, adjusted_mode)) {
+		drm_mode_copy(&dp->cur_mode, adjusted_mode);
+	}
 }
 
 static int dp_atomic_check(struct drm_encoder *encoder,
@@ -1267,7 +1277,29 @@ static int dp_detect(struct drm_connector *connector,
 
 static int dp_get_modes(struct drm_connector *connector)
 {
-	return 0;
+	struct dp_device *dp = connector_to_dp(connector);
+	struct edid *edid;
+	int num_modes;
+
+	if (dp->state == DP_STATE_INIT) {
+		dp_warn(dp, "%s: DP is not ON\n", __func__);
+		return 0;
+	}
+
+	edid = drm_do_get_edid(connector, dp_get_edid_block, dp);
+	if (!edid) {
+		dp_err(dp, "failed to read EDID\n");
+		return 0;
+	}
+
+	dp_clean_drm_modes(dp);
+	drm_connector_update_edid_property(connector, edid);
+	num_modes = drm_add_edid_modes(connector, edid);
+	if (num_modes)
+		dp_find_prefer_mode(dp);
+	kfree(edid);
+
+	return num_modes;
 }
 
 static const struct drm_connector_helper_funcs dp_connector_helper_funcs = {

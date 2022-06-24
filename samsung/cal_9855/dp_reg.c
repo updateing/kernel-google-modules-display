@@ -406,6 +406,25 @@ static void dp_hw_set_initial_common_funcs(void)
 }
 
 // System SST1 Function Enable Configuration
+static int dp_reg_wait_sst1_longhop_power_on(void)
+{
+	u32 val;
+
+	if (readl_poll_timeout_atomic(
+		    regs_dp[REGS_LINK][SST1].regs + SYSTEM_SST1_FUNCTION_ENABLE,
+		    val, SST1_LH_PWR_ON_STATUS_GET(val), 10, 200)) {
+		cal_log_err(0, "%s is timeout.\n", __func__);
+		return -ETIME;
+	} else
+		return 0;
+}
+
+static void dp_reg_set_sst1_longhop_power(u32 on)
+{
+	dp_write_mask(SST1, SYSTEM_SST1_FUNCTION_ENABLE, SST1_LH_PWR_ON_SET(on),
+		      SST1_LH_PWR_ON_MASK);
+}
+
 static void dp_reg_set_sst1_video_func_en(u32 en)
 {
 	dp_write_mask(SST1, SYSTEM_SST1_FUNCTION_ENABLE,
@@ -1326,12 +1345,17 @@ void dp_hw_deinit(void)
 
 void dp_hw_start(void)
 {
+	dp_reg_set_sst1_longhop_power(1);
+	if (dp_reg_wait_sst1_longhop_power_on())
+		cal_log_err(0, "SST LongHop Power is not ON\n");
+
 	dp_hw_set_video_interrupt(1);
 	dp_reg_set_video_en(1);
 }
 
 void dp_hw_stop(void)
 {
+	dp_reg_set_sst1_longhop_power(0);
 	dp_hw_set_video_interrupt(0);
 	dp_reg_set_video_en(0);
 }
