@@ -177,6 +177,12 @@ struct exynos_drm_connector_state {
 	 *			go into idle after some idle period.
 	 */
 	bool panel_idle_support;
+
+	/*
+	 * @blanked_mode: Display should go into forced blanked mode, where power is on but
+	 *                nothing is being displayed on screen.
+	 */
+	bool blanked_mode;
 };
 
 #define to_exynos_connector_state(connector_state) \

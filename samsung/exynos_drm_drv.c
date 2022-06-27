@@ -28,6 +28,7 @@
 #include <drm/exynos_drm.h>
 
 #include "exynos_drm_crtc.h"
+#include "exynos_drm_connector.h"
 #include "exynos_drm_decon.h"
 #include "exynos_drm_drv.h"
 #include "exynos_drm_dsim.h"
@@ -711,6 +712,12 @@ int exynos_atomic_enter_tui(void)
 		    (conn->connector_type != DRM_MODE_CONNECTOR_WRITEBACK)) {
 			pr_warn("%s: %s doesn't support self refresh\n", __func__, conn->name);
 			goto err;
+		}
+		if (is_exynos_drm_connector(conn)) {
+			struct exynos_drm_connector_state *exynos_conn_state =
+				to_exynos_connector_state(conn_state);
+
+			exynos_conn_state->blanked_mode = true;
 		}
 	}
 

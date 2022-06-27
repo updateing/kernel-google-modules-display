@@ -3246,10 +3246,12 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	const struct drm_connector_state *conn_state = ctx->exynos_connector.base.state;
+	struct exynos_drm_connector_state *exynos_conn_state =
+		to_exynos_connector_state(conn_state);
 	struct drm_crtc_state *crtc_state = !conn_state->crtc ? NULL : conn_state->crtc->state;
 	const bool self_refresh_active = crtc_state && crtc_state->self_refresh_active;
 
-	if (self_refresh_active) {
+	if (self_refresh_active && !exynos_conn_state->blanked_mode) {
 		mutex_lock(&ctx->mode_lock);
 		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
 
@@ -3257,11 +3259,12 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
-		if (crtc_state && crtc_state->mode_changed &&
+		if (exynos_conn_state->blanked_mode) {
+			/* blanked mode takes precedence over normal modeset */
+			ctx->panel_state = PANEL_STATE_BLANK;
+		} else if (crtc_state && crtc_state->mode_changed &&
 		    drm_atomic_crtc_effectively_active(crtc_state)) {
 			if (ctx->desc->delay_dsc_reg_init_us) {
-				struct exynos_drm_connector_state *exynos_conn_state =
-							to_exynos_connector_state(conn_state);
 				struct exynos_display_mode *exynos_mode =
 							&exynos_conn_state->exynos_mode;
 
@@ -3271,6 +3274,7 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 
 			ctx->panel_state = PANEL_STATE_MODESET;
 		} else if (ctx->force_power_on) {
+			/* force blank state instead of power off */
 			ctx->panel_state = PANEL_STATE_BLANK;
 		} else {
 			ctx->panel_state = PANEL_STATE_OFF;
