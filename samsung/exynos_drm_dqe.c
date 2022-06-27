@@ -255,6 +255,7 @@ exynos_regamma_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 	struct decon_device *decon = dqe->decon;
 	struct drm_printer p = drm_info_printer(decon->dev);
 	u32 id = decon->id;
+	u32 regamma_id = 0;
 
 	pr_debug("en(%d) dirty(%d)\n", info->force_en, info->dirty);
 
@@ -262,7 +263,7 @@ exynos_regamma_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 		state->regamma_lut = regamma->force_lut;
 
 	if (dqe->state.regamma_lut != state->regamma_lut || info->dirty) {
-		dqe_reg_set_regamma_lut(id, state->regamma_lut);
+		dqe_reg_set_regamma_lut(id, regamma_id, state->regamma_lut);
 		dqe->state.regamma_lut = state->regamma_lut;
 		info->dirty = false;
 	}

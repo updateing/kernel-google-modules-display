@@ -21,10 +21,11 @@
 
 #ifdef CONFIG_SOC_ZUMA
 #define DEGAMMA_LUT_SIZE		66
+#define REGAMMA_LUT_SIZE		66
 #else
 #define DEGAMMA_LUT_SIZE		65
-#endif
 #define REGAMMA_LUT_SIZE		65
+#endif
 #define CGC_LUT_SIZE			4913
 #define HIST_BIN_SIZE			256
 #define LPD_ATC_REG_CNT			45
@@ -220,7 +221,7 @@ void dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 void dqe_reg_init(u32 dqe_id, u32 width, u32 height);
 void dqe_reg_set_degamma_lut(u32 dqe_id, const struct drm_color_lut *lut);
 void dqe_reg_set_cgc_lut(u32 dqe_id, const struct cgc_lut *lut);
-void dqe_reg_set_regamma_lut(u32 dqe_id, const struct drm_color_lut *lut);
+void dqe_reg_set_regamma_lut(u32 dqe_id, u32 regamma_id, const struct drm_color_lut *lut);
 void dqe_reg_set_cgc_dither(u32 dqe_id, struct dither_config *config);
 void dqe_reg_set_disp_dither(u32 dqe_id, struct dither_config *config);
 void dqe_reg_set_linear_matrix(u32 dqe_id, const struct exynos_matrix *lm);

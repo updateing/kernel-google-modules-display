@@ -497,7 +497,11 @@
 
 /*----------------------[DEGAMMA_CON]----------------------------------------*/
 
-#define DQE_REGAMMA_CON		(0x2000)
+#define DQE_REGAMMA0_CON		(0x2000)
+#define DQE_REGAMMA1_CON		(0x4800)
+#define DQE_REGAMMA2_CON		(0x4C00)
+#define DQE_REGAMMA_BASE(id)	((id) ? (id == 1) ? DQE_REGAMMA1_CON : \
+							DQE_REGAMMA2_CON : DQE_REGAMMA0_CON)
 #define REGAMMA_EN			(0x1 << 0)
 
 /*
@@ -506,11 +510,16 @@
  * REGAMMALUT_B (0~32) : 0x210C ~ 0x218C
  * _n: [0, 32] / _x: [0, 64]
  */
-#define DQE_REGAMMALUT(_n)		(0x2004 + ((_n) * 0x4))
-#define DQE_REGAMMALUT_R(_n)		(0x2004 + ((_n) * 0x4))
-#define DQE_REGAMMALUT_G(_n)		(0x2088 + ((_n) * 0x4))
-#define DQE_REGAMMALUT_B(_n)		(0x210C + ((_n) * 0x4))
-#define DQE_REGAMMALUT_REG_CNT		(33)
+#define DQE_REGAMMALUT(id, _n)		((DQE_REGAMMA_BASE(id) + 0x004) + ((_n) * 0x4))
+#define DQE_REGAMMA_R_POSX(id, _n)      ((DQE_REGAMMA_BASE(id) + 0x004) + ((_n) * 0x4))
+#define DQE_REGAMMA_R_POSY(id, _n)      ((DQE_REGAMMA_BASE(id) + 0x048) + ((_n) * 0x4))
+#define DQE_REGAMMA_G_POSX(id, _n)      ((DQE_REGAMMA_BASE(id) + 0x08C) + ((_n) * 0x4))
+#define DQE_REGAMMA_G_POSY(id, _n)      ((DQE_REGAMMA_BASE(id) + 0x0D0) + ((_n) * 0x4))
+#define DQE_REGAMMA_B_POSX(id, _n)      ((DQE_REGAMMA_BASE(id) + 0x114) + ((_n) * 0x4))
+#define DQE_REGAMMA_B_POSY(id, _n)      ((DQE_REGAMMA_BASE(id) + 0x158) + ((_n) * 0x4))
+
+#define DQE_REGAMMA_POS_LUT_SIZE		(33) // POSX/POSY
+#define DQE_REGAMMALUT_REG_CNT		(17) // POSX/POSY regs
 
 #define REGAMMA_LUT_H(_v)		((_v) << 16)
 #define REGAMMA_LUT_H_MASK		(0x1FFF << 16)

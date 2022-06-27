@@ -131,7 +131,7 @@ void dqe_reg_set_cgc_lut(u32 dqe_id, const struct cgc_lut *lut)
 	cal_log_debug(0, "%s -\n", __func__);
 }
 
-void dqe_reg_set_regamma_lut(u32 dqe_id, const struct drm_color_lut *lut)
+void dqe_reg_set_regamma_lut(u32 dqe_id, u32 regamma_id, const struct drm_color_lut *lut)
 {
 	enum dqe_regamma_elements {
 		REGAMMA_RED = 0,
