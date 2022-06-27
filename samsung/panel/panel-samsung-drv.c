@@ -3202,13 +3202,14 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_atomic_state *state = new_crtc_state->state;
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
-	int ret;
+	int ret = 0;
 
 	if (unlikely(!new_crtc_state))
 		return 0;
 
 	if (funcs && funcs->atomic_check) {
-		ret = funcs->atomic_check(ctx, state);
+		/* FIXME */
+		//ret = funcs->atomic_check(ctx, state);
 		if (ret)
 			return ret;
 	}
