@@ -413,16 +413,14 @@
 #define GAMMA_MATRIX_OFFSET_2(_v)	((_v) << 0)
 
 /*----------------------[DEGAMMA_CON]----------------------------------------*/
+#define DQE_DEGAMMA_CON			(0x1000)
+#define DEGAMMA_EN(_v)			(((_v) & 0x1) << 0)
+#define DEGAMMA_EN_MASK			(0x1 << 0)
 
-#define DQE_DEGAMMA_CON		(0x1000)
-#define DEGAMMA_EN			(0x1 << 0)
+#define DQE_DEGAMMA_POSX(_n)		(0x1004 + ((_n) * 0x4))
+#define DQE_DEGAMMA_POSY(_n)		(0x1048 + ((_n) * 0x4))
 
-/*
- * DEGAMMALUT (0~32) : 0x1004 ~ 0x1084
- * _n: [0, 32] / _x: [0, 64]
- */
 #define DQE_DEGAMMALUT(_n)		(0x1004 + ((_n) * 0x4))
-#define DQE_DEGAMMALUT_REG_CNT		(33)
 
 #define DEGAMMA_LUT_H(_v)		((_v) << 16)
 #define DEGAMMA_LUT_H_MASK		(0x1FFF << 16)
@@ -430,6 +428,9 @@
 #define DEGAMMA_LUT_L_MASK		(0x1FFF << 0)
 #define DEGAMMA_LUT(_x, _v)		((_v) << (0 + (16 * ((_x) & 0x1))))
 #define DEGAMMA_LUT_MASK(_x)		(0x1FFF << (0 + (16 * ((_x) & 0x1))))
+
+#define DQE_DEGAMMALUT_POS_SIZE		33
+#define DQE_DEGAMMALUT_REG_CNT		17
 
 /*----------------------[LINEAR_MATRIX]--------------------------------------*/
 

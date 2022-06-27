@@ -103,7 +103,7 @@ void dqe_reg_set_degamma_lut(u32 dqe_id, const struct drm_color_lut *lut)
 	for (i = 0; i < DEGAMMA_LUT_SIZE; i++)
 		tmp_lut[i] = lut[i].red;
 
-	ret = cal_pack_lut_into_reg_pairs(tmp_lut, DEGAMMA_LUT_SIZE,
+	ret = cal_pack_lut_into_reg_pairs(tmp_lut, DQE_DEGAMMALUT_POS_SIZE,
 		DEGAMMA_LUT_L_MASK, DEGAMMA_LUT_H_MASK, regs,
 		DQE_DEGAMMALUT_REG_CNT);
 	if(ret) {
@@ -112,10 +112,22 @@ void dqe_reg_set_degamma_lut(u32 dqe_id, const struct drm_color_lut *lut)
 	}
 
 	for (i = 0; i < DQE_DEGAMMALUT_REG_CNT; i++) {
-		degamma_write_relaxed(dqe_id, DQE_DEGAMMALUT(i), regs[i]);
+		degamma_write_relaxed(dqe_id, DQE_DEGAMMA_POSX(i), regs[i]);
 		cal_log_debug(0, "[%d]: 0x%x\n", i, regs[i]);
 	}
-	degamma_write(dqe_id, DQE_DEGAMMA_CON, DEGAMMA_EN);
+	ret = cal_pack_lut_into_reg_pairs(tmp_lut + 33, DQE_DEGAMMALUT_POS_SIZE,
+		DEGAMMA_LUT_L_MASK, DEGAMMA_LUT_H_MASK, regs,
+		DQE_DEGAMMALUT_REG_CNT);
+	if (ret) {
+		cal_log_err(0, "Failed to pack degamma lut\n");
+		return;
+	}
+
+	for (i = 0; i < DQE_DEGAMMALUT_REG_CNT; i++) {
+		degamma_write_relaxed(dqe_id, DQE_DEGAMMA_POSY(i), regs[i]);
+		cal_log_debug(0, "[%d]: 0x%x\n", i, regs[i]);
+	}
+	degamma_write(dqe_id, DQE_DEGAMMA_CON, DEGAMMA_EN(1));
 
 	cal_log_debug(0, "%s -\n", __func__);
 }
@@ -335,7 +347,10 @@ void dqe_reg_print_degamma_lut(u32 dqe_id, struct drm_printer *p)
 	if (!val)
 		return;
 
-	dqe_reg_print_lut(dqe_id, DQE_DEGAMMALUT(0), DEGAMMA_LUT_SIZE, offset, p);
+	cal_drm_printf(p, 0, "DQE: degamma POSX\n");
+	dqe_reg_print_lut(dqe_id, DQE_DEGAMMA_POSX(0), DQE_DEGAMMALUT_POS_SIZE, offset, p);
+	cal_drm_printf(p, 0, "DQE: degamma POSY\n");
+	dqe_reg_print_lut(dqe_id, DQE_DEGAMMA_POSY(0), DQE_DEGAMMALUT_POS_SIZE, offset, p);
 }
 
 void dqe_reg_print_cgc_lut(u32 dqe_id, u32 count, struct drm_printer *p)

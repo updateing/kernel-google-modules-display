@@ -19,7 +19,11 @@
 #include <drm/drm_print.h>
 #include <cal_config.h>
 
+#ifdef CONFIG_SOC_ZUMA
+#define DEGAMMA_LUT_SIZE		66
+#else
 #define DEGAMMA_LUT_SIZE		65
+#endif
 #define REGAMMA_LUT_SIZE		65
 #define CGC_LUT_SIZE			4913
 #define HIST_BIN_SIZE			256
