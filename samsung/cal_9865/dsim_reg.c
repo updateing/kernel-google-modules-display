@@ -89,6 +89,7 @@ static struct cal_regs_desc regs_desc[REGS_DSIM_TYPE_MAX][MAX_DSI_CNT];
 #define PLL_LOCK_CNT_MARGIN_RATIO	0	/* 10% ~ 20% */
 #define PLL_LOCK_CNT_MARGIN		(PLL_LOCK_CNT_MUL *	\
 					PLL_LOCK_CNT_MARGIN_RATIO / 100)
+#define SEL_VCO_REF_CLOCK		(3000)
 
 static const u32 DSIM_PHY_BIAS_CON_VAL[] = {
 	0x00000010,
@@ -745,12 +746,12 @@ static int dsim_reg_enable_lane_phy(u32 id, u32 lane, bool en)
 
 	/* (1.1) clock lane on|off */
 	reg_id = DSIM_PHY_MC_GNR_CON0;
-	dsim_phy_write(id, reg_id, val);
+	dsim_phy_write_mask(id, reg_id, val, DSIM_PHY_PHY_ENABLE);
 
 	/* (1.2) data lane on|off */
 	for (i = 0; i < lane_cnt; i++) {
 		reg_id = DSIM_PHY_MD_GNR_CON0(i);
-		dsim_phy_write(id, reg_id, val);
+		dsim_phy_write_mask(id, reg_id, val, DSIM_PHY_PHY_ENABLE);
 	}
 
 	/*
@@ -1786,6 +1787,13 @@ static int dsim_reg_set_clocks(u32 id, const struct dsim_reg_config *config,
 
 		/* set PLL ctrl : default value */
 		dsim_reg_set_pll_con(id, DSIM_PHY_PLL_CON_VAL);
+		if ((clks->hs_clk << pll.s) < SEL_VCO_REF_CLOCK) {
+			dsim_phy_write_mask(id, DSIM_PHY_PLL_CON5,
+					    DSIM_PHY_DITHER_SEL_VCO(1),
+					    DSIM_PHY_DITHER_SEL_VCO_MASK);
+			cal_log_debug(id, "SEL_VCO = 1\n");
+		} else
+			cal_log_debug(id, "SEL_VCO = 0\n");
 
 		if (clks->hs_clk < 1500)
 			hsmode = 1;

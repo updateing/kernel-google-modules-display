@@ -525,6 +525,8 @@
 /* PLL_CON5 */
 #define DSIM_PHY_DITHER_ICP(_x)			(((_x) & 0x3) << 4)
 #define DSIM_PHY_DITHER_ICP_MASK		(0x3 << 4)
+#define DSIM_PHY_DITHER_SEL_VCO(_x)		((_x) << 2)
+#define DSIM_PHY_DITHER_SEL_VCO_MASK		(0x1 << 2)
 #define DSIM_PHY_DITHER_SEL_PF(_x)		(((_x) & 0x3) << 0)
 #define DSIM_PHY_DITHER_SEL_PF_MASK		(0x3 << 0)
 
