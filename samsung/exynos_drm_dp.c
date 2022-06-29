@@ -15,6 +15,7 @@
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
+#include <linux/irq.h>
 #include <video/videomode.h>
 
 #include <drm/drm_probe_helper.h>
@@ -808,6 +809,7 @@ static void dp_enable(struct drm_encoder *encoder)
 	dp_set_avi_infoframe(dp);
 	dp_set_spd_infoframe();
 
+	enable_irq(dp->res.irq);
 	dp_hw_start();
 	dp_info(dp, "enabled DP as cur_mode = %s@%d\n", dp->cur_mode.name,
 		drm_mode_vrefresh(&dp->cur_mode));
@@ -825,6 +827,7 @@ static void dp_disable(struct drm_encoder *encoder)
 	mutex_lock(&dp->cmd_lock);
 
 	if (dp->state == DP_STATE_RUN) {
+		disable_irq(dp->res.irq);
 		dp_hw_stop();
 		dp_info(dp, "disabled DP\n");
 
@@ -1411,6 +1414,26 @@ static int dp_parse_dt(struct dp_device *dp, struct device *dev)
 
 static irqreturn_t dp_irq_handler(int irq, void *dev_data)
 {
+	struct dp_device *dp = dev_data;
+	bool common = false, str = false, pcs = false;
+	unsigned int intr_val = 0;
+
+	dp_hw_get_intr_source(&common, &str, &pcs);
+
+	if (common) {
+		intr_val = dp_hw_get_and_clear_common_intr();
+		dp_debug(dp, "Common Intr = 0x%08X\n", intr_val);
+	}
+
+	if (str) {
+		intr_val = dp_hw_get_and_clear_video_intr();
+		dp_debug(dp, "Video Intr = 0x%08X\n", intr_val);
+	}
+
+	if (pcs) {
+		dp_debug(dp, "triggered intr from PCS block\n");
+	}
+
 	return IRQ_HANDLED;
 }
 

@@ -469,6 +469,25 @@ static void dp_reg_set_osc_clk_div(unsigned int mhz)
 }
 
 /* System Interrupt Registers */
+static void dp_reg_get_interrupt_source(bool *common, bool *str1, bool *pcs)
+{
+	u32 val = dp_read(SST1, SYSTEM_INTERRUPT_REQUEST);
+
+	*common = IRQ_COMMON_GET(val) ? true : false;
+	*str1 = IRQ_STR1_GET(val) ? true : false;
+	*pcs = IRQ_PCS_GET(val) ? true : false;
+}
+
+static u32 dp_reg_get_common_interrupt(void)
+{
+	return dp_read(SST1, SYSTEM_IRQ_COMMON_STATUS);
+}
+
+static void dp_reg_set_common_interrupt_clear(u32 val)
+{
+	dp_write(SST1, SYSTEM_IRQ_COMMON_STATUS, val);
+}
+
 static void dp_reg_set_common_interrupt_mask(u32 en, u32 intr_mask)
 {
 	if (en)
@@ -704,6 +723,16 @@ static void dp_reg_set_enhanced_mode(u32 en)
 }
 
 // SST1 Interrupts
+static u32 dp_reg_get_video_interrupt(void)
+{
+	return dp_read(SST1, SST1_INTERRUPT_STATUS_SET0);
+}
+
+static void dp_reg_set_video_interrupt_clear(u32 val)
+{
+	dp_write(SST1, SST1_INTERRUPT_STATUS_SET0, val);
+}
+
 static void dp_reg_set_video_interrupt_mask(u32 en, u32 intr_mask)
 {
 	if (en)
@@ -1401,6 +1430,31 @@ int dp_hw_set_bist_video_config(struct dp_hw_config *hw_config)
 	}
 
 	return 0;
+}
+
+void dp_hw_get_intr_source(bool *common, bool *str, bool *pcs)
+{
+	dp_reg_get_interrupt_source(common, str, pcs);
+}
+
+u32 dp_hw_get_and_clear_common_intr(void)
+{
+	u32 val = 0;
+
+	val = dp_reg_get_common_interrupt();
+	dp_reg_set_common_interrupt_clear(val);
+
+	return val;
+}
+
+u32 dp_hw_get_and_clear_video_intr(void)
+{
+	u32 val = 0;
+
+	val = dp_reg_get_video_interrupt();
+	dp_reg_set_video_interrupt_clear(val);
+
+	return val;
 }
 
 void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe)

@@ -229,6 +229,10 @@ void dp_hw_stop(void);
 void dp_hw_set_video_config(struct dp_hw_config *hw_config);
 int  dp_hw_set_bist_video_config(struct dp_hw_config *hw_config);
 
+void dp_hw_get_intr_source(bool *common, bool *str, bool *pcs);
+u32  dp_hw_get_and_clear_common_intr(void);
+u32  dp_hw_get_and_clear_video_intr(void);
+
 void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe);
 void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe);
 
