@@ -181,16 +181,24 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 			(decon->config.out_bpc == 8)) {
 		new_exynos_state->in_bpc = 8;
 	} else if (new_exynos_state->force_bpc == EXYNOS_BPC_MODE_UNSPECIFIED) {
-		max_bpc = 8; /* initial bpc value */
-		drm_atomic_crtc_state_for_each_plane_state(plane, plane_state, crtc_state) {
-			const struct drm_format_info *info;
-			const struct dpu_fmt *fmt_info;
+		/*
+		 * When DQE is enabled but force_bpc is not specified,
+		 * CRTC's input BPC should be binded as output BPC or Plane's format.
+		 */
+		if (decon->config.out_bpc == 10) {
+			max_bpc = 10;
+		} else {
+			max_bpc = 8; /* initial bpc value */
+			drm_atomic_crtc_state_for_each_plane_state(plane, plane_state, crtc_state) {
+				const struct drm_format_info *info;
+				const struct dpu_fmt *fmt_info;
 
-			info = plane_state->fb->format;
-			fmt_info = dpu_find_fmt_info(info->format);
-			if (fmt_info->bpc == 10) {
-				max_bpc = 10;
-				break;
+				info = plane_state->fb->format;
+				fmt_info = dpu_find_fmt_info(info->format);
+				if (fmt_info->bpc == 10) {
+					max_bpc = 10;
+					break;
+				}
 			}
 		}
 		new_exynos_state->in_bpc = max_bpc;

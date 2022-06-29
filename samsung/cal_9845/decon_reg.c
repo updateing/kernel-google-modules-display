@@ -647,6 +647,7 @@ static void decon_reg_set_ewr_control(u32 id, u32 cnt, u32 en)
 	decon_reg_set_ewr_enable(id, en);
 }
 #endif
+
 static void decon_reg_update_req_compress(u32 id)
 {
 	decon_write_mask(id, SHD_REG_UP_REQ, ~0, SHD_REG_UP_REQ_CMP);
@@ -1489,13 +1490,11 @@ static int decon_reg_stop_perframe_dsi(u32 id, struct decon_config *config,
 	return ret;
 }
 
-#if defined(CONFIG_EXYNOS_DISPLAYPORT)
 static int decon_reg_stop_perframe_dp(u32 id, u32 fps)
 {
 	int ret = 0;
 	/* timeout_us : 1000000us / fps + 50% margin */
 	const int timeout_us = DIV_ROUND_UP(USEC_PER_SEC * 15, fps * 10);
-	u32 sst_id = SST1;
 
 	cal_log_debug(id, "%s +\n", __func__);
 
@@ -1505,15 +1504,9 @@ static int decon_reg_stop_perframe_dp(u32 id, u32 fps)
 
 	ret = decon_reg_wait_run_is_off_timeout(id, timeout_us);
 
-	sst_id = displayport_get_sst_id_with_decon_id(id);
-	displayport_reg_lh_p_ch_power(sst_id, 0);
-
 	cal_log_debug(id, "%s -\n", __func__);
 	return ret;
 }
-#else
-static inline int decon_reg_stop_perframe_dp(u32 id, u32 fps) { return 0; }
-#endif
 
 static int decon_reg_stop_inst_dsi(u32 id, struct decon_config *config, u32 fps)
 {
@@ -1536,12 +1529,10 @@ static int decon_reg_stop_inst_dsi(u32 id, struct decon_config *config, u32 fps)
 	return ret;
 }
 
-#if defined(CONFIG_EXYNOS_DISPLAYPORT)
 static int decon_reg_stop_inst_dp(u32 id, u32 fps)
 {
 	int ret = 0;
 	const int timeout_us = DIV_ROUND_UP(USEC_PER_SEC * 15, fps * 10);
-	u32 sst_id = SST1;
 
 	cal_log_debug(id, "%s +\n", __func__);
 
@@ -1549,20 +1540,11 @@ static int decon_reg_stop_inst_dp(u32 id, u32 fps)
 	decon_reg_direct_on_off(id, 0);
 	decon_reg_update_req_global(id);
 
-	sst_id = displayport_get_sst_id_with_decon_id(id);
-	displayport_reg_lh_p_ch_power(sst_id, 0);
-
 	ret = decon_reg_wait_run_is_off_timeout(id, timeout_us);
 
 	cal_log_debug(id, "%s -\n", __func__);
 	return ret;
 }
-#else
-static inline int decon_reg_stop_inst_dp(u32 id, u32 fps)
-{
-	return 0;
-}
-#endif
 
 void decon_reg_set_win_enable(u32 id, u32 win_idx, u32 en)
 {
@@ -1895,14 +1877,6 @@ int decon_reg_init(u32 id, struct decon_config *config)
 int decon_reg_start(u32 id, struct decon_config *config)
 {
 	int ret = 0;
-#if defined(CONFIG_EXYNOS_DISPLAYPORT)
-	u32 sst_id = SST1;
-
-	if (config->out_type & DECON_OUT_DP) {
-		sst_id = displayport_get_sst_id_with_decon_id(id);
-		displayport_reg_lh_p_ch_power(sst_id, 1);
-	}
-#endif
 
 	decon_reg_direct_on_off(id, 1);
 	decon_reg_update_req_global(id);
@@ -1955,7 +1929,7 @@ int decon_reg_stop(u32 id, struct decon_config *config, bool rst, u32 fps)
 	} else if (config->out_type & DECON_OUT_DP) {
 		ret = decon_reg_stop_perframe_dp(id, fps);
 		if (ret < 0) {
-			cal_log_err(id, "failed to perframe_stop\n");
+			cal_log_err(id, "failed to perframe_stop(DP)\n");
 			/* if fails, call decon instant off */
 			ret = decon_reg_stop_inst_dp(id, fps);
 			if (ret < 0)
