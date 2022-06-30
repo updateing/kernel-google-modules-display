@@ -939,6 +939,8 @@ static void dsc_reg_set_pps(u32 id, u32 dsc_id, struct decon_dsc *dsc_enc)
 	u32 val;
 	u32 initial_dec_delay;
 
+	dsc_write_mask(id, DSC_PPS00_03(dsc_id), 0x11, PPS00_VER_MASK);
+
 	/* TODO: PPS03 might have to be considered for 10 bit BPC panel */
 	val = PPS04_COMP_CFG(dsc_enc->comp_cfg);
 	val |= PPS05_BPP(dsc_enc->bit_per_pixel);
