@@ -543,12 +543,17 @@ int exynos_atomic_commit(struct drm_device *dev, struct drm_atomic_state *state,
 	DPU_ATRACE_BEGIN("exynos_atomic_commit");
 
 	/*
-	 * if self refresh was activated on last commit, it's okay to stall instead
-	 * of failing since commit should finish rather quickly
+	 * if self refresh was activated on last commit or coming out of self refresh/hibernation,
+	 * it's okay to stall instead of failing since commit should finish rather quickly
 	 */
 	if (!stall) {
+		const struct exynos_drm_crtc_state *old_exynos_crtc_state;
+
 		for_each_old_crtc_in_state(state, crtc, old_crtc_state, i) {
-			if (old_crtc_state->self_refresh_active) {
+			old_exynos_crtc_state = to_exynos_crtc_state(old_crtc_state);
+
+			if (old_crtc_state->self_refresh_active ||
+			    old_exynos_crtc_state->hibernation_exit) {
 				stall = true;
 				break;
 			}
