@@ -3016,7 +3016,7 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 
 	backlight_state_changed(bl);
 
-	dev_info(ctx->dev, "%s: panel:%d, bl:0x%x\n", __func__,
+	dev_dbg(ctx->dev, "%s: panel:%d, bl:0x%x\n", __func__,
 		 panel_state, bl->props.state);
 }
 
