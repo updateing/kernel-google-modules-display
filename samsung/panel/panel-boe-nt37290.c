@@ -1302,11 +1302,18 @@ static void nt37290_set_hbm_mode(struct exynos_panel *ctx,
 	}
 
 	if (IS_HBM_ON_IRC_OFF(ctx->hbm_mode) != IS_HBM_ON_IRC_OFF(mode)) {
-		EXYNOS_DCS_BUF_ADD(ctx, 0xFF, 0xAA, 0x55, 0xA5, 0x84);
-		EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x02);
-		EXYNOS_DCS_BUF_ADD(ctx, 0xF5, 0x01);
-		EXYNOS_DCS_BUF_ADD(ctx, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08);
-		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB9, IS_HBM_ON_IRC_OFF(mode) ? 0x00 : 0x01);
+		if (ctx->panel_rev >= PANEL_REV_DVT1) {
+			EXYNOS_DCS_BUF_ADD(ctx, 0x5F, IS_HBM_ON_IRC_OFF(mode) ? 0x01 : 0x00);
+			EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x26,
+				 IS_HBM_ON_IRC_OFF(mode) ? 0x03 : 0x00);
+		} else {
+			EXYNOS_DCS_BUF_ADD(ctx, 0xFF, 0xAA, 0x55, 0xA5, 0x84);
+			EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x02);
+			EXYNOS_DCS_BUF_ADD(ctx, 0xF5, 0x01);
+			EXYNOS_DCS_BUF_ADD(ctx, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08);
+			EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB9,
+				 IS_HBM_ON_IRC_OFF(mode) ? 0x00 : 0x01);
+		}
 	}
 
 	ctx->hbm_mode = mode;
