@@ -98,7 +98,6 @@ static const unsigned char FHD_PPS_SETTING[DSC_PPS_SIZE] = {
 };
 
 
-#define S6E3HC4_WRCTRLD_DIMMING_BIT    0x08
 #define S6E3HC4_WRCTRLD_BCTRL_BIT      0x20
 #define S6E3HC4_WRCTRLD_HBM_BIT        0xC0
 #define S6E3HC4_WRCTRLD_LOCAL_HBM_BIT  0x10
@@ -275,8 +274,8 @@ static void s6e3hc4_update_te2(struct exynos_panel *ctx)
 
 static inline bool is_auto_mode_allowed(struct exynos_panel *ctx)
 {
-	/* don't want to enable auto mode/early exit during hbm or dimming on */
-	if (IS_HBM_ON(ctx->hbm_mode) || ctx->dimming_on)
+	/* don't want to enable auto mode/early exit during hbm mode */
+	if (IS_HBM_ON(ctx->hbm_mode))
 		return false;
 
 	if (ctx->idle_delay_ms) {
@@ -735,13 +734,9 @@ static void s6e3hc4_write_display_mode(struct exynos_panel *ctx,
 	if (ctx->hbm.local_hbm.enabled)
 		val |= S6E3HC4_WRCTRLD_LOCAL_HBM_BIT;
 
-	if (ctx->dimming_on)
-		val |= S6E3HC4_WRCTRLD_DIMMING_BIT;
-
 	dev_dbg(ctx->dev,
-		"%s(wrctrld:0x%x, hbm: %s, dimming: %s local_hbm: %s)\n",
+		"%s(wrctrld:0x%x, hbm: %s, local_hbm: %s)\n",
 		__func__, val, IS_HBM_ON(ctx->hbm_mode) ? "on" : "off",
-		ctx->dimming_on ? "on" : "off",
 		ctx->hbm.local_hbm.enabled ? "on" : "off");
 
 	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
@@ -1019,19 +1014,6 @@ static void s6e3hc4_set_hbm_mode(struct exynos_panel *ctx,
 		s6e3hc4_write_display_mode(ctx, &pmode->mode);
 		s6e3hc4_update_panel_feat(ctx, NULL, false);
 	}
-}
-
-static void s6e3hc4_set_dimming_on(struct exynos_panel *ctx,
-				 bool dimming_on)
-{
-	const struct exynos_panel_mode *pmode = ctx->current_mode;
-
-	ctx->dimming_on = dimming_on;
-	if (pmode->exynos_mode.is_lp_mode) {
-		dev_info(ctx->dev,"in lp mode, skip to update");
-		return;
-	}
-	s6e3hc4_write_display_mode(ctx, &pmode->mode);
 }
 
 static const struct exynos_dsi_cmd s6e3hc4_lhbm_extra_cmds[] = {
@@ -1406,7 +1388,6 @@ static const struct exynos_panel_funcs s6e3hc4_exynos_funcs = {
 	.set_nolp_mode = s6e3hc4_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
 	.set_hbm_mode = s6e3hc4_set_hbm_mode,
-	.set_dimming_on = s6e3hc4_set_dimming_on,
 	.set_local_hbm_mode = s6e3hc4_set_local_hbm_mode,
 	.is_mode_seamless = s6e3hc4_is_mode_seamless,
 	.mode_set = s6e3hc4_mode_set,
@@ -1443,7 +1424,7 @@ const struct brightness_capability s6e3hc4_brightness_capability = {
 			.max = 1000,
 		},
 		.level = {
-			.min = 2457,
+			.min = 2900,
 			.max = 4095,
 		},
 		.percentage = {
