@@ -50,6 +50,8 @@
 #include <dt-bindings/soc/google/gs101-devfreq.h>
 #elif defined(CONFIG_SOC_GS201)
 #include <dt-bindings/soc/google/gs201-devfreq.h>
+#elif defined(CONFIG_SOC_ZUMA)
+#include <dt-bindings/soc/google/zuma-devfreq.h>
 #endif
 #endif
 
