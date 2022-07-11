@@ -3042,6 +3042,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->is_partial, desc->is_partial);
 	drm_object_attach_property(obj, p->panel_idle_support, desc->is_panel_idle_supported);
 	drm_object_attach_property(obj, p->panel_orientation, ctx->orientation);
+	drm_object_attach_property(obj, p->vrr_switch_duration, desc->vrr_switch_duration);
 
 	if (desc->brt_capability) {
 		ret = exynos_panel_attach_brightness_capability(&ctx->exynos_connector,

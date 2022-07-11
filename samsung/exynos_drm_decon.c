@@ -1380,7 +1380,7 @@ static ssize_t early_wakeup_store(struct device *dev,
 		return len;
 
 	decon = dev_get_drvdata(dev);
-	kthread_queue_work(&decon->worker, &decon->early_wakeup_work);
+	exynos_hibernation_async_exit(decon->hibernation);
 
 	return len;
 }
@@ -1968,17 +1968,6 @@ err:
 	return ret;
 }
 
-static void decon_early_wakeup_work(struct kthread_work *work)
-{
-	struct decon_device *decon = container_of(work, struct decon_device,
-			early_wakeup_work);
-
-	DPU_ATRACE_BEGIN("decon_early_wakeup_work");
-	hibernation_block_exit(decon->hibernation);
-	hibernation_unblock_enter(decon->hibernation);
-	DPU_ATRACE_END("decon_early_wakeup_work");
-}
-
 static int decon_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -2035,7 +2024,6 @@ static int decon_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	kthread_init_work(&decon->early_wakeup_work, decon_early_wakeup_work);
 	decon_info(decon, "successfully probed");
 
 err:

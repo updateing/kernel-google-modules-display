@@ -797,15 +797,16 @@ static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
  * Sends a command to panel to indicate a frame is about to come in case its been a while since
  * the last frame update and auto mode may have started to take effect and lowering refresh rate
  */
-static void nt37290_trigger_early_exit(struct exynos_panel *ctx)
+static bool nt37290_trigger_early_exit(struct exynos_panel *ctx)
 {
 	const ktime_t delta = ktime_sub(ktime_get(), ctx->last_commit_ts);
 	const s64 delta_us = ktime_to_us(delta);
+	bool updated = false;
 
 	if (delta_us < EARLY_EXIT_THRESHOLD_US) {
 		dev_dbg(ctx->dev, "skip early exit. %lldus since last commit\n",
 			delta_us);
-		return;
+		return false;
 	}
 
 	/* triggering early exit causes a switch to 120hz */
@@ -819,18 +820,22 @@ static void nt37290_trigger_early_exit(struct exynos_panel *ctx)
 
 		dev_dbg(ctx->dev, "%s: disable auto idle mode for %s\n",
 			 __func__, pmode->mode.name);
-		nt37290_change_frequency(ctx, pmode);
+		updated = nt37290_change_frequency(ctx, pmode);
 	} else {
 		EXYNOS_DCS_WRITE_TABLE(ctx, stream_2c);
 	}
 
 	DPU_ATRACE_END(__func__);
+
+	return updated;
 }
 
+/* TODO: move update te2 to common display driver for other panel drivers */
 static void nt37290_commit_done(struct exynos_panel *ctx)
 {
 	struct nt37290_panel *spanel = to_spanel(ctx);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
+	bool updated = false;
 
 	if (!is_panel_active(ctx) || !pmode)
 		return;
@@ -842,14 +847,17 @@ static void nt37290_commit_done(struct exynos_panel *ctx)
 	}
 
 	if (test_bit(G10_FEAT_EARLY_EXIT, spanel->feat))
-		nt37290_trigger_early_exit(ctx);
+		updated = nt37290_trigger_early_exit(ctx);
 	/**
 	 * For IDLE_MODE_ON_INACTIVITY, we should go back to auto mode again
 	 * after the delay time has elapsed.
 	 */
 	else if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY &&
 		 spanel->delayed_idle && !ctx->hbm.local_hbm.enabled)
-		nt37290_change_frequency(ctx, pmode);
+		updated = nt37290_change_frequency(ctx, pmode);
+
+	if (updated)
+		nt37290_update_te2(ctx);
 }
 
 static void nt37290_set_lp_mode(struct exynos_panel *ctx,
@@ -1294,11 +1302,18 @@ static void nt37290_set_hbm_mode(struct exynos_panel *ctx,
 	}
 
 	if (IS_HBM_ON_IRC_OFF(ctx->hbm_mode) != IS_HBM_ON_IRC_OFF(mode)) {
-		EXYNOS_DCS_BUF_ADD(ctx, 0xFF, 0xAA, 0x55, 0xA5, 0x84);
-		EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x02);
-		EXYNOS_DCS_BUF_ADD(ctx, 0xF5, 0x01);
-		EXYNOS_DCS_BUF_ADD(ctx, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08);
-		EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB9, IS_HBM_ON_IRC_OFF(mode) ? 0x00 : 0x01);
+		if (ctx->panel_rev >= PANEL_REV_DVT1) {
+			EXYNOS_DCS_BUF_ADD(ctx, 0x5F, IS_HBM_ON_IRC_OFF(mode) ? 0x01 : 0x00);
+			EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x26,
+				 IS_HBM_ON_IRC_OFF(mode) ? 0x03 : 0x00);
+		} else {
+			EXYNOS_DCS_BUF_ADD(ctx, 0xFF, 0xAA, 0x55, 0xA5, 0x84);
+			EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x02);
+			EXYNOS_DCS_BUF_ADD(ctx, 0xF5, 0x01);
+			EXYNOS_DCS_BUF_ADD(ctx, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08);
+			EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xB9,
+				 IS_HBM_ON_IRC_OFF(mode) ? 0x00 : 0x01);
+		}
 	}
 
 	ctx->hbm_mode = mode;
