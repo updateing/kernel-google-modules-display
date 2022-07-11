@@ -2126,13 +2126,14 @@ void __decon_dump(struct drm_printer *p, u32 id, struct decon_regs *regs, bool d
 	/* decon_main */
 	cal_drm_printf(p, id, "\n=== DECON%d_MAIN SFR DUMP ===\n", id);
 	dpu_print_hex_dump(p, main_regs, main_regs + 0x0000, 0x344);
-	dpu_print_hex_dump(p, main_regs, main_regs + 0x400, 0x300);
+	dpu_print_hex_dump(p, main_regs, main_regs + 0x700, 0x4);
+	dpu_print_hex_dump(p, main_regs, main_regs + 0xD00, 0x300);
 	/* shadow */
 	cal_drm_printf(p, id, "=== DECON%d_MAIN SHADOW SFR DUMP ===\n", id);
 	dpu_print_hex_dump(p, main_regs, main_regs + SHADOW_OFFSET, 0x2B0);
 
 	/* decon_win & decon_wincon : 6EA */
-	for (i = 0; i < 6; i++) {
+	for (i = 0; i < MAX_WIN_PER_DECON; i++) {
 		cal_drm_printf(p, id, "\n=== DECON_WIN%d SFR DUMP ===\n", i);
 		dpu_print_hex_dump(p, win_regs, win_regs + WIN_OFFSET(i), 0x20);
 		cal_drm_printf(p, id, "=== DECON_WINCON%d SFR DUMP ===\n", i);

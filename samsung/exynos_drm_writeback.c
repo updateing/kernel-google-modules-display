@@ -55,7 +55,7 @@ void wb_dump(struct drm_printer *p, struct writeback_device *wb)
 	}
 
 	__dpp_dump(p, wb->id, wb->regs.dpp_base_regs, wb->regs.dma_base_regs,
-			wb->attr);
+		   NULL, NULL, wb->attr);
 }
 
 static const uint32_t writeback_formats[] = {
