@@ -577,6 +577,28 @@ static void exynos_panel_handoff(struct exynos_panel *ctx)
 		ctx->panel_state = PANEL_STATE_UNINITIALIZED;
 		gpiod_direction_output(ctx->reset_gpio, 0);
 	}
+
+	if (ctx->desc && ctx->desc->num_modes > 0 &&
+		ctx->panel_state == PANEL_STATE_HANDOFF) {
+		int i;
+
+		for (i = 0; i < ctx->desc->num_modes; i++) {
+			const struct exynos_panel_mode *pmode;
+
+			pmode = &ctx->desc->modes[i];
+			if (pmode->mode.type & DRM_MODE_TYPE_PREFERRED) {
+				ctx->current_mode = pmode;
+				break;
+			}
+		}
+		if (ctx->current_mode == NULL) {
+			ctx->current_mode = &ctx->desc->modes[0];
+			i = 0;
+		}
+		dev_info(ctx->dev, "set default panel mode[%d]: %s\n",
+			i, ctx->current_mode->mode.name[0] ?
+			ctx->current_mode->mode.name : "NA");
+	}
 }
 
 static int exynos_panel_parse_dt(struct exynos_panel *ctx)
@@ -621,7 +643,6 @@ int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connec
 	struct exynos_panel *ctx =
 		container_of(panel, struct exynos_panel, panel);
 	struct drm_display_mode *preferred_mode = NULL;
-	const struct exynos_panel_mode *current_mode = ctx->current_mode;
 	int i;
 
 	dev_dbg(ctx->dev, "%s +\n", __func__);
@@ -642,12 +663,8 @@ int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connec
 
 		dev_dbg(ctx->dev, "added display mode: %s\n", mode->name);
 
-		if (!preferred_mode || (mode->type & DRM_MODE_TYPE_PREFERRED)) {
+		if (!preferred_mode || (mode->type & DRM_MODE_TYPE_PREFERRED))
 			preferred_mode = mode;
-			/* if enabled at boot, assume preferred mode was set */
-			if ((ctx->panel_state == PANEL_STATE_HANDOFF) && !current_mode)
-				ctx->current_mode = pmode;
-		}
 	}
 
 	if (preferred_mode) {

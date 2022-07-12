@@ -596,7 +596,7 @@ static int s6e3hc3_atomic_check(struct exynos_panel *ctx, struct drm_atomic_stat
 	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
 	struct s6e3hc3_panel *spanel = to_spanel(ctx);
 
-	if (drm_mode_vrefresh(&ctx->current_mode->mode) == 120 ||
+	if (!ctx->current_mode || drm_mode_vrefresh(&ctx->current_mode->mode) == 120 ||
 	    !new_conn_state || !new_conn_state->crtc)
 		return 0;
 
