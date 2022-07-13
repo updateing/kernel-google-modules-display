@@ -497,7 +497,7 @@ struct exynos_panel_desc {
 	const struct exynos_panel_funcs *exynos_panel_func;
 };
 
-#define PANEL_ID_MAX		32
+#define PANEL_ID_MAX		40
 #define PANEL_EXTINFO_MAX	16
 #define LOCAL_HBM_MAX_TIMEOUT_MS 3000 /* 3000 ms */
 #define LOCAL_HBM_GAMMA_CMD_SIZE_MAX 16
