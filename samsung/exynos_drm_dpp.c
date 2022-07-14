@@ -653,11 +653,13 @@ static int dpp_check_scale(struct dpp_device *dpp,
 	if ((src_w == dst->w) && (src_h == dst->h))
 		return 0;
 
+#if !defined(CONFIG_SOC_ZUMA)
 	/* Scaling is requested. need to check limitation */
 	if (!test_bit(DPP_ATTR_CSC, &dpp->attr)) {
 		dpp_err(dpp, "not support CSC\n");
 		return -ENOTSUPP;
 	}
+#endif
 
 	if ((src_w > dst->w * res->scale_down) ||
 			(src_h > dst->h * res->scale_down)) {
