@@ -27,6 +27,8 @@
 #include <dt-bindings/clock/gs101.h>
 #elif defined(CONFIG_SOC_GS201)
 #include <dt-bindings/clock/gs201.h>
+#elif defined(CONFIG_SOC_ZUMA)
+#include <dt-bindings/clock/zuma.h>
 #endif
 
 #if defined(CONFIG_SOC_EXYNOS9610)
