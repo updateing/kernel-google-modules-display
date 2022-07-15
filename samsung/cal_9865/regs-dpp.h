@@ -20,11 +20,12 @@
 
 /*
  *-------------------------------------------------------------------
- * RDMA(L0~L5) SFR list
- * base address : 0x1C0B_0000
+ * RDMA(L0~L6) SFR list
+ * base address(DPUF0) : 0x1990_0000
+ * base address(DPUF1) : 0x19D0_0000
  * < Layer.offset >
- *  L0      L1      L2      L3      L4      L5
- *  0x0000  0x1000  0x2000  0x3000  0x4000  0x5000
+ *  L0      L1      L2      L3      L4      L5	    L6
+ *  0x0000  0x1000  0x2000  0x3000  0x4000  0x5000  0x6000
  *-------------------------------------------------------------------
  */
 
@@ -414,8 +415,9 @@
 
 /*
  *-------------------------------------------------------------------
- * WDMA(L12) SFR list
- * base address : 0x1C0B_C000
+ * WDMA SFR list
+ * base address : 0x1990_8000
+ * base address : 0x19D0_8000
  *-------------------------------------------------------------------
  */
 #define WDMA_ENABLE				0x0000
@@ -632,14 +634,61 @@
 #define WDMA_BWL_COMPENSATE_CTRL_HDR		0xd24
 /* same field with WDMA_BWL_COMPENSATE_CTRL_PLD */
 
+/*
+ *-------------------------------------------------------------------
+ * DPU_DMA: CGC SFR List
+ * base address(DPUF0) : 0x1990_0000
+ * base address(DPUF1) : 0x19D0_0000
+ * < Layer.offset >
+ *  CGC
+ *  0xE000
+ *-------------------------------------------------------------------
+ */
+
+#define CGC_ENABLE				(0x0000)
+#define CGC_START_SET_0				(1 << 0)
+#define CGC_START_SET_0_MASK			(1 << 0)
+#define CGC_IRQ					(0x0004)
+#define CGC_CONFIG_ERR_IRQ			(1 << 21)
+#define CGC_READ_SLAVE_ERROR			(1 << 19)
+#define CGC_STATUS_DEADLOCK_IRQ			(1 << 17)
+#define CGC_STATUS_FRAMEDONE_IRQ		(1 << 16)
+#define CGC_ALL_IRQ_MASK			(0x2B << 1)
+#define CGC_IRQ_ENABLE_MASK			(1 << 0)
+
+#define CGC_IN_CTRL				(0x0008)
+#define CGC_IN_CTRL_1				(0x000C)
+#define START_EN_SET0(_v)			((_v) << 0)
+#define START_EN_SET0_MASK			(1 << 0)
+#define CGC_BASE_ADDR_SET_0			(0x0040)
+#define CGC_BASE_ADDR_SET_1			(0x0044)
+
+#define CGC_DEADLOCK_CTRL			(0x0100)
+#define CGC_DEADLOCK_NUM(_v)			((_v) << 1)
+#define CGC_DEADLOCK_NUM_MASK			(0x7FFFFFFF << 1)
+#define CGC_DEADLOCK_NUM_EN			(1 << 0)
+
+#define CGC_BUS_CTRL				(0x0110)
+#define CGC_LLC_CTRL				(0x0114)
+#define CGC_PERF_CTRL				(0x0120)
+#define CGC_QOS_LUT_LOW				(0x0130)
+#define CGC_QOS_LUT_HIGH			(0x0134)
+#define CGC_DYNAMIC_GATIN_EN			(0x0140)
+#define CGC_MST_SECURITY			(0x0200)
+#define CGC_SLV_SECURITY			(0x0204)
+#define CGC_DEBUG_CTRL				(0x0300)
+#define CGC_DEBUG_DATA				(0x0304)
+#define CGC_PSLV_ERR_CTRL			(0x030C)
+
 
 /*
  *-------------------------------------------------------------------
- * DPP(L0~L5, L12) SFR list
- * base address : 0x1C0D_0000
+ * DPP(L0~L6, WB) SFR list
+ * base address : 0x1993_0000
+ * base address : 0x19D3_0000
  * < Layer.offset >
- *  L0      L1      L2      L3      L4      L5      L12
- *  0x0000  0x1000  0x2000  0x3000  0x4000  0x5000  0xC000
+ *  L0      L1      L2      L3      L4      L5      L6	    WB
+ *  0x0000  0x1000  0x2000  0x3000  0x4000  0x5000  0x6000  0x8000
  *-------------------------------------------------------------------
  */
 #define DPP_COM_SHD_OFFSET			0x0100

@@ -427,11 +427,7 @@ void decon_reg_get_crc_data(u32 id, u32 crc_data[3]);
 /* For DQE configuration */
 void decon_reg_set_dqe_enable(u32 id, bool en);
 void decon_reg_update_req_dqe(u32 id);
-static inline void decon_reg_update_req_cgc(u32 id)
-{
-	decon_reg_update_req_cgc_internal(id);
-}
-
+void decon_reg_update_req_cgc(u32 id);
 
 /* DPU hw limitation check */
 struct decon_device;

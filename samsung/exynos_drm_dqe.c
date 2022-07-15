@@ -808,6 +808,20 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 
 	dqe_version = exynos_get_dqe_version();
 	dqe_regs_desc_init(dqe->regs, res.start, "dqe", dqe_version, decon->id);
+
+	i = of_property_match_string(np, "reg-names", "dqe-cgc");
+	if (i < 0)
+		pr_debug("dqe-cgc is not supported\n");
+
+	if (i >= 0 && of_address_to_resource(np, i, &res)) {
+		pr_err("failed to get dqe cgc resource\n");
+		return NULL;
+	}
+
+	dqe->cgc_regs = of_iomap(np, i);
+
+	dqe_cgc_regs_desc_init(dqe->cgc_regs, res.start, "dqe-cgc", dqe_version, decon->id);
+
 	dqe->funcs = &dqe_funcs;
 	dqe->initialized = false;
 	dqe->decon = decon;

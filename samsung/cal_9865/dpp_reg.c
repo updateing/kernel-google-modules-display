@@ -1197,6 +1197,16 @@ void rcd_dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
 void cgc_dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
 {
 	/* TODO: This will be implemented in the future */
+	cal_drm_printf(p, id, "=== DPU_DMA CGC%d SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0000, 0x144);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0200, 0x8);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0300, 0x24);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0740, 0x4);
+
+	cal_drm_printf(p, id, "=== DPU_DMA CGC%d SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0000 + DMA_SHD_OFFSET, 0x144);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0200 + DMA_SHD_OFFSET, 0x8);
+	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0300 + DMA_SHD_OFFSET, 0x24);
 }
 
 static void dpp_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, unsigned long attr)
@@ -1294,4 +1304,79 @@ int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr)
 	}
 
 	return 0;
+}
+
+static void cgc_reg_print_irqs_msg(u32 id, u32 irqs)
+{
+	if (irqs & CGC_READ_SLAVE_ERROR)
+		cal_log_err(id, "CGC DMA read error irq occur\n");
+
+	if (irqs & CGC_STATUS_DEADLOCK_IRQ)
+		cal_log_err(id, "CGC DMA deadlock irq occur\n");
+
+	if (irqs & CGC_CONFIG_ERR_IRQ)
+		cal_log_err(id, "CGC DMA cfg err irq occur\n");
+}
+
+static void cgc_reg_clear_irq(u32 id, u32 irq)
+{
+	dma_write_mask(id, CGC_IRQ, ~0, irq);
+}
+
+static void cgc_reg_set_irq_en(u32 id, bool en)
+{
+	u32 val = en ? ~0 : 0;
+
+	dma_write_mask(id, CGC_IRQ, val, CGC_IRQ_ENABLE_MASK);
+}
+
+static void cgc_reg_set_irq_mask_all(u32 id, bool en)
+{
+	u32 val = en ? ~0 : 0;
+
+	dma_write_mask(id, CGC_IRQ, val, CGC_ALL_IRQ_MASK);
+}
+
+static void cgc_reg_set_base_addr(u32 id, dma_addr_t addr)
+{
+	dma_write(id, CGC_BASE_ADDR_SET_0, addr);
+}
+
+static void cgc_reg_set_deadlock(u32 id, bool en, u32 dl_num)
+{
+	u32 val = en ? ~0 : 0;
+
+	dma_write_mask(id, CGC_DEADLOCK_CTRL, val, CGC_DEADLOCK_NUM_EN);
+	dma_write_mask(id, CGC_DEADLOCK_CTRL, CGC_DEADLOCK_NUM(dl_num),
+				CGC_DEADLOCK_NUM_MASK);
+}
+
+u32 cgc_reg_get_irq_and_clear_internal(u32 id)
+{
+	u32 val;
+
+	val = dma_read(id, CGC_IRQ);
+	cgc_reg_print_irqs_msg(id, val);
+	cgc_reg_clear_irq(id, val);
+
+	return val;
+}
+
+void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr)
+{
+	if (!en) {
+		cgc_reg_set_irq_en(id, 0);
+		cgc_reg_set_irq_mask_all(id, 1);
+		return;
+	}
+	cgc_reg_set_irq_en(id, 1);
+	cgc_reg_set_irq_mask_all(id, 0);
+	cgc_reg_set_base_addr(id, addr);
+	cgc_reg_set_deadlock(id, 1, 0x7FFFFFFF);
+}
+
+void cgc_reg_set_cgc_start_internal(u32 id)
+{
+	dma_write_mask(id, CGC_IN_CTRL_1, START_EN_SET0(1), START_EN_SET0_MASK);
+	dma_write_mask(id, CGC_ENABLE, CGC_START_SET_0, CGC_START_SET_0_MASK);
 }

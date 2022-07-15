@@ -19,6 +19,7 @@
 #include "regs-dqe.h"
 
 struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
+struct cal_regs_dqe regs_dqe_cgc[REGS_DQE_ID_MAX];
 
 void
 dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
@@ -28,6 +29,16 @@ dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 	regs_dqe[dqe_id].desc.regs = regs;
 	regs_dqe[dqe_id].desc.name = name;
 	regs_dqe[dqe_id].desc.start = start;
+}
+
+void
+dqe_cgc_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
+		   enum dqe_version ver, unsigned int dqe_id)
+{
+	regs_dqe_cgc[dqe_id].version = ver;
+	regs_dqe_cgc[dqe_id].desc.regs = regs;
+	regs_dqe_cgc[dqe_id].desc.name = name;
+	regs_dqe_cgc[dqe_id].desc.start = start;
 }
 
 static void dqe_reg_set_img_size(u32 dqe_id, u32 width, u32 height)
@@ -116,16 +127,17 @@ void dqe_reg_set_cgc_lut(u32 dqe_id, const struct cgc_lut *lut)
 	cal_log_debug(0, "%s +\n", __func__);
 
 	if (!lut) {
-		cgc_write_mask(dqe_id, DQE_CGC_CON, 0, CGC_EN_MASK);
+		dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, 0, CGC_EN_MASK);
 		return;
 	}
 	for (i = 0; i < DRM_SAMSUNG_CGC_LUT_REG_CNT; ++i) {
-		dqe_write_relaxed(dqe_id, DQE_CGC_LUT_R(i), lut->r_values[i]);
-		dqe_write_relaxed(dqe_id, DQE_CGC_LUT_G(i), lut->g_values[i]);
-		dqe_write_relaxed(dqe_id, DQE_CGC_LUT_B(i), lut->b_values[i]);
+		dqe_cgc_write_relaxed(dqe_id, DQE_CGC_LUT_R(i), lut->r_values[i]);
+		dqe_cgc_write_relaxed(dqe_id, DQE_CGC_LUT_G(i), lut->g_values[i]);
+		dqe_cgc_write_relaxed(dqe_id, DQE_CGC_LUT_B(i), lut->b_values[i]);
 	}
 
-	cgc_write_mask(dqe_id, DQE_CGC_CON, ~0, CGC_EN_MASK);
+	dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, ~0, CGC_EN_MASK);
+	dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, ~0, CGC0_COEF_SHD_UP_EN_MASK);
 
 	cal_log_debug(0, "%s -\n", __func__);
 }
@@ -188,7 +200,7 @@ static void dqe_reg_print_lut(u32 dqe_id, u32 start, u32 count, const u32 offset
 	const char *end = buf + sizeof(buf);
 
 	for (i = 0; i < DIV_ROUND_UP(count, 2); ++i) {
-		val = dqe_read(dqe_id, start + i * 4 + offset);
+		val = dqe_cgc_read(dqe_id, start + i * 4 + offset);
 
 		p += scnprintf(p, end - p, "[%4d]%4x ", i * 2, GET_LUT_L(val));
 
@@ -330,7 +342,7 @@ void dqe_reg_print_cgc_lut(u32 dqe_id, u32 count, struct drm_printer *p)
 {
 	u32 val;
 
-	val = cgc_read_mask(dqe_id, DQE_CGC_CON, CGC_EN_MASK);
+	val = dqe_cgc_read_mask(dqe_id, DQE_CGC_CON, CGC_EN_MASK);
 	cal_drm_printf(p, 0, "DQE: cgc %s\n", val ? "on" : "off");
 
 	if (!val)
@@ -616,12 +628,48 @@ void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height)
 void dqe_dump(struct drm_printer *p, u32 dqe_id)
 {
 	void __iomem *dqe_regs = regs_dqe[dqe_id].desc.regs;
+	void __iomem *dqe_cgc_regs = regs_dqe_cgc[dqe_id].desc.regs;
 
 	cal_drm_printf(p, 0, "\n=== DQE_%d SFR ===\n", dqe_id);
-	dpu_print_hex_dump(p, dqe_regs, dqe_regs, 0x20);
+	dpu_print_hex_dump(p, dqe_regs, dqe_regs, 0x130);
+	dpu_print_hex_dump(p, dqe_regs, dqe_regs + 0x1FC, 0x4);
+
+	cal_drm_printf(p, 0, "\n=== DQE_%d CGC SFR ===\n", dqe_id);
+	dpu_print_hex_dump(p, dqe_cgc_regs, dqe_cgc_regs, 0x30);
+	dpu_print_hex_dump(p, dqe_cgc_regs, dqe_cgc_regs + 0x1000, 0x100);
+	dpu_print_hex_dump(p, dqe_cgc_regs, dqe_cgc_regs + 0x4000, 0x100);
+	dpu_print_hex_dump(p, dqe_cgc_regs, dqe_cgc_regs + 0x7000, 0x100);
 }
 
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected)
 {
 	cal_set_write_protected(&regs_dqe[dqe_id].desc, protected);
+}
+
+void dqe_reg_set_cgc_en_internal(u32 dqe_id, bool en)
+{
+	dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_EN(en), CGC_EN_MASK);
+	dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, CGC0_COEF_DMA_EN(en), CGC0_COEF_DMA_EN_MASK);
+	dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, CGC0_COEF_SHD_UP_EN(en), CGC0_COEF_SHD_UP_EN_MASK);
+}
+
+int dqe_reg_wait_cgc_dma_done_internal(u32 dqe_id, unsigned long timeout_us)
+{
+	u32 val;
+	int ret;
+
+	ret = readl_poll_timeout_atomic(dqe_cgc_regs_desc(dqe_id)->regs +
+			DQE_CGC_CON, val,
+			!(val & CGC_COEF_DMA_REQ), 2, timeout_us);
+	if (ret) {
+		cal_log_err(dqe_id, "timeout of CGC COEF DMA request (0x%x)\n",
+				!(val & CGC_COEF_DMA_REQ));
+	}
+	return ret;
+}
+
+void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id)
+{
+	dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_COEF_DMA_REQ,
+			CGC_COEF_DMA_REQ_MASK);
 }

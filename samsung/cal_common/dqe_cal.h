@@ -29,7 +29,6 @@
 #define LINEAR_MATRIX_COEFFS_CNT	9
 #define LINEAR_MATRIX_OFFSETS_CNT	3
 
-#define DQE_CGC_CON			(0x1800)
 #define CGC_EN(_v)			((_v) << 0)
 #define CGC_EN_MASK			(1 << 0)
 
@@ -53,6 +52,7 @@ enum dqe_regs_id {
 };
 
 extern struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
+extern struct cal_regs_dqe regs_dqe_cgc[REGS_DQE_ID_MAX];
 
 /*
  * There are several types of DQE versions.
@@ -89,6 +89,16 @@ static struct cal_regs_offset regs_dqe_offset[DQE_VERSION_MAX] = {
 	cal_read_relaxed(dqe_regs_desc(dqe_id), offset)
 #define dqe_write_relaxed(dqe_id, offset, val)		\
 	cal_write_relaxed(dqe_regs_desc(dqe_id), offset, val)
+
+#define dqe_cgc_regs_desc(dqe_id)			(&regs_dqe_cgc[dqe_id].desc)
+#define dqe_cgc_read(dqe_id, offset)			\
+	cal_read(dqe_cgc_regs_desc(dqe_id), offset)
+#define dqe_cgc_read_mask(dqe_id, offset, mask)			\
+	cal_read(dqe_cgc_regs_desc(dqe_id), offset)
+#define dqe_cgc_write_mask(dqe_id, offset, val, mask)	\
+	cal_write_mask(dqe_cgc_regs_desc(dqe_id), offset, val, mask)
+#define dqe_cgc_write_relaxed(dqe_id, offset, val)		\
+	cal_write_relaxed(dqe_cgc_regs_desc(dqe_id), offset, val)
 
 #define dither_offset(ver)				(regs_dqe_offset[ver].dither_offset)
 #define dither_read(dqe_id, offset)			\
@@ -138,7 +148,6 @@ static struct cal_regs_offset regs_dqe_offset[DQE_VERSION_MAX] = {
 #define hist_read_relaxed(dqe_id, offset)		\
 	dqe_read_relaxed(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
 
-
 enum dqe_dither_type {
 	CGC_DITHER = 0,
 	DISP_DITHER = 1,
@@ -177,18 +186,29 @@ struct exynos_atc {
 };
 
 #ifdef CONFIG_SOC_GS201
-static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en);
-static inline void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id);
-static inline int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us);
-static inline void dqe_reg_set_histogram_pos_internal(u32 id,
-		enum exynos_prog_pos histogram_pos);
+void dqe_reg_set_rcd_en_internal(u32 id, bool en);
+void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_prog_pos histogram_pos);
 #else
 /* Stubs for non-gs201 SoCs */
 static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
-static inline void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id) {return;}
-static inline int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us) {return 0;}
 static inline void dqe_reg_set_histogram_pos_internal(u32 id,
 		enum exynos_prog_pos histogram_pos) {return;}
+#endif
+
+
+#if defined(CONFIG_SOC_GS201) || defined(CONFIG_SOC_ZUMA)
+void dqe_reg_set_cgc_en_internal(u32 dqe_id, bool en);
+void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id);
+int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us);
+void dqe_cgc_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
+			    enum dqe_version ver, unsigned int dqe_id);
+#else
+static inline void dqe_reg_set_cgc_en_internal(dqe_id, en) {return; }
+static inline void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id) {return; }
+static inline int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us) {return 0; }
+static inline void dqe_cgc_regs_desc_init(void __iomem *regs, phys_addr_t start,
+					  const char *name, enum dqe_version ver,
+					  unsigned int dqe_id) {return; }
 #endif
 
 void dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
@@ -230,17 +250,17 @@ static inline void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
 	dqe_reg_set_rcd_en_internal(dqe_id, en);
 }
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected);
-static inline void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id)
-{
-	dqe_reg_set_cgc_coef_dma_req_internal(dqe_id);
-}
 static inline void dqe_reg_set_cgc_en(u32 dqe_id, bool en)
 {
-	cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_EN(en), CGC_EN_MASK);
+	dqe_reg_set_cgc_en_internal(dqe_id, en);
 }
 static inline void dqe_reg_wait_cgc_dma_done(u32 dqe_id, u32 timeout_us)
 {
 	dqe_reg_wait_cgc_dma_done_internal(dqe_id, timeout_us);
+}
+static inline void dqe_reg_set_cgc_coef_dma_req(u32 dqe_id)
+{
+	dqe_reg_set_cgc_coef_dma_req_internal(dqe_id);
 }
 
 #endif /* __SAMSUNG_DQE_CAL_H__ */

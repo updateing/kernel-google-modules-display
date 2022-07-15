@@ -2447,3 +2447,8 @@ void decon_reg_set_drm_write_protected(u32 id, bool protected)
 {
 	cal_set_write_protected(sub_regs_desc(id), protected);
 }
+
+void decon_reg_update_req_cgc(u32 id)
+{
+	decon_reg_update_req_cgc_internal(id);
+}

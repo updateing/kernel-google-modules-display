@@ -22,6 +22,11 @@ void dqe_reg_set_rcd_en_internal(u32 dqe_id, bool en)
 	dqe_write(dqe_id, DQE_RCD, DQE_RCD_EN(en ? 1 : 0));
 }
 
+void dqe_reg_set_cgc_en_internal(u32 dqe_id, bool en)
+{
+	cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_EN(en), CGC_EN_MASK);
+}
+
 void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id)
 {
 	cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_COEF_DMA_REQ,

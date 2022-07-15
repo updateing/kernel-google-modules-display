@@ -116,6 +116,7 @@ struct debugfs_dump {
 
 struct exynos_dqe {
 	void __iomem *regs;
+	void __iomem *cgc_regs;
 	bool initialized;
 	const struct exynos_dqe_funcs *funcs;
 	struct exynos_dqe_state state;

@@ -467,17 +467,25 @@
 
 /*----------------------[CGC]------------------------------------------------*/
 
-#define DQE_CGC_CON			(0x1800)
+#define DQE_CGC_CON			(0x0)
 #define CGC_LUT_READ_SHADOW		(0x1 << 2)
+#define CGC0_COEF_SHD_UP_EN(_v)		((_v) << 12)
+#define CGC0_COEF_SHD_UP_EN_MASK	(0x1 << 12)
+#define CGC0_COEF_DMA_EN(_v)		((_v) << 8)
+#define CGC0_COEF_DMA_EN_MASK		(0x1 << 8)
+#define CGC_COEF_DMA_REQ		(1 << 4)
+#define CGC_COEF_DMA_REQ_MASK		(1 << 4)
+#define CGC0_EN				(1 << 0)
+
 
 /*
  * DEGAMMALUT (0~2) : 0x1804 ~ 0x180C
  * _n: [0, 2]
  */
-#define DQE_CGC_MC_R(_n)		(0x1804 + ((_n) * 0x4))
-#define DQE_CGC_MC_R0			(0x1804)
-#define DQE_CGC_MC_R1			(0x1808)
-#define DQE_CGC_MC_R2			(0x180C)
+#define DQE_CGC_MC_R(_n)		(0x0004 + ((_n) * 0x4))
+#define DQE_CGC_MC_R0			(0x0004)
+#define DQE_CGC_MC_R1			(0x0008)
+#define DQE_CGC_MC_R2			(0x000C)
 
 #define CGC_MC_GAIN_R(_v)		((_v) << 16)
 #define CGC_MC_GAIN_R_MASK		(0xFFF << 16)
@@ -597,15 +605,15 @@
 /*----------------------[CGC_LUT]-----------------------------------------*/
 
 /*
- * CGC_LUT_R (0~2456) : 0x4000 ~ 0x6660
- * CGC_LUT_G (0~2456) : 0x8000 ~ 0xA660
- * CGC_LUT_B (0~2456) : 0xC000 ~ 0xE660
+ * CGC_LUT_R (0~2456) : 0x1000 ~ 0x3660
+ * CGC_LUT_G (0~2456) : 0x4000 ~ 0x6660
+ * CGC_LUT_B (0~2456) : 0x7000 ~ 0x9660
  * _n: [0, 2456] / _x: [0, 4913]
  */
-#define DQE_CGC_LUT(_n)			(0x4000 + ((_n) * 0x4))
-#define DQE_CGC_LUT_R(_n)		(0x4000 + ((_n) * 0x4))
-#define DQE_CGC_LUT_G(_n)		(0x8000 + ((_n) * 0x4))
-#define DQE_CGC_LUT_B(_n)		(0xC000 + ((_n) * 0x4))
+#define DQE_CGC_LUT(_n)			(0x1000 + ((_n) * 0x4))
+#define DQE_CGC_LUT_R(_n)		(0x1000 + ((_n) * 0x4))
+#define DQE_CGC_LUT_G(_n)		(0x4000 + ((_n) * 0x4))
+#define DQE_CGC_LUT_B(_n)		(0x7000 + ((_n) * 0x4))
 
 #define CGC_LUT_H(_v)			((_v) << 16)
 #define CGC_LUT_H_MASK			(0x1FFF << 16)

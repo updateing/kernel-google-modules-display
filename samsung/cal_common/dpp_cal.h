@@ -130,6 +130,8 @@ enum dpp_regs_id {
 	REGS_RCD1_ID,
 	REGS_WB0_ID,
 	REGS_WB1_ID,
+	REGS_CGC0_ID,
+	REGS_CGC1_ID,
 	REGS_DPP_ID_MAX
 };
 #else
@@ -266,14 +268,18 @@ void rcd_reg_init(u32 id);
 int rcd_reg_deinit(u32 id, bool reset, const unsigned long attr);
 void rcd_reg_configure_params(u32 id, struct dpp_params_info *p,
 		const unsigned long attr);
-u32 cgc_reg_get_irq_and_clear_internal(u32 id);
-void cgc_reg_set_cgc_start_internal(u32 id);
-void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr);
 #else
 static inline void rcd_reg_init(u32 id) {return;}
 static inline int rcd_reg_deinit(u32 id, bool reset, const unsigned long attr) {return 0;}
 static inline void rcd_reg_configure_params(u32 id, struct dpp_params_info *p,
 		const unsigned long attr) {return;}
+#endif
+
+#if defined(CONFIG_SOC_GS201) || defined(CONFIG_SOC_ZUMA)
+u32 cgc_reg_get_irq_and_clear_internal(u32 id);
+void cgc_reg_set_cgc_start_internal(u32 id);
+void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr);
+#else
 static inline u32 cgc_reg_get_irq_and_clear_internal(u32 id) {return 0;}
 static inline void cgc_reg_set_cgc_start_internal(u32 id) {return;}
 static inline void cgc_reg_set_config_internal(u32 id, bool en, dma_addr_t addr) {return;}
@@ -318,6 +324,7 @@ int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr);
 u32 dpp_reg_get_irq_and_clear(u32 id);
 u32 idma_reg_get_irq_and_clear(u32 id);
 u32 odma_reg_get_irq_and_clear(u32 id);
+
 static inline u32 cgc_reg_get_irq_and_clear(u32 id)
 {
 	return cgc_reg_get_irq_and_clear_internal(id);
