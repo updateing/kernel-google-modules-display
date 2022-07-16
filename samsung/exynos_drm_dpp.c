@@ -112,6 +112,12 @@ static const uint32_t rcd_alpha_formats[] = {
 	DRM_FORMAT_C8,
 };
 
+static const uint64_t dpp_format_modifiers[] = {
+	DRM_FORMAT_MOD_ARM_AFBC(0),
+	DRM_FORMAT_MOD_SAMSUNG_SBWC(0),
+	DRM_FORMAT_MOD_INVALID,
+};
+
 const struct dpp_restriction dpp_drv_data = {
 	.src_f_w.min = 16,
 	.src_f_w.max = 65534,
@@ -973,6 +979,7 @@ static int dpp_bind(struct device *dev, struct device *master, void *data)
 
 	plane_config.pixel_formats = dpp->pixel_formats;
 	plane_config.num_pixel_formats = dpp->num_pixel_formats;
+	plane_config.format_modifiers = dpp->format_modifiers;
 	plane_config.zpos = id;
 	plane_config.type = get_decon_drvdata(id) ? DRM_PLANE_TYPE_PRIMARY :
 		DRM_PLANE_TYPE_OVERLAY;
@@ -1061,6 +1068,8 @@ static int exynos_dpp_parse_dt(struct dpp_device *dpp, struct device_node *np)
 		dpp->pixel_formats = dpp_gf_formats;
 		dpp->num_pixel_formats = ARRAY_SIZE(dpp_gf_formats);
 	}
+
+	dpp->format_modifiers = dpp_format_modifiers;
 
 	of_property_read_u32(np, "scale_down", (u32 *)&res->scale_down);
 	of_property_read_u32(np, "scale_up", (u32 *)&res->scale_up);

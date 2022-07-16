@@ -721,7 +721,7 @@ int exynos_plane_init(struct drm_device *dev,
 	err = drm_universal_plane_init(dev, plane, 0, &exynos_plane_funcs,
 				       config->pixel_formats,
 				       config->num_pixel_formats,
-				       NULL, config->type, NULL);
+				       config->format_modifiers, config->type, NULL);
 	if (err) {
 		DRM_ERROR("failed to initialize plane\n");
 		return err;

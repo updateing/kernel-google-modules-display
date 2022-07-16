@@ -82,6 +82,8 @@ struct dpp_device {
 	const uint32_t *pixel_formats;
 	unsigned int num_pixel_formats;
 
+	const uint64_t *format_modifiers;
+
 	struct dpp_regs	regs;
 	struct dpp_params_info win_config;
 
