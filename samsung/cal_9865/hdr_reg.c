@@ -17,7 +17,7 @@
 
 #include "regs-hdr.h"
 
-static struct cal_regs_desc regs_hdr[REGS_DPP_ID_MAX - 1];
+static struct cal_regs_desc regs_hdr[REGS_DPP_ID_MAX];
 
 #define hdr_regs_desc(id)			(&regs_hdr[id])
 #define hdr_read(id, offset)			\
