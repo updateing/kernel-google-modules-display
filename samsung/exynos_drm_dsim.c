@@ -1903,16 +1903,21 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	bool is_empty_msg;
 	bool is_last;
 
+	DPU_ATRACE_BEGIN(__func__);
+
+	is_empty_msg = !msg->tx_buf || msg->tx_len == 0;
+	is_long = mipi_dsi_packet_format_is_long(msg->type);
+	if (dsim->config.mode == DSIM_VIDEO_MODE) {
+		if (flags & (EXYNOS_DSI_MSG_FORCE_BATCH | EXYNOS_DSI_MSG_FORCE_FLUSH))
+			dsim_warn(dsim, "force batching is attempted in video mode\n");
+		if (!is_empty_msg)
+			ret = dsim_write_single_cmd_locked(dsim, msg, is_long);
+		goto err;
+	}
+
 	if (flags & EXYNOS_DSI_MSG_FORCE_BATCH) {
 		WARN_ON(dsim->force_batching);
 		dsim->force_batching = true;
-		return 0;
-	}
-
-	DPU_ATRACE_BEGIN(__func__);
-	is_long = mipi_dsi_packet_format_is_long(msg->type);
-	if (dsim->config.mode == DSIM_VIDEO_MODE) {
-		ret = dsim_write_single_cmd_locked(dsim, msg, is_long);
 		goto err;
 	}
 
@@ -1927,7 +1932,7 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	}
 
 	is_last = (IS_LAST(flags) && !dsim->force_batching) || (flags & EXYNOS_DSI_MSG_FORCE_FLUSH);
-	is_empty_msg = msg->tx_len == 0;
+
 	if (flags & EXYNOS_DSI_MSG_FORCE_FLUSH) {
 		dsim->force_batching = false;
 		WARN_ON(!is_empty_msg);
