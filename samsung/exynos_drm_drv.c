@@ -421,16 +421,18 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 			pr_err("%s: timeout of waiting for fence, name:%s idx:%d\n",
 				__func__, plane->name ? : "NA", plane->index);
 			if (crtc) {
-				struct exynos_drm_crtc_state *exynos_crtc_state;
-				struct drm_crtc_state *crtc_state;
+				struct exynos_drm_crtc_state *new_exynos_crtc_state;
+				struct drm_crtc_state *new_crtc_state;
 
-				crtc_state = drm_atomic_get_crtc_state(state, crtc);
-				if (IS_ERR(crtc_state) || !crtc_state->enable || !crtc_state->active)
+				new_crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+				if (!new_crtc_state ||
+					!new_crtc_state->enable || !new_crtc_state->active)
 					continue;
-				exynos_crtc_state = to_exynos_crtc_state(crtc_state);
-				if (!exynos_crtc_state->skip_update) {
-					exynos_crtc_state->skip_update = true;
-					pr_warn("%s: skip frame update at %s\n", __func__, crtc->name);
+				new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
+				if (!new_exynos_crtc_state->skip_update) {
+					new_exynos_crtc_state->skip_update = true;
+					pr_warn("%s: skip frame update at %s\n",
+									__func__, crtc->name);
 				}
 			}
 			print_drm_plane_state_info(&p, new_plane_state);
