@@ -155,7 +155,11 @@ static void decon_set_color_map(struct decon_device *decon, u32 win_id,
 	win_info.start_pos = win_start_pos(0, 0);
 	win_info.end_pos = win_end_pos(hactive, vactive);
 	win_info.start_time = 0;
+#ifdef CONFIG_BOARD_EMULATOR
 	win_info.colormap = 0x00FF00; /* green */
+#else
+	win_info.colormap = 0x000000; /* black */
+#endif
 	win_info.blend = DECON_BLENDING_NONE;
 	decon_reg_set_window_control(decon->id, win_id, &win_info, true);
 	decon_reg_update_req_window(decon->id, win_id);
