@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #define DRM_SAMSUNG_HDR_EOTF_LUT_LEN	129
+#define DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN	20
 
 /**
  * struct hdr_eotf_lut - HDR EOTF look up table to set by user-space
@@ -30,7 +31,19 @@ struct hdr_eotf_lut {
 	__u32 posy[DRM_SAMSUNG_HDR_EOTF_LUT_LEN];
 };
 
+struct hdr_v2p2_element {
+	__u16 even;
+	__u16 odd;
+};
+
+struct hdr_eotf_lut_v2p2 {
+	struct hdr_v2p2_element ts[DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN];
+	struct hdr_v2p2_element vs[DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN];
+	__u16 scaler;
+};
+
 #define DRM_SAMSUNG_HDR_OETF_LUT_LEN	33
+#define DRM_SAMSUNG_HDR_OETF_V2P2_LUT_LEN	24
 
 /**
  * struct hdr_oetf_lut - HDR OETF look up table to set by user-space
@@ -45,6 +58,11 @@ struct hdr_eotf_lut {
 struct hdr_oetf_lut {
 	__u16 posx[DRM_SAMSUNG_HDR_OETF_LUT_LEN];
 	__u16 posy[DRM_SAMSUNG_HDR_OETF_LUT_LEN];
+};
+
+struct hdr_oetf_lut_v2p2 {
+	struct hdr_v2p2_element ts[DRM_SAMSUNG_HDR_OETF_V2P2_LUT_LEN];
+	struct hdr_v2p2_element vs[DRM_SAMSUNG_HDR_OETF_V2P2_LUT_LEN];
 };
 
 #define DRM_SAMSUNG_HDR_GM_DIMENS	3
@@ -65,6 +83,7 @@ struct hdr_gm_data {
 };
 
 #define DRM_SAMSUNG_HDR_TM_LUT_LEN		33
+#define DRM_SAMSUNG_HDR_TM_V2P2_LUT_LEN		24
 
 /**
  * struct hdr_tm_data - HDR tone mapping data and look up table to set
@@ -97,6 +116,18 @@ struct hdr_tm_data {
 	__u16 rng_y_max;
 	__u16 posx[DRM_SAMSUNG_HDR_TM_LUT_LEN];
 	__u32 posy[DRM_SAMSUNG_HDR_TM_LUT_LEN];
+};
+
+struct hdr_tm_data_v2p2 {
+	__u16 coeff_00;
+	__u16 coeff_01;
+	__u16 coeff_02;
+	__u16 ymix_tf;
+	__u16 ymix_vf;
+	__u16 ymix_slope;
+	__u16 ymix_dv;
+	struct hdr_v2p2_element ts[DRM_SAMSUNG_HDR_TM_V2P2_LUT_LEN];
+	struct hdr_v2p2_element vs[DRM_SAMSUNG_HDR_TM_V2P2_LUT_LEN];
 };
 
 #define DRM_SAMSUNG_CGC_LUT_REG_CNT	2457
