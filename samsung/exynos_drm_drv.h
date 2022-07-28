@@ -84,12 +84,21 @@ struct exynos_drm_rect {
 	unsigned int w, h;
 };
 
+#if defined(CONFIG_SOC_ZUMA)
+struct exynos_hdr_state {
+	struct hdr_eotf_lut_v2p2 *eotf_lut;
+	struct hdr_oetf_lut_v2p2 *oetf_lut;
+	struct hdr_gm_data *gm;
+	struct hdr_tm_data_v2p2 *tm;
+};
+#else
 struct exynos_hdr_state {
 	struct hdr_eotf_lut *eotf_lut;
 	struct hdr_oetf_lut *oetf_lut;
 	struct hdr_gm_data *gm;
 	struct hdr_tm_data *tm;
 };
+#endif
 
 /*
  * Exynos drm plane state structure.

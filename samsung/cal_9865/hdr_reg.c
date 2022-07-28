@@ -41,92 +41,66 @@ void hdr_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 void hdr_reg_set_hdr(u32 id, bool en)
 {
 	cal_log_debug(id, "%s +\n", __func__);
-	hdr_write_mask(id, HDR_LSI_L_COM_CTRL, en ? ~0 : 0,
-			COM_CTRL_ENABLE_MASK);
+	hdr_write_mask(id, HDR_HDR_CON, en ? ~0 : 0, HDR_EN_MASK);
 	cal_log_debug(id, "%s -\n", __func__);
 }
 
-void hdr_reg_set_eotf_lut(u32 id, struct hdr_eotf_lut *lut)
+void hdr_reg_set_eotf_lut(u32 id, struct hdr_eotf_lut_v2p2 *lut)
 {
 	int i;
-	int ret = 0;
-	u32 regs[HDR_EOTF_POSX_LUT_REG_CNT] = {0};
+	u32 val;
+
+	cal_log_info(id, "%s +\n", __func__);
+
+	if (!lut) {
+		hdr_write_mask(id, HDR_HDR_CON, EOTF_EN(0), EOTF_EN_MASK);
+		return;
+	}
+
+	for (i = 0; i < HDR_EOTF_LUT_REG_CNT; i++) {
+		val = EOTF_TS_ODD(lut->ts[i].odd) | EOTF_TS_EVEN(lut->ts[i].even);
+		hdr_write_relaxed(id, HDR_EOTF_LUT_TS(i), val);
+		cal_log_debug(id, "EOTF TS[%d]: 0x%x\n", i, val);
+	}
+
+	for (i = 0; i < HDR_EOTF_LUT_REG_CNT; i++) {
+		val = EOTF_VS_ODD(lut->vs[i].odd) | EOTF_VS_EVEN(lut->vs[i].even);
+		hdr_write_relaxed(id, HDR_EOTF_LUT_VS(i), val);
+		cal_log_debug(id, "EOTF VS[%d]: 0x%x\n", i, val);
+	}
+
+	hdr_write_relaxed(id, HDR_EOTF_SCALER, EOTF_SCALER(lut->scaler));
+
+	hdr_write_mask(id, HDR_HDR_CON, EOTF_EN(1), EOTF_EN_MASK);
+
+	cal_log_info(id, "%s -\n", __func__);
+}
+
+void hdr_reg_set_oetf_lut(u32 id, struct hdr_oetf_lut_v2p2 *lut)
+{
+	int i;
+	u32 val;
 
 	cal_log_debug(id, "%s +\n", __func__);
 
 	if (!lut) {
-		hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_EEN(0),
-				MOD_CTRL_EEN_MASK);
+		hdr_write_mask(id, HDR_HDR_CON, OETF_EN(0), OETF_EN_MASK);
 		return;
 	}
 
-	ret = cal_pack_lut_into_reg_pairs(lut->posx, DRM_SAMSUNG_HDR_EOTF_LUT_LEN,
-			EOTF_POSX_L_MASK, EOTF_POSX_H_MASK, regs,
-			HDR_EOTF_POSX_LUT_REG_CNT);
-	if(ret) {
-		cal_log_err(id, "Failed to pack eotf_posx\n");
-	} else {
-		for (i = 0; i < HDR_EOTF_POSX_LUT_REG_CNT; i++) {
-			hdr_write_relaxed(id, HDR_LSI_L_EOTF_POSX(i), regs[i]);
-			cal_log_debug(id, "POSX[%d]: 0x%x\n", i, regs[i]);
-		}
+	for (i = 0; i < HDR_OETF_LUT_REG_CNT; i++) {
+		val = OETF_TS_ODD(lut->ts[i].odd) | OETF_TS_EVEN(lut->ts[i].even);
+		hdr_write_relaxed(id, HDR_OETF_LUT_TS(i), val);
+		cal_log_debug(id, "OETF TS[%d]: 0x%x\n", i, val);
 	}
 
-	for (i = 0; i < HDR_EOTF_POSY_LUT_REG_CNT; i++) {
-		hdr_write_relaxed(id, HDR_LSI_L_EOTF_POSY(i), lut->posy[i]);
-		cal_log_debug(id, "POSY[%d]: 0x%x\n", i, lut->posy[i]);
+	for (i = 0; i < HDR_OETF_LUT_REG_CNT; i++) {
+		val = OETF_VS_ODD(lut->vs[i].odd) | OETF_VS_EVEN(lut->vs[i].even);
+		hdr_write_relaxed(id, HDR_OETF_LUT_VS(i), val);
+		cal_log_debug(id, "OETF VS[%d]: 0x%x\n", i, val);
 	}
 
-	hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_EEN(1),
-			MOD_CTRL_EEN_MASK);
-
-	cal_log_debug(id, "%s -\n", __func__);
-}
-
-void hdr_reg_set_oetf_lut(u32 id, struct hdr_oetf_lut *lut)
-{
-	int i;
-
-	cal_log_debug(id, "%s +\n", __func__);
-
-	if (!lut) {
-		hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_OEN(0),
-				MOD_CTRL_OEN_MASK);
-		return;
-	}
-
-	{
-		u32 regs[HDR_OETF_POSX_LUT_REG_CNT] = {0};
-		int ret = cal_pack_lut_into_reg_pairs(lut->posx,
-				DRM_SAMSUNG_HDR_OETF_LUT_LEN, OETF_POSX_L_MASK,
-				OETF_POSX_H_MASK, regs, HDR_OETF_POSX_LUT_REG_CNT);
-		if (ret) {
-			cal_log_err(id, "Failed to pack oetf_posx\n");
-		} else {
-			for (i = 0; i < HDR_OETF_POSX_LUT_REG_CNT; i++) {
-				hdr_write_relaxed(id, HDR_LSI_L_OETF_POSX(i), regs[i]);
-				cal_log_debug(id, "POSX[%d]: 0x%x\n", i, regs[i]);
-			}
-		}
-	}
-
-	{
-		u32 regs[HDR_OETF_POSY_LUT_REG_CNT] = {0};
-		int ret = cal_pack_lut_into_reg_pairs(lut->posy,
-				DRM_SAMSUNG_HDR_OETF_LUT_LEN, OETF_POSY_L_MASK,
-				OETF_POSY_H_MASK, regs, HDR_OETF_POSY_LUT_REG_CNT);
-		if (ret) {
-			cal_log_err(id, "Failed to pack oetf_posy\n");
-		} else {
-			for (i = 0; i < HDR_OETF_POSY_LUT_REG_CNT; i++) {
-				hdr_write_relaxed(id, HDR_LSI_L_OETF_POSY(i), regs[i]);
-				cal_log_debug(id, "POSY[%d]: 0x%x\n", i, regs[i]);
-			}
-		}
-	}
-
-	hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_OEN(1),
-			MOD_CTRL_OEN_MASK);
+	hdr_write_mask(id, HDR_HDR_CON, OETF_EN(1), OETF_EN_MASK);
 
 	cal_log_debug(id, "%s -\n", __func__);
 }
@@ -143,72 +117,78 @@ void hdr_reg_set_gm(u32 id, struct hdr_gm_data *data)
 	cal_log_debug(id, "%s +\n", __func__);
 
 	if (!data) {
-		hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_GEN(0),
-				MOD_CTRL_GEN_MASK);
+		hdr_write_mask(id, HDR_HDR_CON, GM_EN(0), GM_EN_MASK);
 		return;
 	}
 
 	for (i = 0; i < HDR_GM_COEF_REG_CNT; ++i) {
-		hdr_write_relaxed(id, HDR_LSI_L_GM_COEF(i), data->coeffs[i]);
+		hdr_write_relaxed(id, HDR_GM_COEFF(i), data->coeffs[i]);
 		cal_log_debug(id, "COEFFS[%d]: 0x%x\n", i, data->coeffs[i]);
 	}
 
 	for (i = 0; i < HDR_GM_OFFS_REG_CNT; ++i) {
-		hdr_write_relaxed(id, HDR_LSI_L_GM_OFFS(i), data->offsets[i]);
+		hdr_write_relaxed(id, HDR_GM_OFF(i), data->offsets[i]);
 		cal_log_debug(id, "OFFSETS[%d]: 0x%x\n", i, data->offsets[i]);
 	}
 
-	hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_GEN(1),
-			MOD_CTRL_GEN_MASK);
-
+	hdr_write_mask(id, HDR_HDR_CON, GM_EN(1), GM_EN_MASK);
 	cal_log_debug(id, "%s -\n", __func__);
 }
 
-void hdr_reg_set_tm(u32 id, struct hdr_tm_data *tm)
+void hdr_reg_set_tm(u32 id, struct hdr_tm_data_v2p2 *tm)
 {
 	int i;
-	int ret;
 	u32 val;
-	u32 regs[HDR_TM_POSX_LUT_REG_CNT] = {0};
 
 	cal_log_debug(id, "%s +\n", __func__);
 
 	if (!tm) {
-		hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, 0, MOD_CTRL_TEN_MASK);
+		hdr_write_mask(id, HDR_HDR_CON, TM_EN(0), TM_EN_MASK);
 		return;
 	}
 
-	val = TM_COEFB(tm->coeff_b) | TM_COEFG(tm->coeff_g) |
-		TM_COEFR(tm->coeff_r);
-	hdr_write_relaxed(id, HDR_LSI_L_TM_COEF, val);
-	cal_log_debug(id, "COEFF: 0x%x\n", val);
-
-	val = TM_RNGX_MAXX(tm->rng_x_max) | TM_RNGX_MINX(tm->rng_x_min);
-	hdr_write_relaxed(id, HDR_LSI_L_TM_RNGX, val);
-	cal_log_debug(id, "RNGX: 0x%x\n", val);
-
-	val = TM_RNGY_MAXY(tm->rng_y_max) | TM_RNGY_MINY(tm->rng_y_min);
-	hdr_write_relaxed(id, HDR_LSI_L_TM_RNGY, val);
-	cal_log_debug(id, "RNGY: 0x%x\n", val);
+	val = TCOEFF00(tm->coeff_00);
+	hdr_write_relaxed(id, HDR_TM_COEFF00, val);
+	cal_log_debug(id, "COEFF00: 0x%x\n", val);
 
 
-	ret = cal_pack_lut_into_reg_pairs(tm->posx, DRM_SAMSUNG_HDR_TM_LUT_LEN,
-			TM_POSX_L_MASK, TM_POSX_H_MASK, regs, HDR_TM_POSX_LUT_REG_CNT);
-	if(ret) {
-		cal_log_err(id, "Failed to pack tm_posx\n");
-	} else {
-		for (i = 0; i < HDR_TM_POSX_LUT_REG_CNT; i++) {
-			hdr_write_relaxed(id, HDR_LSI_L_TM_POSX(i), regs[i]);
-			cal_log_debug(id, "POSX[%d]: 0x%x\n", i, regs[i]);
-		}
+	val = TCOEFF01(tm->coeff_01);
+	hdr_write_relaxed(id, HDR_TM_COEFF01, val);
+	cal_log_debug(id, "COEFF01: 0x%x\n", val);
+
+	val = TCOEFF02(tm->coeff_02);
+	hdr_write_relaxed(id, HDR_TM_COEFF02, val);
+	cal_log_debug(id, "COEFF02: 0x%x\n", val);
+
+	val = YMIX_TF(tm->ymix_tf);
+	hdr_write_relaxed(id, HDR_TM_YMIX_TF, val);
+	cal_log_debug(id, "YMIX_TF: 0x%x\n", val);
+
+	val = YMIX_VF(tm->ymix_vf);
+	hdr_write_relaxed(id, HDR_TM_YMIX_VF, val);
+	cal_log_debug(id, "YMIX_VF: 0x%x\n", val);
+
+	val = YMIX_TF(tm->ymix_slope);
+	hdr_write_relaxed(id, HDR_TM_YMIX_SLOPE, val);
+	cal_log_debug(id, "YMIX_SLOPE: 0x%x\n", val);
+
+	val = YMIX_DV(tm->ymix_dv);
+	hdr_write_relaxed(id, HDR_TM_YMIX_DV, val);
+	cal_log_debug(id, "YMIX_DV: 0x%x\n", val);
+
+	for (i = 0; i < HDR_TM_LUT_REG_CNT; i++) {
+		val = TM_TS_ODD(tm->ts[i].odd) | TM_TS_EVEN(tm->ts[i].even);
+		hdr_write_relaxed(id, HDR_TM_LUT_TS(i), val);
+		cal_log_debug(id, "TS[%d]: 0x%x\n", i, val);
 	}
 
-	for (i = 0; i < HDR_TM_POSY_LUT_REG_CNT; i++) {
-		hdr_write_relaxed(id, HDR_LSI_L_TM_POSY(i), tm->posy[i]);
-		cal_log_debug(id, "POSY[%d]: 0x%x\n", i, tm->posy[i]);
+	for (i = 0; i < HDR_TM_LUT_REG_CNT; i++) {
+		val = TM_VS_ODD(tm->vs[i].odd) | TM_VS_EVEN(tm->vs[i].even);
+		hdr_write_relaxed(id, HDR_TM_LUT_VS(i), val);
+		cal_log_debug(id, "VS[%d]: 0x%x\n", i, val);
 	}
 
-	hdr_write_mask(id, HDR_LSI_L_MOD_CTRL, ~0, MOD_CTRL_TEN_MASK);
+	hdr_write_mask(id, HDR_HDR_CON, TM_EN(1), TM_EN_MASK);
 
 	cal_log_debug(id, "%s -\n", __func__);
 }
@@ -252,17 +232,17 @@ void hdr_reg_print_eotf_lut(u32 id, struct drm_printer *p)
 {
 	u32 val;
 
-	val = hdr_read_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_EEN_MASK);
+	val = hdr_read_mask(id, HDR_HDR_CON, EOTF_EN_MASK);
 	cal_drm_printf(p, id, "HDR: eotf %s\n", val ? "on" : "off");
 
 	if (!val)
 		return;
 
-	cal_drm_printf(p, id, "POSX:\n");
-	hdr_reg_print(id, HDR_LSI_L_EOTF_POSX(0), DRM_SAMSUNG_HDR_EOTF_LUT_LEN,
-							ELEM_SIZE_16, p);
-	cal_drm_printf(p, id, "POSY:\n");
-	hdr_reg_print(id, HDR_LSI_L_EOTF_POSY(0), DRM_SAMSUNG_HDR_EOTF_LUT_LEN,
+	cal_drm_printf(p, id, "TS:\n");
+	hdr_reg_print(id, HDR_EOTF_LUT_TS(0), DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN,
+							ELEM_SIZE_32, p);
+	cal_drm_printf(p, id, "VS:\n");
+	hdr_reg_print(id, HDR_EOTF_LUT_VS(0), DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN,
 							ELEM_SIZE_32, p);
 }
 
@@ -270,53 +250,58 @@ void hdr_reg_print_oetf_lut(u32 id, struct drm_printer *p)
 {
 	u32 val;
 
-	val = hdr_read_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_OEN_MASK);
+	val = hdr_read_mask(id, HDR_HDR_CON, OETF_EN_MASK);
 	cal_drm_printf(p, id, "HDR: oetf %s\n", val ? "on" : "off");
 
 	if (!val)
 		return;
 
-	cal_drm_printf(p, id, "POSX:\n");
-	hdr_reg_print(id, HDR_LSI_L_OETF_POSX(0), DRM_SAMSUNG_HDR_OETF_LUT_LEN,
-							ELEM_SIZE_16, p);
-	cal_drm_printf(p, id, "POSY:\n");
-	hdr_reg_print(id, HDR_LSI_L_OETF_POSY(0), DRM_SAMSUNG_HDR_OETF_LUT_LEN,
-							ELEM_SIZE_16, p);
+	cal_drm_printf(p, id, "TS:\n");
+	hdr_reg_print(id, HDR_OETF_LUT_TS(0), DRM_SAMSUNG_HDR_OETF_V2P2_LUT_LEN,
+							ELEM_SIZE_32, p);
+	cal_drm_printf(p, id, "VS:\n");
+	hdr_reg_print(id, HDR_OETF_LUT_VS(0), DRM_SAMSUNG_HDR_OETF_V2P2_LUT_LEN,
+							ELEM_SIZE_32, p);
 }
 
 void hdr_reg_print_gm(u32 id, struct drm_printer *p)
 {
 	u32 val;
 
-	val = hdr_read_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_GEN_MASK);
+	val = hdr_read_mask(id, HDR_HDR_CON, GM_EN_MASK);
 	cal_drm_printf(p, id, "HDR: gammut %s\n", val ? "on" : "off");
 
 	if (!val)
 		return;
 
 	cal_drm_printf(p, id, "COEFFS:\n");
-	hdr_reg_print(id, HDR_LSI_L_GM_COEF(0), HDR_GM_COEF_REG_CNT,
-							ELEM_SIZE_32, p);
+	hdr_reg_print(id, HDR_GM_COEFF(0), HDR_GM_COEF_REG_CNT,
+			ELEM_SIZE_32, p);
+
 	cal_drm_printf(p, id, "OFFSETS:\n");
-	hdr_reg_print(id, HDR_LSI_L_GM_OFFS(0), HDR_GM_OFFS_REG_CNT,
-							ELEM_SIZE_32, p);
+	hdr_reg_print(id, HDR_GM_COEFF(0), HDR_GM_OFFS_REG_CNT,
+			ELEM_SIZE_32, p);
 }
 
 void hdr_reg_print_tm(u32 id, struct drm_printer *p)
 {
 	u32 val;
 
-	val = hdr_read_mask(id, HDR_LSI_L_MOD_CTRL, MOD_CTRL_TEN_MASK);
+	val = hdr_read_mask(id, HDR_HDR_CON, TM_EN_MASK);
 	cal_drm_printf(p, id, "HDR: tone mapping %s\n", val ? "on" : "off");
 
-	cal_drm_printf(p, id, "COEFF: 0x%x\n", hdr_read(id, HDR_LSI_L_TM_COEF));
-	cal_drm_printf(p, id, "RNGX: 0x%x\n", hdr_read(id, HDR_LSI_L_TM_RNGX));
-	cal_drm_printf(p, id, "RNGY: 0x%x\n", hdr_read(id, HDR_LSI_L_TM_RNGY));
+	cal_drm_printf(p, id, "COEFF00: 0x%x\n", hdr_read(id, HDR_TM_COEFF00));
+	cal_drm_printf(p, id, "COEFF01: 0x%x\n", hdr_read(id, HDR_TM_COEFF01));
+	cal_drm_printf(p, id, "COEFF01: 0x%x\n", hdr_read(id, HDR_TM_COEFF02));
+	cal_drm_printf(p, id, "YMIX_TF: 0x%x\n", hdr_read(id, HDR_TM_YMIX_TF));
+	cal_drm_printf(p, id, "YMIX_VF: 0x%x\n", hdr_read(id, HDR_TM_YMIX_VF));
+	cal_drm_printf(p, id, "YMIX_SLOPE: 0x%x\n", hdr_read(id, HDR_TM_YMIX_SLOPE));
+	cal_drm_printf(p, id, "YMIX_DV: 0x%x\n", hdr_read(id, HDR_TM_YMIX_DV));
 
-	cal_drm_printf(p, id, "POSX:\n");
-	hdr_reg_print(id, HDR_LSI_L_TM_POSX(0), DRM_SAMSUNG_HDR_TM_LUT_LEN,
-							ELEM_SIZE_16, p);
-	cal_drm_printf(p, id, "POSY:\n");
-	hdr_reg_print(id, HDR_LSI_L_TM_POSY(0), DRM_SAMSUNG_HDR_TM_LUT_LEN,
+	cal_drm_printf(p, id, "TS:\n");
+	hdr_reg_print(id, HDR_TM_LUT_TS(0), DRM_SAMSUNG_HDR_TM_V2P2_LUT_LEN,
+							ELEM_SIZE_32, p);
+	cal_drm_printf(p, id, "VS:\n");
+	hdr_reg_print(id, HDR_TM_LUT_VS(0), DRM_SAMSUNG_HDR_TM_V2P2_LUT_LEN,
 							ELEM_SIZE_32, p);
 }

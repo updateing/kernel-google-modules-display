@@ -34,66 +34,59 @@
 #define HDR_VERSION			(0x01010000)
 #define HDR_VERSION_GET(_v)		(((_v) >> 0) & 0xFFFFFFFF)
 
-#define HDR_LSI_L_COM_CTRL		(0x0004)
-#define COM_CTRL_ENABLE_MASK		(1 << 0)
+#define HDR_HDR_CON			(0x0000)
+#define OETF_EN(_v)			((_v) << 28)
+#define OETF_EN_MASK			(1 << 28)
+#define TM_EN(_v)			((_v) << 24)
+#define TM_EN_MASK			(1 << 24)
+#define GM_EN(_v)			((_v) << 20)
+#define GM_EN_MASK			(1 << 20)
+#define EOTF_LUT_EN(_v)			((_v) << 17)
+#define EOTF_LUT_EN_MASK		(1 << 17)
+#define EOTF_EN(_v)			((_v) << 16)
+#define EOTF_EN_MASK			(1 << 16)
+#define FP16_CVT_EN(_v)			((_v) << 5)
+#define FP16_CVT_EN_MASK		(1 << 5)
+#define FP16_EN(_v)			((_v) << 4)
+#define FP16_EN_MASK			(1 << 4)
+#define HDR_EN(_v)			((_v) << 0)
+#define HDR_EN_MASK			(1 << 0)
 
-#define HDR_LSI_L_MOD_CTRL		(0x0008)
-#define MOD_CTRL_TEN(_v)		((_v) << 5)	/* H only */
-#define MOD_CTRL_TEN_MASK		(1 << 5)
-#define MOD_CTRL_GEN(_v)		((_v) << 2)
-#define MOD_CTRL_GEN_MASK		(1 << 2)
-#define MOD_CTRL_EEN(_v)		((_v) << 1)
-#define MOD_CTRL_EEN_MASK		(1 << 1)
-#define MOD_CTRL_OEN(_v)		((_v) << 0)
-#define MOD_CTRL_OEN_MASK		(1 << 0)
+#define HDR_EOTF_SCALER			(0x0004)
+#define EOTF_SCALER(_v)			((_v) << 0)
+#define EOTF_SCALER_MASK		(0xffff < 0)
 
 /*-----[ OETF : Inverse EOTF ]-------------------------------------------------
- * 32-segment transfer function, 16-bit >> 10-bit
- *-----------------------------------------------------------------------------
  */
-#define HDR_OETF_POSX_LUT_REG_CNT	(17)
-/*
- * OETF_POSX (0~16) : 0x000C ~ 0x004C
- * _n: [0, 16] / _x: [0, 32]
- */
-#define HDR_LSI_L_OETF_POSX(_n)		(0x000C + ((_n) * 0x4))
-#define OETF_POSX_H(_v)			((_v) << 16)
-#define OETF_POSX_H_MASK		(0xFFFF << 16)
-#define OETF_POSX_L(_v)			((_v) << 0)
-#define OETF_POSX_L_MASK		(0xFFFF << 0)
+#define HDR_OETF_LUT_REG_CNT		(24)
 
-#define HDR_OETF_POSY_LUT_REG_CNT	(17)
-/*
- * OETF_POSY (0~16) : 0x0050 ~ 0x0090
- * _n: [0, 16] / _x: [0, 32]
- */
-#define HDR_LSI_L_OETF_POSY(_n)		(0x0050 + ((_n) * 0x4))
-#define OETF_POSY_H(_v)			((_v) << 16)
-#define OETF_POSY_H_MASK		(0xFFF << 16)
-#define OETF_POSY_L(_v)			((_v) << 0)
-#define OETF_POSY_L_MASK		(0xFFF << 0)
+#define HDR_OETF_LUT_TS(_n)		(0x01BC + ((_n) * 0x4))
+#define OETF_TS_ODD(_v)			((_v) << 16)
+#define OETF_TS_ODD_MASK		(0x3FFF << 16)
+#define OETF_TS_EVEN(_v)		((_v) << 0)
+#define OETF_TS_EVEN_MASK		(0x3FFF << 0)
+
+#define HDR_OETF_LUT_VS(_n)		(0x021C + ((_n) * 0x4))
+#define OETF_VS_ODD(_v)			((_v) << 16)
+#define OETF_VS_ODD_MASK		(0x3FF << 16)
+#define OETF_VS_EVEN(_v)		((_v) << 0)
+#define OETF_VS_EVEN_MASK		(0x3FF << 0)
 
 /*-----[ EOTF : Electro-Optical Transfer Function ]----------------------------
- * 128-segment transfer function, 10-bit >> 16-bit
- *-----------------------------------------------------------------------------
  */
-#define HDR_EOTF_POSX_LUT_REG_CNT	(65)
-/*
- * EOTF_POSX (0~64) : 0x0094 ~ 0x0194
- * _n: [0, 64] / _x: [0, 128]
- */
-#define HDR_LSI_L_EOTF_POSX(_n)		(0x0094 + ((_n) * 0x4))
-#define EOTF_POSX_H(_v)			((_v) << 16)
-#define EOTF_POSX_H_MASK		(0x3FF << 16)
-#define EOTF_POSX_L(_v)			((_v) << 0)
-#define EOTF_POSX_L_MASK		(0x3FF << 0)
+#define HDR_EOTF_LUT_REG_CNT		(20)
 
-#define HDR_EOTF_POSY_LUT_REG_CNT	(129)
-/*
- * EOTF_POSY (0~128) : 0x0198 ~ 0x0398
- * _n: [0, 128] / _x: [0, 256]
- */
-#define HDR_LSI_L_EOTF_POSY(_n)		(0x0198 + ((_n) * 0x4))
+#define HDR_EOTF_LUT_TS(_n)		(0x0010 + ((_n) * 0x4))
+#define EOTF_TS_ODD(_v)			((_v) << 16)
+#define EOTF_TS_ODD_MASK		(0x3FF << 16)
+#define EOTF_TS_EVEN(_v)		((_v) << 0)
+#define EOTF_TS_EVEN_MASK		(0x3FF << 0)
+
+#define HDR_EOTF_LUT_VS(_n)		(0x0060 + ((_n) * 0x4))
+#define EOTF_VS_ODD(_v)			((_v) << 16)
+#define EOTF_VS_ODD_MASK		(0xFFFF << 16)
+#define EOTF_VS_EVEN(_v)		((_v) << 0)
+#define EOTF_VS_EVEN_MASK		(0xFFFF << 0)
 
 /*-----[ GM : Gamut Mapping ]--------------------------------------------------
  * 3x3 matrix, S2.16
@@ -107,20 +100,20 @@
  * |Gconv| = |C10 C11 C12| |Gin| + |Goffset1|
  * |Bconv| = |C20 C21 C22| |Bin| + |Boffset2|
  */
-#define HDR_LSI_L_GM_COEF(_n)		(0x039C + ((_n) * 0x4))
+#define HDR_GM_COEFF(_n)		(0x00B0 + ((_n) * 0x4))
 #define GM_COEF(_v)			((_v) << 0)
-#define GM_COEF_MASK			(0x7FFFF << 0)
+#define GM_COEF_MASK			(0xFFFF << 0)
 
 #define HDR_GM_OFFS_REG_CNT		(3)
 /*
  * GM_OFFS (0~2) : 0x03C0 ~ 0x03C8
  */
-#define HDR_LSI_L_GM_OFFS(_n)		(0x03C0 + ((_n) * 0x4))
-#define HDR_LSI_L_GM_OFFS_0		(0x03C0)
-#define HDR_LSI_L_GM_OFFS_1		(0x03C4)
-#define HDR_LSI_L_GM_OFFS_2		(0x03C8)
+#define HDR_GM_OFF(_n)			(0x00D4 + ((_n) * 0x4))
+#define HDR_GM_OFF_0			(0x00D4)
+#define HDR_GM_OFF_1			(0x00D8)
+#define HDR_GM_OFF_2			(0x00DC)
 #define GM_OFFS(_v)			((_v) << 0)
-#define GM_OFFS_MASK			(0x1FFFF << 0)
+#define GM_OFFS_MASK			(0x3FFF << 0)
 
 /*-----[ TM : Tone Mapping ]---------------------------------------------------
  * Available only in high-end IP
@@ -129,37 +122,46 @@
  * Supports for both fixed-ratio mixing and adaptive mixing
  *-----------------------------------------------------------------------------
  */
-#define HDR_LSI_L_TM_COEF		(0x03CC)
-#define TM_COEFB(_v)			((_v) << 20)
-#define TM_COEFG(_v)			((_v) << 10)
-#define TM_COEFR(_v)			((_v) << 0)
+#define HDR_TM_COEFF00			(0x00E0)
+#define TCOEFF00(_v)			((_v) << 0)
+#define TCOEFF00_MASK			(0xFFF << 0)
 
-#define HDR_LSI_L_TM_RNGX		(0x03D0)
-#define TM_RNGX_MAXX(_v)		((_v) << 16)
-#define TM_RNGX_MINX(_v)		((_v) << 0)
+#define HDR_TM_COEFF01			(0x00E4)
+#define TCOEFF01(_v)			((_v) << 0)
+#define TCOEFF01_MASK			(0xFFF << 0)
 
-#define HDR_LSI_L_TM_RNGY		(0x03D4)
-#define TM_RNGY_MAXY(_v)		((_v) << 9)
-#define TM_RNGY_MINY(_v)		((_v) << 0)
+#define HDR_TM_COEFF02			(0x00E8)
+#define TCOEFF02(_v)			((_v) << 0)
+#define TCOEFF02_MASK			(0xFFF << 0)
 
-#define HDR_TM_POSX_LUT_REG_CNT		(17)
-/*
- * TM_POSX (0~16) : 0x03D8 ~ 0x0418
- * _n: [0, 16] / _x: [0, 32]
- */
-#define HDR_LSI_L_TM_POSX(_n)		(0x03D8 + ((_n) * 0x4))
-#define TM_POSX_H(_v)			((_v) << 16)
-#define TM_POSX_H_MASK			(0xFFFF << 16)
-#define TM_POSX_L(_v)			((_v) << 0)
-#define TM_POSX_L_MASK			(0xFFFF << 0)
+#define HDR_TM_YMIX_TF			(0x00EC)
+#define YMIX_TF(_v)			((_v) << 0)
+#define YMIX_TF_MASK			(0x1FFF << 0)
 
-#define HDR_TM_POSY_LUT_REG_CNT		(33)
-/*
- * TM_POSY (0~32) : 0x041C ~ 0x049C
- * _n: [0, 32] / _x: [0, 64]
- */
-#define HDR_LSI_L_TM_POSY(_n)		(0x041C + ((_n) * 0x4))
-#define TM_POSY(_v)			((_v) << 0)
-#define TM_POSY_MASK			(0x7FFFFFF << 0)
+#define HDR_TM_YMIX_VF			(0x00F0)
+#define YMIX_VF(_v)			((_v) << 0)
+#define YMIX_VF_MASK			(0x1FFF << 0)
+
+#define HDR_TM_YMIX_SLOPE		(0x00F4)
+#define YMIX_SLOPE(_v)			((_v) << 0)
+#define YMIX_SLOPE_MASK			(0x3FFF << 0)
+
+#define HDR_TM_YMIX_DV			(0x00F8)
+#define YMIX_DV(_v)			((_v) << 0)
+#define YMIX_DV_MASK			(0x1FFF << 0)
+
+#define HDR_TM_LUT_REG_CNT		(24)
+
+#define HDR_TM_LUT_TS(_n)		(0x00FC + ((_n) * 0x4))
+#define TM_TS_ODD(_v)			((_v) << 16)
+#define TM_TS_ODD_MASK			(0x1FFF << 16)
+#define TM_TS_EVEN(_v)			((_v) << 0)
+#define TM_TS_EVEN_MASK			(0x1FFF << 0)
+
+#define HDR_TM_LUT_VS(_n)		(0x015C + ((_n) * 0x4))
+#define TM_VS_ODD(_v)			((_v) << 16)
+#define TM_VS_ODD_MASK			(0x1FFF << 16)
+#define TM_VS_EVEN(_v)			((_v) << 0)
+#define TM_VS_EVEN_MASK			(0x1FFF << 0)
 
 #endif /* __HDR_REGS_H__ */

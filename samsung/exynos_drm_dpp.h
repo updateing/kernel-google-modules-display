@@ -40,12 +40,20 @@ enum dpp_state {
 
 struct eotf_debug_override {
 	struct exynos_debug_info info;
+#if defined(CONFIG_SOC_ZUMA)
+	struct hdr_eotf_lut_v2p2 force_lut;
+#else
 	struct hdr_eotf_lut force_lut;
+#endif
 };
 
 struct oetf_debug_override {
 	struct exynos_debug_info info;
+#if defined(CONFIG_SOC_ZUMA)
+	struct hdr_oetf_lut_v2p2 force_lut;
+#else
 	struct hdr_oetf_lut force_lut;
+#endif
 };
 
 struct gm_debug_override {
@@ -55,7 +63,11 @@ struct gm_debug_override {
 
 struct tm_debug_override {
 	struct exynos_debug_info info;
+#if defined(CONFIG_SOC_ZUMA)
+	struct hdr_tm_data_v2p2 force_data;
+#else
 	struct hdr_tm_data force_data;
+#endif
 };
 
 struct exynos_hdr {

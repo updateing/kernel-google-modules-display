@@ -134,21 +134,39 @@ static int exynos_drm_plane_set_property(struct drm_plane *plane,
 	} else if (property == exynos_plane->props.colormap) {
 		exynos_state->colormap = val;
 	} else if (property == exynos_plane->props.eotf_lut) {
+#if defined(CONFIG_SOC_ZUMA)
+		ret = exynos_drm_replace_property_blob_from_id(
+				state->plane->dev, &exynos_state->eotf_lut,
+				val, sizeof(struct hdr_eotf_lut_v2p2));
+#else
 		ret = exynos_drm_replace_property_blob_from_id(
 				state->plane->dev, &exynos_state->eotf_lut,
 				val, sizeof(struct hdr_eotf_lut));
+#endif
 	} else if (property == exynos_plane->props.oetf_lut) {
+#if defined(CONFIG_SOC_ZUMA)
+		ret = exynos_drm_replace_property_blob_from_id(
+				state->plane->dev, &exynos_state->oetf_lut,
+				val, sizeof(struct hdr_oetf_lut_v2p2));
+#else
 		ret = exynos_drm_replace_property_blob_from_id(
 				state->plane->dev, &exynos_state->oetf_lut,
 				val, sizeof(struct hdr_oetf_lut));
+#endif
 	} else if (property == exynos_plane->props.gm) {
 		ret = exynos_drm_replace_property_blob_from_id(
 				state->plane->dev, &exynos_state->gm,
 				val, sizeof(struct hdr_gm_data));
 	} else if (property == exynos_plane->props.tm) {
+#if defined(CONFIG_SOC_ZUMA)
+		ret = exynos_drm_replace_property_blob_from_id(
+				state->plane->dev, &exynos_state->tm,
+				val, sizeof(struct hdr_tm_data_v2p2));
+#else
 		ret = exynos_drm_replace_property_blob_from_id(
 				state->plane->dev, &exynos_state->tm,
 				val, sizeof(struct hdr_tm_data));
+#endif
 	} else if (property == exynos_plane->props.block) {
 		ret = exynos_drm_replace_property_blob_from_id(
 				state->plane->dev, &exynos_state->block,
@@ -284,6 +302,45 @@ static struct drm_plane_funcs exynos_plane_funcs = {
 	.format_mod_supported	= exynos_drm_plane_format_mod_supported_per_plane,
 };
 
+#if defined(CONFIG_SOC_ZUMA)
+static void
+exynos_plane_update_hdr_params(struct exynos_drm_plane_state *exynos_state)
+{
+	struct exynos_hdr_state *hdr_state = &exynos_state->hdr_state;
+	struct hdr_eotf_lut_v2p2 *eotf_lut;
+	struct hdr_oetf_lut_v2p2 *oetf_lut;
+	struct hdr_gm_data *gm;
+	struct hdr_tm_data_v2p2 *tm;
+
+	if (exynos_state->eotf_lut) {
+		eotf_lut = (struct hdr_eotf_lut_v2p2 *)exynos_state->eotf_lut->data;
+		hdr_state->eotf_lut = eotf_lut;
+	} else {
+		hdr_state->eotf_lut = NULL;
+	}
+
+	if (exynos_state->oetf_lut) {
+		oetf_lut = (struct hdr_oetf_lut_v2p2 *)exynos_state->oetf_lut->data;
+		hdr_state->oetf_lut = oetf_lut;
+	} else {
+		hdr_state->oetf_lut = NULL;
+	}
+
+	if (exynos_state->gm) {
+		gm = (struct hdr_gm_data *)exynos_state->gm->data;
+		hdr_state->gm = gm;
+	} else {
+		hdr_state->gm = NULL;
+	}
+
+	if (exynos_state->tm) {
+		tm = (struct hdr_tm_data_v2p2 *)exynos_state->tm->data;
+		hdr_state->tm = tm;
+	} else {
+		hdr_state->tm = NULL;
+	}
+}
+#else
 static void
 exynos_plane_update_hdr_params(struct exynos_drm_plane_state *exynos_state)
 {
@@ -321,6 +378,7 @@ exynos_plane_update_hdr_params(struct exynos_drm_plane_state *exynos_state)
 		hdr_state->tm = NULL;
 	}
 }
+#endif
 
 static int exynos_plane_atomic_check(struct drm_plane *plane,
 				     struct drm_atomic_state *atomic_state)
