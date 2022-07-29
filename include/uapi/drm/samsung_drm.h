@@ -7,6 +7,7 @@
 #endif
 
 #include <drm/drm.h>
+#include <drm/drm_fourcc_gs101.h>
 
 #if defined(__cplusplus)
 extern "C" {
