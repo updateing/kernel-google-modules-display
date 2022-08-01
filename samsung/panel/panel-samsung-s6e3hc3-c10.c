@@ -779,6 +779,10 @@ static int s6e3hc3_c10_disable(struct drm_panel *panel)
 	if (ret)
 		return ret;
 
+	/* HBM is disabled in exynos_panel_disable() */
+	clear_bit(C10_FEAT_HBM, spanel->feat);
+	clear_bit(C10_FEAT_IRC_OFF, spanel->feat);
+
 	/* panel register state gets reset after disabling hardware */
 	bitmap_clear(spanel->hw_feat, 0, C10_FEAT_MAX);
 	spanel->hw_vrefresh = 60;
