@@ -174,31 +174,31 @@ static void decon_reg_set_qactive_pll_mode(u32 id, u32 en)
 static void decon_reg_set_sram_enable(u32 id,
 		u32 pri[MAX_SRAM_EN_CNT], u32 sec[MAX_SRAM_EN_CNT])
 {
-	int i, n;
+	int i, n, j;
 	u32 val1 = 0, val2 = 0;
 
 	n = 0;
-	for (i = 0; i < MAX_SRAM_EN_CNT; i++) {
-		if (pri[n])
-			val1 |= SRAM_EN_ID(n % 8);
-		if (sec[n])
-			val2 |= SRAM_EN_ID(n % 8);
-
-		n++;
-		if (n == 8) {
-			/* sram0 ~ 7 */
-			decon_write(id, SRAM_EN_OF_PRI_0, val1);
-			if (id != 2)
-				decon_write(id, SRAM_EN_OF_SEC_0, val2);
-			val1 = 0;
-			val2 = 0;
+	for (j = 0; j < SRAM_EN_OF_PRI_REG_CNT; j++) {
+		for (i = 0; i < SRAM_EN_CNT; i++) {
+			n = 8*j + i;
+			if (pri[n])
+				val1 |= SRAM_EN_ID(i % 8);
+			if (sec[n])
+				val2 |= SRAM_EN_ID(i % 8);
 		}
+		decon_write(id, SRAM_EN_OF_PRI(j), val1);
+		if (id != 2)
+			decon_write(id, SRAM_EN_OF_SEC(j), val2);
+		val1 = 0;
+		val2 = 0;
 	}
 
 	if (id != 2) {
-		/* sram8 ~ 12 */
-		decon_write(id, SRAM_EN_OF_PRI_1, val1);
+		/* sram32 */
+		if (pri[32])
+			decon_write(id, SRAM_EN_OF_PRI_4, SRAM32_EN_F);
 	}
+
 }
 
 static void decon_reg_set_outfifo_size_ctl0(u32 id, u32 width, u32 height)
@@ -1785,10 +1785,10 @@ int decon_reg_init(u32 id, struct decon_config *config)
 	/* for bring-up */
 	u32 pri_sram[3][MAX_SRAM_EN_CNT] = {
 		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 1, 1, 1, 1}, /* decon0 : 33 */
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 33 */
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 		 1, 1, 1, 1, 1, 1, 1}, /* decon1 : 33 */
 		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 		 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,

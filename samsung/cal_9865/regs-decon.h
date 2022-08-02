@@ -443,9 +443,12 @@
 #define WM_LOW_THRESHOLD_GET(_v)		(((_v) >> 0) & 0xffff)
 
 #define MAX_SRAM_EN_CNT				(33)
+#define SRAM_EN_OF_PRI_REG_CNT			4
+#define SRAM_EN_CNT				8
 #define SRAM_EN_ID(_id)				(1 << (_id * 4))
 
 /* primary display path */
+#define SRAM_EN_OF_PRI(_i)			(0x0300 + ((_i) * 4))
 #define SRAM_EN_OF_PRI_0			(0x0300)
 #define SRAM7_EN_F				(1 << 28)
 #define SRAM6_EN_F				(1 << 24)
@@ -490,6 +493,7 @@
 #define SRAM32_EN_F				(1 << 0)
 
 /* CWB : same with primary */
+#define SRAM_EN_OF_SEC(_i)			(0x0320 + ((_i) * 4))
 #define SRAM_EN_OF_SEC_0			(0x0320)
 #define SRAM_EN_OF_SEC_1			(0x0324)
 #define SRAM_EN_OF_SEC_2			(0x0328)
