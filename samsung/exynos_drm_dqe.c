@@ -706,6 +706,7 @@ static void set_default_atc_config(struct exynos_atc *atc)
 	atc->threshold_3 = 0x1;
 	atc->gain_limit = 0x1FF;
 	atc->lt_calc_ab_shift = 0x1;
+	atc->dim_ratio = 0xFF;
 }
 
 static ssize_t
@@ -787,6 +788,7 @@ DQE_ATC_ATTR_U8_RW(threshold_2);
 DQE_ATC_ATTR_U8_RW(threshold_3);
 DQE_ATC_ATTR_U16_RW(gain_limit);
 DQE_ATC_ATTR_U8_RW(lt_calc_ab_shift);
+DQE_ATC_ATTR_U16_RW(dim_ratio);
 
 static ssize_t force_update_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -880,6 +882,7 @@ static struct attribute *atc_attrs[] = {
 	&dev_attr_threshold_3.attr,
 	&dev_attr_gain_limit.attr,
 	&dev_attr_lt_calc_ab_shift.attr,
+	&dev_attr_dim_ratio.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(atc);

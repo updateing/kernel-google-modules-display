@@ -246,6 +246,7 @@ struct exynos_atc {
 	__u8 threshold_3;
 	__u16 gain_limit;
 	__u8 lt_calc_ab_shift;
+	__u16 dim_ratio;
 };
 
 #if defined(CONFIG_SOC_GS201)

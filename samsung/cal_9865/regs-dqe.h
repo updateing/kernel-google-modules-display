@@ -128,6 +128,9 @@
 #define ATC_LT_MASK			(0xFF << 0)
 
 #define DQE_ATC_WEIGHT			(0x0408)
+#define ATC_LA_W_ON(_v)			((_v) << 24)
+#define ATC_LA_W_ON_MASK		(0x1 << 24)
+#define ATC_PL_W2_MASK			(0xF << 16)
 #define ATC_PL_W2(_v)			((_v) << 16)
 #define ATC_PL_W2_MASK			(0xF << 16)
 #define ATC_PL_W1(_v)			((_v) << 0)
@@ -195,6 +198,12 @@
 #define ATC_IBSI_Y_P2_MASK		(0xFFFF << 16)
 #define ATC_IBSI_X_P2(_v)		((_v) << 0)
 #define ATC_IBSI_X_P2_MASK		(0xFFFF << 0)
+
+#define DQE_ATC_DIMMING_CONTROL	(0x0440)
+#define ATC_TARGET_DIM_RATIO(_v)	((_v) << 16)
+#define ATC_TARGET_DIM_RATIO_MASK 	(0x1FF << 16)
+#define ATC_DIM_PERIOD_SHIFT(_v)	((_v) << 0)
+#define ATC_DIM_PERIOD_SHIFT_MASK 	(0xF << 0)
 
 /*----------------------[HSC]------------------------------------------------*/
 

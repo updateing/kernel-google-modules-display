@@ -585,6 +585,9 @@ void dqe_reg_set_atc(u32 dqe_id, const struct exynos_atc *atc)
 		ATC_LT_CALC_AB_SHIFT(atc->lt_calc_ab_shift);
 	dqe_write_relaxed(dqe_id, DQE_ATC_GAIN_LIMIT, val);
 
+	val = ATC_TARGET_DIM_RATIO(atc->dim_ratio);
+	dqe_write_relaxed(dqe_id, DQE_ATC_DIMMING_CONTROL, val);
+
 	dqe_write_mask(dqe_id, DQE_ATC_CONTROL, ~0, DQE_ATC_EN_MASK);
 }
 
@@ -623,7 +626,7 @@ void dqe_reg_print_atc(u32 dqe_id, struct drm_printer *p)
 		return;
 
 	cal_drm_printf(p, 0, "ATC configuration\n");
-	dqe_reg_print_dump(dqe_id, DQE_ATC_CONTROL, 16, 0, p);
+	dqe_reg_print_dump(dqe_id, DQE_ATC_CONTROL, 27, 0, p);
 }
 
 void dqe_reg_save_lpd_atc(u32 dqe_id, u32 *lpd_atc_regs)
