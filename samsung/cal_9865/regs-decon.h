@@ -694,12 +694,13 @@
 #define DSC_CRC_Y2_S1_F(_v)			((_v) << 0)
 
 #define DSC_PPS00_03(_id)			(DSC_OFFSET(_id) + 0x0040)
-#define PPS00_VER(_v)				((_v) << 24)
-#define PPS00_VER_MASK				(0xff << 24)
+#define PPS00_DSC_VER(_v)			((_v) << 24)
+#define PPS00_DSC_VER_MASK			(0xFF << 24)
 #define PPS01_ID(_v)				((_v) << 16)
 #define PPS01_ID_MASK				(0xff << 16)
 #define PPS03_BPC_LBD_MASK			(0xff << 0)
-#define PPS03_BPC_LBD(_v)			((_v) << 0)
+#define PPS03_LBD(_v)				((_v) << 0)
+#define PPS03_BPC(_v)				((_v) << 4)
 
 #define DSC_PPS04_07(_id)			(DSC_OFFSET(_id) + 0x0044)
 #define PPS04_COMP_CFG(_v)			((_v) << 24)
@@ -710,8 +711,8 @@
 #define PPS06_07_PIC_HEIGHT(_v)			((_v) << 0)
 
 #define DSC_PPS08_11(_id)			(DSC_OFFSET(_id) + 0x0048)
-#define PPS08_09_PIC_WIDHT_MASK			(0xffff << 16)
-#define PPS08_09_PIC_WIDHT(_v)			((_v) << 16)
+#define PPS08_09_PIC_WIDTH_MASK		(0xffff << 16)
+#define PPS08_09_PIC_WIDTH(_v)			((_v) << 16)
 #define PPS10_11_SLICE_HEIGHT_MASK		(0xffff << 0)
 #define PPS10_11_SLICE_HEIGHT(_v)		((_v) << 0)
 
