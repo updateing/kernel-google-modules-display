@@ -413,17 +413,26 @@ EXPORT_SYMBOL(exynos_panel_init);
 
 void exynos_panel_reset(struct exynos_panel *ctx)
 {
+	u32 delay;
 	dev_dbg(ctx->dev, "%s +\n", __func__);
 
 	if (IS_ENABLED(CONFIG_BOARD_EMULATOR))
 		return;
 
 	gpiod_set_value(ctx->reset_gpio, 1);
-	usleep_range(5000, 6000);
+	delay = ctx->reset_timing_ms[RESET_TIMING_HIGH] ?: 5;
+	delay *= 1000;
+	usleep_range(delay, delay + 10);
+
 	gpiod_set_value(ctx->reset_gpio, 0);
-	usleep_range(5000, 6000);
+	delay = ctx->reset_timing_ms[RESET_TIMING_LOW] ?: 5;
+	delay *= 1000;
+	usleep_range(delay, delay + 10);
+
 	gpiod_set_value(ctx->reset_gpio, 1);
-	usleep_range(10000, 11000);
+	delay = ctx->reset_timing_ms[RESET_TIMING_INIT] ?: 10;
+	delay *= 1000;
+	usleep_range(delay, delay + 10);
 
 	dev_dbg(ctx->dev, "%s -\n", __func__);
 

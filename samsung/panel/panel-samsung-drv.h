@@ -520,12 +520,20 @@ struct te2_data {
 	enum exynos_panel_te2_opt option;
 };
 
+enum reset_timing {
+	RESET_TIMING_HIGH = 0,
+	RESET_TIMING_LOW,
+	RESET_TIMING_INIT,
+	RESET_TIMING_COUNT
+};
+
 struct exynos_panel {
 	struct device *dev;
 	struct drm_panel panel;
 	struct dentry *debugfs_entry;
 	struct dentry *debugfs_cmdset_entry;
 	struct gpio_desc *reset_gpio;
+	u32 reset_timing_ms[RESET_TIMING_COUNT];
 	struct gpio_desc *enable_gpio;
 	struct regulator *vci;
 	struct regulator *vddi;
