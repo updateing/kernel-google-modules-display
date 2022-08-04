@@ -22,6 +22,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_fourcc_gs101.h>
+#include <trace/dpu_trace.h>
 
 #include <cal_config.h>
 
@@ -50,7 +51,7 @@ static unsigned int dpu_event_print_underrun = 128;
 static unsigned int dpu_event_print_fail_update_bw = 32;
 static unsigned int dpu_debug_dump_mask = DPU_EVT_CONDITION_DEFAULT |
 	DPU_EVT_CONDITION_UNDERRUN | DPU_EVT_CONDITION_FAIL_UPDATE_BW |
-	DPU_EVT_CONDITION_FIFO_TIMEOUT;
+	DPU_EVT_CONDITION_FIFO_TIMEOUT | DPU_EVT_CONDITION_IDMA_ERROR_COMPACT;
 
 module_param_named(event_log_max, dpu_event_log_max, uint, 0);
 module_param_named(event_print_max, dpu_event_print_max, uint, 0600);
@@ -115,7 +116,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	int idx;
 	bool skip_excessive = true;
 
-	if (index < 0) {
+	if (index < 0 || index >= MAX_DECON_CNT) {
 		DRM_ERROR("%s: decon id is not valid(%d)\n", __func__, index);
 		return;
 	}
@@ -151,6 +152,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 	case DPU_EVT_IDMA_DEADLOCK:
 	case DPU_EVT_IDMA_CFG_ERROR:
 		decon->d.idma_err_cnt++;
+		DPU_ATRACE_INT_PID("IDMA_ERROR", decon->d.idma_err_cnt & 1, decon->thread->pid);
 		break;
 	default:
 		skip_excessive = false;
@@ -613,7 +615,8 @@ static bool is_skip_dpu_event_dump(enum dpu_event_type type, enum dpu_event_cond
 		}
 	}
 
-	if (condition == DPU_EVT_CONDITION_IDMA_ERROR) {
+	if (condition == DPU_EVT_CONDITION_IDMA_ERROR ||
+		condition == DPU_EVT_CONDITION_IDMA_ERROR_COMPACT) {
 		switch (type) {
 		case DPU_EVT_DECON_FRAMEDONE:
 		case DPU_EVT_DECON_FRAMESTART:
@@ -1842,7 +1845,7 @@ void dpu_print_hex_dump(struct drm_printer *p, void __iomem *regs, const void *b
 	}
 }
 
-static bool decon_dump_ignore(enum dpu_event_condition condition)
+bool decon_dump_ignore(enum dpu_event_condition condition)
 {
 	return !(dpu_debug_dump_mask & condition);
 }
@@ -1887,6 +1890,7 @@ void decon_dump_event_condition(const struct decon_device *decon,
 	case DPU_EVT_CONDITION_UNDERRUN:
 	case DPU_EVT_CONDITION_FIFO_TIMEOUT:
 	case DPU_EVT_CONDITION_IDMA_ERROR:
+	case DPU_EVT_CONDITION_IDMA_ERROR_COMPACT:
 		print_log_size = dpu_event_print_underrun;
 		break;
 	case DPU_EVT_CONDITION_FAIL_UPDATE_BW:

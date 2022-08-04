@@ -273,6 +273,7 @@ enum dpu_event_condition {
 	DPU_EVT_CONDITION_FAIL_UPDATE_BW	= 1U << 2,
 	DPU_EVT_CONDITION_FIFO_TIMEOUT		= 1U << 3,
 	DPU_EVT_CONDITION_IDMA_ERROR		= 1U << 4,
+	DPU_EVT_CONDITION_IDMA_ERROR_COMPACT	= 1U << 5,
 };
 
 #define DPU_CALLSTACK_MAX 10
@@ -479,6 +480,7 @@ static inline struct decon_device *get_decon_drvdata(u32 id)
 	return NULL;
 }
 
+bool decon_dump_ignore(enum dpu_event_condition condition);
 void decon_dump(const struct decon_device *decon);
 void decon_dump_all(struct decon_device *decon,
 		enum dpu_event_condition cond, bool async_buf_dump);

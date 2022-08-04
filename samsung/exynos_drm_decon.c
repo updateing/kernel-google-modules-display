@@ -34,7 +34,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/console.h>
 #include <linux/iommu.h>
-#include <trace/dpu_trace.h>
 #include <uapi/linux/sched/types.h>
 
 #include <soc/google/exynos-cpupm.h>
