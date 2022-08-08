@@ -465,6 +465,9 @@ static int s6e3fc3_p10_set_op_hz(struct exynos_panel *ctx, unsigned int hz)
 {
 	const unsigned int vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
 
+	if (!is_panel_active(ctx))
+		return -EPERM;
+
 	if ((vrefresh > hz) || ((hz != 60) && (hz != 90))) {
 		dev_err(ctx->dev, "invalid op_hz=%u for vrefresh=%u\n",
 			hz, vrefresh);

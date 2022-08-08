@@ -980,6 +980,9 @@ static int s6e3hc3_c10_set_op_hz(struct exynos_panel *ctx, unsigned int hz)
 	struct s6e3hc3_c10_panel *spanel = to_spanel(ctx);
 	u32 vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
 
+	if (!is_panel_active(ctx))
+		return -EPERM;
+
 	if (vrefresh > hz) {
 		dev_err(ctx->dev, "invalid op_hz=%d for vrefresh=%d\n",
 			hz, vrefresh);
