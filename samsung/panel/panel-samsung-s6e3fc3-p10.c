@@ -360,6 +360,17 @@ static void s6e3fc3_p10_lhbm_gamma_write(struct exynos_panel *ctx)
 		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x03, 0xD7, 0x65); /* global para */
 		exynos_dcs_write(ctx, aod_cmd, LHBM_GAMMA_CMD_SIZE); /* write gamma */
 	}
+
+	/* workaround of higher LHBM brightness with enabling HBM */
+	if (ctx->panel_rev >= PANEL_REV_DVT1) {
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x01, 0x6C, 0x66);
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0x66, 0x39, 0x39, 0x39, 0x3C, 0x3C, 0x3C);
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x01, 0x90, 0x66);
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0x66, 0x2C, 0x2C, 0x2C, 0x32, 0x32, 0x32);
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x01, 0xB4, 0x66);
+		EXYNOS_DCS_WRITE_SEQ(ctx, 0x66, 0x1E, 0x1E, 0x1E, 0x15, 0x15, 0x15);
+	}
+
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x28, 0xF2); /* global para */
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xC4); /* 8 bit */
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
