@@ -28,6 +28,7 @@
 #include <drm/exynos_drm.h>
 
 #include "exynos_drm_crtc.h"
+#include "exynos_drm_connector.h"
 #include "exynos_drm_decon.h"
 #include "exynos_drm_drv.h"
 #include "exynos_drm_dsim.h"
@@ -403,6 +404,7 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 	struct drm_plane_state *new_plane_state;
 	int i, ret, err = 0;
 	struct drm_printer p = drm_info_printer(dev->dev);
+	long tmo = msecs_to_jiffies(EXYNOS_DRM_WAIT_FENCE_TIMEOUT_MS);
 
 	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
 		struct dma_fence *fence = new_plane_state->fence;
@@ -411,11 +413,27 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 			continue;
 
 		WARN_ON(!new_plane_state->fb);
-		ret = dma_fence_wait_timeout(fence, pre_swap,
-			msecs_to_jiffies(EXYNOS_DRM_WAIT_FENCE_TIMEOUT_MS));
+		ret = dma_fence_wait_timeout(fence, pre_swap, tmo);
 		if (ret == 0) {
+			struct drm_crtc *crtc = new_plane_state->crtc;
+
 			pr_err("%s: timeout of waiting for fence, name:%s idx:%d\n",
 				__func__, plane->name ? : "NA", plane->index);
+			if (crtc) {
+				struct exynos_drm_crtc_state *new_exynos_crtc_state;
+				struct drm_crtc_state *new_crtc_state;
+
+				new_crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+				if (!new_crtc_state ||
+					!new_crtc_state->enable || !new_crtc_state->active)
+					continue;
+				new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
+				if (!new_exynos_crtc_state->skip_update) {
+					new_exynos_crtc_state->skip_update = true;
+					pr_warn("%s: skip frame update at %s\n",
+									__func__, crtc->name);
+				}
+			}
 			print_drm_plane_state_info(&p, new_plane_state);
 
 			spin_lock_irq(fence->lock);
@@ -433,6 +451,7 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 				drm_printf(&p, "fence: err=%d\n", fence->error);
 			spin_unlock_irq(fence->lock);
 
+			tmo = 0;
 			err = -ETIMEDOUT;
 		} else if (ret < 0) {
 			pr_warn("%s: error of waiting for dma fence, ret=%d\n", __func__, ret);
@@ -525,12 +544,17 @@ int exynos_atomic_commit(struct drm_device *dev, struct drm_atomic_state *state,
 	DPU_ATRACE_BEGIN("exynos_atomic_commit");
 
 	/*
-	 * if self refresh was activated on last commit, it's okay to stall instead
-	 * of failing since commit should finish rather quickly
+	 * if self refresh was activated on last commit or coming out of self refresh/hibernation,
+	 * it's okay to stall instead of failing since commit should finish rather quickly
 	 */
 	if (!stall) {
+		const struct exynos_drm_crtc_state *old_exynos_crtc_state;
+
 		for_each_old_crtc_in_state(state, crtc, old_crtc_state, i) {
-			if (old_crtc_state->self_refresh_active) {
+			old_exynos_crtc_state = to_exynos_crtc_state(old_crtc_state);
+
+			if (old_crtc_state->self_refresh_active ||
+			    old_exynos_crtc_state->hibernation_exit) {
 				stall = true;
 				break;
 			}
@@ -694,6 +718,12 @@ int exynos_atomic_enter_tui(void)
 		    (conn->connector_type != DRM_MODE_CONNECTOR_WRITEBACK)) {
 			pr_warn("%s: %s doesn't support self refresh\n", __func__, conn->name);
 			goto err;
+		}
+		if (is_exynos_drm_connector(conn)) {
+			struct exynos_drm_connector_state *exynos_conn_state =
+				to_exynos_connector_state(conn_state);
+
+			exynos_conn_state->blanked_mode = true;
 		}
 	}
 

@@ -533,6 +533,9 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 
 			DPU_ATRACE_END("crtc_disable");
 		}
+		/*  TODO(b/237120310): needs cleanup after we identify mode_changed handling */
+		if (old_crtc_state->self_refresh_active && new_crtc_state->mode_changed)
+			old_crtc_state->active = true;
 	}
 
 	DPU_ATRACE_BEGIN("modeset");

@@ -379,6 +379,7 @@ void decon_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *nam
 /*************** DECON CAL APIs exposed to DECON driver ***************/
 /* DECON control */
 int decon_reg_init(u32 id, struct decon_config *config);
+int decon_dsc_reg_init(u32 id, struct decon_config *config, u32 overlap_w, u32 swrst);
 int decon_reg_start(u32 id, struct decon_config *config);
 int decon_reg_stop(u32 id, struct decon_config *config, bool rst, u32 fps);
 void decon_reg_set_bpc_and_dither_path(u32 id, struct decon_config *config);

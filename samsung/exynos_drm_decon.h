@@ -441,7 +441,6 @@ struct decon_device {
 	struct exynos_dqe		*dqe;
 	struct task_struct		*thread;
 	struct kthread_worker		worker;
-	struct kthread_work		early_wakeup_work;
 	struct kthread_work		buf_dump_work;
 	struct exynos_recovery		recovery;
 	struct exynos_dma		*cgc_dma;
@@ -453,6 +452,7 @@ struct decon_device {
 	int				irq_ds;	/* dimming start irq number */
 	int				irq_de;	/* dimming end irq number */
 	atomic_t			te_ref;
+	struct completion te_rising; /* signaled when irq_te is triggered */
 
 	spinlock_t			slock;
 
