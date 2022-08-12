@@ -463,6 +463,31 @@ struct exynos_binned_lp {
 	struct exynos_panel_te2_timing te2_timing;
 };
 
+enum panel_reset_timing {
+	PANEL_RESET_TIMING_HIGH = 0,
+	PANEL_RESET_TIMING_LOW,
+	PANEL_RESET_TIMING_INIT,
+	PANEL_RESET_TIMING_COUNT
+};
+
+enum panel_reg_id {
+	PANEL_REG_ID_INVALID = 0,
+	PANEL_REG_ID_VCI,
+	PANEL_REG_ID_VDDI,
+	PANEL_REG_ID_VDDD,
+	PANEL_REG_ID_VDDR_EN,
+	PANEL_REG_ID_VDDR,
+	PANEL_REG_ID_MAX,
+};
+
+struct panel_reg_ctrl {
+	enum panel_reg_id id;
+	u32 post_delay_ms;
+};
+#define IS_VALID_PANEL_REG_ID(id) \
+	(((id) > PANEL_REG_ID_INVALID) && ((id) < PANEL_REG_ID_MAX))
+#define PANEL_REG_COUNT (PANEL_REG_ID_MAX - 1)
+
 struct exynos_panel_desc {
 	const u8 *dsc_pps;
 	u8 panel_id_reg;
@@ -495,6 +520,9 @@ struct exynos_panel_desc {
 	const size_t num_binned_lp;
 	const struct drm_panel_funcs *panel_func;
 	const struct exynos_panel_funcs *exynos_panel_func;
+	const u32 reset_timing_ms[PANEL_RESET_TIMING_COUNT];
+	const struct panel_reg_ctrl reg_ctrl_enable[PANEL_REG_COUNT];
+	const struct panel_reg_ctrl reg_ctrl_disable[PANEL_REG_COUNT];
 };
 
 #define PANEL_ID_MAX		32
@@ -522,20 +550,12 @@ struct te2_data {
 	enum exynos_panel_te2_opt option;
 };
 
-enum reset_timing {
-	RESET_TIMING_HIGH = 0,
-	RESET_TIMING_LOW,
-	RESET_TIMING_INIT,
-	RESET_TIMING_COUNT
-};
-
 struct exynos_panel {
 	struct device *dev;
 	struct drm_panel panel;
 	struct dentry *debugfs_entry;
 	struct dentry *debugfs_cmdset_entry;
 	struct gpio_desc *reset_gpio;
-	u32 reset_timing_ms[RESET_TIMING_COUNT];
 	struct gpio_desc *enable_gpio;
 	struct regulator *vci;
 	struct regulator *vddi;

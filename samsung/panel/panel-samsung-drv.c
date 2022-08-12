@@ -414,23 +414,25 @@ EXPORT_SYMBOL(exynos_panel_init);
 void exynos_panel_reset(struct exynos_panel *ctx)
 {
 	u32 delay;
+	const u32 *timing_ms = ctx->desc->reset_timing_ms;
+
 	dev_dbg(ctx->dev, "%s +\n", __func__);
 
-	if (IS_ENABLED(CONFIG_BOARD_EMULATOR))
+	if (IS_ENABLED(CONFIG_BOARD_EMULATOR) || IS_ERR_OR_NULL(ctx->reset_gpio))
 		return;
 
 	gpiod_set_value(ctx->reset_gpio, 1);
-	delay = ctx->reset_timing_ms[RESET_TIMING_HIGH] ?: 5;
+	delay = timing_ms[PANEL_RESET_TIMING_HIGH] ?: 5;
 	delay *= 1000;
 	usleep_range(delay, delay + 10);
 
 	gpiod_set_value(ctx->reset_gpio, 0);
-	delay = ctx->reset_timing_ms[RESET_TIMING_LOW] ?: 5;
+	delay = timing_ms[PANEL_RESET_TIMING_LOW] ?: 5;
 	delay *= 1000;
 	usleep_range(delay, delay + 10);
 
 	gpiod_set_value(ctx->reset_gpio, 1);
-	delay = ctx->reset_timing_ms[RESET_TIMING_INIT] ?: 10;
+	delay = timing_ms[PANEL_RESET_TIMING_INIT] ?: 10;
 	delay *= 1000;
 	usleep_range(delay, delay + 10);
 
@@ -450,104 +452,83 @@ static void _exynos_panel_set_vddd_voltage(struct exynos_panel *ctx, bool is_lp)
 		dev_err(ctx->dev, "failed to set vddd at %u uV\n", uv);
 }
 
+static int _exynos_panel_reg_ctrl(struct exynos_panel *ctx,
+	const struct panel_reg_ctrl *reg_ctrl, bool enable)
+{
+	struct regulator *panel_reg[PANEL_REG_ID_MAX] = {
+		[PANEL_REG_ID_VCI] = ctx->vci,
+		[PANEL_REG_ID_VDDD] = ctx->vddd,
+		[PANEL_REG_ID_VDDI] = ctx->vddi,
+		[PANEL_REG_ID_VDDR_EN] = ctx->vddr_en,
+		[PANEL_REG_ID_VDDR] = ctx->vddr,
+	};
+	u32 i;
+
+	for (i = 0; i < PANEL_REG_COUNT; i++) {
+		enum panel_reg_id id = reg_ctrl[i].id;
+		u32 delay_ms = reg_ctrl[i].post_delay_ms;
+		int ret;
+		struct regulator *reg;
+
+		if (!IS_VALID_PANEL_REG_ID(id))
+			return 0;
+
+		reg = panel_reg[id];
+		if (!reg) {
+			dev_dbg(ctx->dev, "no valid regulator found id=%d\n", id);
+			continue;
+		}
+		ret = enable ? regulator_enable(reg) : regulator_disable(reg);
+		if (ret) {
+			dev_err(ctx->dev, "failed to %s regulator id=%d\n",
+				enable ? "enable" : "disable", id);
+			return ret;
+		}
+
+		if (delay_ms)
+			usleep_range(delay_ms * 1000, delay_ms * 1000 + 10);
+		dev_dbg(ctx->dev, "%s regulator id=%d with post_delay=%d ms\n",
+			enable ? "enable" : "disable", id, delay_ms);
+	}
+	return 0;
+}
+
 static int _exynos_panel_set_power(struct exynos_panel *ctx, bool on)
 {
-	int ret;
+	const struct panel_reg_ctrl default_ctrl_disable[PANEL_REG_COUNT] = {
+		{PANEL_REG_ID_VDDR, 0},
+		{PANEL_REG_ID_VDDR_EN, 0},
+		{PANEL_REG_ID_VDDD, 0},
+		{PANEL_REG_ID_VDDI, 0},
+		{PANEL_REG_ID_VCI, 0},
+	};
+	const struct panel_reg_ctrl default_ctrl_enable[PANEL_REG_COUNT] = {
+		{PANEL_REG_ID_VDDI, 5},
+		{PANEL_REG_ID_VDDD, 0},
+		{PANEL_REG_ID_VCI, 0},
+		{PANEL_REG_ID_VDDR_EN, 2},
+		{PANEL_REG_ID_VDDR, 0},
+
+	};
+	const struct panel_reg_ctrl *reg_ctrl;
 
 	if (on) {
-		if (ctx->enable_gpio) {
+		if (!IS_ERR_OR_NULL(ctx->enable_gpio)) {
 			gpiod_set_value(ctx->enable_gpio, 1);
 			usleep_range(10000, 11000);
 		}
-
-		if (ctx->vddi) {
-			ret = regulator_enable(ctx->vddi);
-			if (ret) {
-				dev_err(ctx->dev, "vddi enable failed\n");
-				return ret;
-			}
-			usleep_range(5000, 6000);
-		}
-
-		if (ctx->vddd) {
-			ret = regulator_enable(ctx->vddd);
-			if (ret) {
-				dev_err(ctx->dev, "vddd enable failed\n");
-				return ret;
-			}
-		}
-
-		if (ctx->vci) {
-			ret = regulator_enable(ctx->vci);
-			if (ret) {
-				dev_err(ctx->dev, "vci enable failed\n");
-				return ret;
-			}
-		}
-
-		if (ctx->vddr_en) {
-			ret = regulator_enable(ctx->vddr_en);
-			if (ret) {
-				dev_err(ctx->dev, "vddr_en enable failed\n");
-				return ret;
-			}
-			usleep_range(2 * 1000, 2 * 1000 + 10);
-		}
-
-		if (ctx->vddr) {
-			ret = regulator_enable(ctx->vddr);
-			if (ret) {
-				dev_err(ctx->dev, "vddr enable failed\n");
-				return ret;
-			}
-		}
+		reg_ctrl = IS_VALID_PANEL_REG_ID(ctx->desc->reg_ctrl_enable[0].id) ?
+			ctx->desc->reg_ctrl_enable : default_ctrl_enable;
 	} else {
-		gpiod_set_value(ctx->reset_gpio, 0);
-		if (ctx->enable_gpio)
+		if (!IS_ERR_OR_NULL(ctx->reset_gpio))
+			gpiod_set_value(ctx->reset_gpio, 0);
+		if (!IS_ERR_OR_NULL(ctx->enable_gpio))
 			gpiod_set_value(ctx->enable_gpio, 0);
-
-		if (ctx->vddr) {
-			ret = regulator_disable(ctx->vddr);
-			if (ret) {
-				dev_err(ctx->dev, "vddr disable failed\n");
-				return ret;
-			}
-		}
-
-		if (ctx->vddr_en) {
-			ret = regulator_disable(ctx->vddr_en);
-			if (ret) {
-				dev_err(ctx->dev, "vddr_en disable failed\n");
-				return ret;
-			}
-		}
-
-		if (ctx->vddd) {
-			ret = regulator_disable(ctx->vddd);
-			if (ret) {
-				dev_err(ctx->dev, "vddd disable failed\n");
-				return ret;
-			}
-		}
-
-		if (ctx->vddi) {
-			ret = regulator_disable(ctx->vddi);
-			if (ret) {
-				dev_err(ctx->dev, "vddi disable failed\n");
-				return ret;
-			}
-		}
-
-		if (ctx->vci > 0) {
-			ret = regulator_disable(ctx->vci);
-			if (ret) {
-				dev_err(ctx->dev, "vci disable failed\n");
-				return ret;
-			}
-		}
+		reg_ctrl = IS_VALID_PANEL_REG_ID(ctx->desc->reg_ctrl_disable[0].id) ?
+			ctx->desc->reg_ctrl_disable : default_ctrl_disable;
 	}
 
-	return 0;
+	return _exynos_panel_reg_ctrl(ctx, reg_ctrl, on);
 }
 
 int exynos_panel_set_power(struct exynos_panel *ctx, bool on)
