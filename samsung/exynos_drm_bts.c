@@ -50,9 +50,6 @@
 #define ACLK_100MHZ_PERIOD	10000UL
 #define FRAME_TIME_NSEC		1000000000UL	/* 1sec */
 
-/* TODO: remove it after we move logic into bts driver */
-#define NUM_INTERCONNECT_CH		4
-
 #define DPU_DEBUG_BTS(fmt, args...)	pr_debug("[BTS] "fmt,  ##args)
 #define DPU_INFO_BTS(fmt, args...)	pr_info("[BTS] "fmt,  ##args)
 #define DPU_ERR_BTS(fmt, args...)	pr_err("[BTS] "fmt, ##args)

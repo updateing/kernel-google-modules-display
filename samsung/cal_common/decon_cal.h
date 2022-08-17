@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
- * Copyright (c) 2019 Samsung Electronics Co., Ltd.
+ * Copyright (c) 2022 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
  *
- * Header file for GS101 DECON CAL
+ * Header file for GS101/GS201/ZUMA DECON CAL
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -18,15 +18,15 @@
 
 #ifdef CONFIG_SOC_ZUMA
 #define MAX_WIN_PER_DECON	14
+#define MAX_AXI_PORT		2
+#define NUM_INTERCONNECT_CH	2
 #else
 #define MAX_WIN_PER_DECON	6
-#endif
-#define MAX_DECON_CNT		3
-#ifdef CONFIG_SOC_ZUMA
-#define MAX_AXI_PORT		2
-#else
 #define MAX_AXI_PORT		3
+#define NUM_INTERCONNECT_CH	4
 #endif
+
+#define MAX_DECON_CNT		3
 #define BTS_DFS_MAX		7 /* DPU DVFS Level */
 
 #define DECON_BLENDING_PREMULT		0
