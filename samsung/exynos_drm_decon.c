@@ -307,6 +307,7 @@ static void decon_update_dsi_config(struct decon_config *config,
 		config->dsc.slice_width = DIV_ROUND_UP(config->image_width,
 						       config->dsc.slice_count);
 		config->dsc.cfg = exynos_mode->dsc.cfg;
+		config->dsc.delay_reg_init_us = exynos_mode->dsc.delay_reg_init_us;
 	}
 
 	is_vid_mode = (exynos_mode->mode_flags & MIPI_DSI_MODE_VIDEO) != 0;
@@ -691,24 +692,33 @@ static void decon_arm_event_locked(struct exynos_drm_crtc *exynos_crtc)
 	decon->event = event;
 }
 
-#define RESERVED_TIME_FOR_KICKOFF_NS		3500000
+#define VSYNC_PERIOD_VARIANCE_NS		2000000
 static void decon_wait_earliest_process_time(
+		const struct exynos_drm_crtc_state *old_exynos_crtc_state,
 		const struct exynos_drm_crtc_state *new_exynos_crtc_state)
 {
+	const struct drm_crtc_state *old_crtc_state = &old_exynos_crtc_state->base;
+	const struct drm_crtc_state *new_crtc_state = &new_exynos_crtc_state->base;
+	int32_t vrefresh, vsync_period_ns;
 	ktime_t earliest_process_time, now;
 
+	vrefresh = drm_mode_vrefresh(&old_crtc_state->mode);
+	if (vrefresh == 0) {
+		/* decon just be enabled */
+		vrefresh = drm_mode_vrefresh(&new_crtc_state->mode);
+	}
+	vsync_period_ns = mult_frac(1000, 1000 * 1000, vrefresh);
 	if (ktime_compare(new_exynos_crtc_state->expected_present_time,
-				RESERVED_TIME_FOR_KICKOFF_NS) <= 0)
+				vsync_period_ns - VSYNC_PERIOD_VARIANCE_NS) <= 0) {
 		return;
+	}
 
 	earliest_process_time = ktime_sub_ns(new_exynos_crtc_state->expected_present_time,
-					RESERVED_TIME_FOR_KICKOFF_NS);
+					vsync_period_ns - VSYNC_PERIOD_VARIANCE_NS);
 	now = ktime_get();
 
 	if (ktime_after(earliest_process_time, now)) {
-		const struct drm_crtc_state *crtc_state = &new_exynos_crtc_state->base;
-		int32_t vrefresh = drm_mode_vrefresh(&crtc_state->mode);
-		int32_t max_delay_us = mult_frac(10000, 1000, vrefresh);  // 10 * vsync period
+		int32_t max_delay_us = (10 * vsync_period_ns) / 1000;
 		int32_t delay_until_process;
 
 		DPU_ATRACE_BEGIN("wait for earliest present time");
@@ -811,7 +821,7 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 	if (new_exynos_crtc_state->seamless_mode_changed)
 		decon_seamless_mode_set(exynos_crtc, old_crtc_state);
 
-	decon_wait_earliest_process_time(new_exynos_crtc_state);
+	decon_wait_earliest_process_time(old_exynos_crtc_state, new_exynos_crtc_state);
 
 	spin_lock_irqsave(&decon->slock, flags);
 	decon_reg_start(decon->id, &decon->config);
@@ -1070,22 +1080,41 @@ static void decon_exit_hibernation(struct decon_device *decon)
 	DPU_EVENT_LOG(DPU_EVT_EXIT_HIBERNATION_OUT, decon->id, NULL);
 }
 
+static void decon_wait_for_te(struct decon_device *decon, int vrefresh)
+{
+	unsigned int te_period_ms = DIV_ROUND_UP(MSEC_PER_SEC, vrefresh);
+
+	reinit_completion(&decon->te_rising);
+
+	DPU_ATRACE_BEGIN(__func__);
+
+	/* Wait for next TE rising or one TE period */
+	if (!wait_for_completion_timeout(&decon->te_rising, te_period_ms))
+		decon_debug(decon, "%s: exceed 1 TE period for %dhz\n",
+			    __func__, vrefresh);
+
+	DPU_ATRACE_END(__func__);
+}
+
 static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_state *old_crtc_state)
 {
 	const struct drm_crtc_state *crtc_state = exynos_crtc->base.state;
 	struct exynos_drm_crtc_state *old_exynos_crtc_state = to_exynos_crtc_state(old_crtc_state);
 	struct decon_device *decon = exynos_crtc->ctx;
+	int vrefresh = drm_mode_vrefresh(&old_crtc_state->mode);
 
 	if (decon->state == DECON_STATE_ON) {
 		decon_info(decon, "already enabled(%d)\n", decon->state);
 		return;
 	}
 
+	DPU_ATRACE_BEGIN(__func__);
+
 	if (decon->state == DECON_STATE_HIBERNATION) {
 		WARN_ON(!old_crtc_state->self_refresh_active);
 
 		if (old_exynos_crtc_state->bypass)
-			_decon_stop(decon, true, drm_mode_vrefresh(&old_crtc_state->mode));
+			_decon_stop(decon, true, vrefresh);
 
 		decon_exit_hibernation(decon);
 		goto ret;
@@ -1118,11 +1147,32 @@ static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_st
 	decon_info(decon, "%s -\n", __func__);
 
 ret:
+	if (decon->config.dsc.enabled && decon->config.dsc.delay_reg_init_us) {
+		struct drm_atomic_state *state = old_crtc_state->state;
+		struct exynos_drm_connector_state *exynos_conn_state =
+					crtc_get_exynos_connector_state(state, crtc_state);
+		struct exynos_display_mode *exynos_mode = &exynos_conn_state->exynos_mode;
+		unsigned int delay_us = decon->config.dsc.delay_reg_init_us;
+		unsigned int extra_delay_us =
+				DIV_ROUND_UP(MSEC_PER_SEC, vrefresh) * MSEC_PER_SEC - delay_us;
+
+		decon_wait_for_te(decon, vrefresh);
+		usleep_range(extra_delay_us, extra_delay_us + 100);
+
+		/* remove the delay */
+		exynos_mode->dsc.delay_reg_init_us = 0;
+		decon->config.dsc.delay_reg_init_us = 0;
+
+		decon_dsc_reg_init(decon->id, &decon->config, 0, 0);
+	}
+
 	/* drop extra vote taken to avoid power disable during bypass mode */
 	if (old_exynos_crtc_state->bypass) {
 		decon_debug(decon, "bypass mode: drop extra power ref\n");
 		pm_runtime_put_sync(decon->dev);
 	}
+
+	DPU_ATRACE_END(__func__);
 
 	WARN_ON(!pm_runtime_active(decon->dev));
 }
@@ -1335,7 +1385,7 @@ static ssize_t early_wakeup_store(struct device *dev,
 		return len;
 
 	decon = dev_get_drvdata(dev);
-	kthread_queue_work(&decon->worker, &decon->early_wakeup_work);
+	exynos_hibernation_async_exit(decon->hibernation);
 
 	return len;
 }
@@ -1778,6 +1828,9 @@ static irqreturn_t decon_te_irq_handler(int irq, void *dev_id)
 	DPU_EVENT_LOG(DPU_EVT_TE_INTERRUPT, decon->id, NULL);
 	DPU_ATRACE_INT_PID("TE", decon->d.te_cnt++ & 1, decon->thread->pid);
 
+	if (decon->config.dsc.delay_reg_init_us)
+		complete_all(&decon->te_rising);
+
 	if (decon->config.mode.op_mode == DECON_COMMAND_MODE)
 		drm_crtc_handle_vblank(&decon->crtc->base);
 
@@ -1920,17 +1973,6 @@ err:
 	return ret;
 }
 
-static void decon_early_wakeup_work(struct kthread_work *work)
-{
-	struct decon_device *decon = container_of(work, struct decon_device,
-			early_wakeup_work);
-
-	DPU_ATRACE_BEGIN("decon_early_wakeup_work");
-	hibernation_block_exit(decon->hibernation);
-	hibernation_unblock_enter(decon->hibernation);
-	DPU_ATRACE_END("decon_early_wakeup_work");
-}
-
 static int decon_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1954,6 +1996,7 @@ static int decon_probe(struct platform_device *pdev)
 
 	spin_lock_init(&decon->slock);
 	init_waitqueue_head(&decon->framedone_wait);
+	init_completion(&decon->te_rising);
 
 	decon->state = DECON_STATE_INIT;
 	pm_runtime_enable(decon->dev);
@@ -1986,7 +2029,6 @@ static int decon_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	kthread_init_work(&decon->early_wakeup_work, decon_early_wakeup_work);
 	decon_info(decon, "successfully probed");
 
 err:

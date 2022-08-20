@@ -475,10 +475,12 @@ struct exynos_panel_desc {
 	u32 max_brightness;
 	u32 min_brightness;
 	u32 dft_brightness; /* default brightness */
+	u32 vrr_switch_duration;
 	/* extra frame is needed to apply brightness change if it's not at next VSYNC */
 	bool dbv_extra_frame;
 	bool is_partial;
 	bool is_panel_idle_supported;
+	const unsigned int delay_dsc_reg_init_us;
 	const struct brightness_capability *brt_capability;
 	const u32 *bl_range;
 	u32 bl_num_ranges;
@@ -608,6 +610,7 @@ struct exynos_panel {
 	ktime_t last_commit_ts;
 	ktime_t last_mode_set_ts;
 	ktime_t last_self_refresh_active_ts;
+	ktime_t last_panel_idle_set_ts;
 	struct delayed_work idle_work;
 
 	/**

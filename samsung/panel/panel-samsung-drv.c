@@ -1184,8 +1184,8 @@ unsigned int panel_get_idle_time_delta(struct exynos_panel *ctx)
 	if (idle_mode == IDLE_MODE_ON_INACTIVITY) {
 		delta_ms = ktime_ms_delta(now, ctx->last_mode_set_ts);
 	} else if (idle_mode == IDLE_MODE_ON_SELF_REFRESH) {
-		const ktime_t ts = max(ctx->last_self_refresh_active_ts,
-					ctx->last_mode_set_ts);
+		const ktime_t ts = max3(ctx->last_self_refresh_active_ts,
+					ctx->last_mode_set_ts, ctx->last_panel_idle_set_ts);
 
 		delta_ms = ktime_ms_delta(now, ts);
 	} else {
@@ -1268,6 +1268,10 @@ static ssize_t panel_idle_store(struct device *dev, struct device_attribute *att
 	mutex_lock(&ctx->mode_lock);
 	if (idle_enabled != ctx->panel_idle_enabled) {
 		ctx->panel_idle_enabled = idle_enabled;
+
+		if (idle_enabled)
+			ctx->last_panel_idle_set_ts = ktime_get();
+
 		panel_update_idle_mode_locked(ctx);
 	}
 	mutex_unlock(&ctx->mode_lock);
@@ -1416,9 +1420,6 @@ static ssize_t osc2_clk_khz_store(struct device *dev, struct device_attribute *a
 	unsigned int osc2_clk_khz;
 	int ret;
 
-	if (!is_panel_active(ctx))
-		return -EPERM;
-
 	if (!funcs || !funcs->set_osc2_clk_khz)
 		return -EOPNOTSUPP;
 
@@ -1440,9 +1441,6 @@ static ssize_t osc2_clk_khz_show(struct device *dev, struct device_attribute *at
 {
 	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
-
-	if (!is_panel_active(ctx))
-		return -EPERM;
 
 	return scnprintf(buf, PAGE_SIZE, "%u\n", ctx->osc2_clk_khz);
 }
@@ -3052,6 +3050,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->is_partial, desc->is_partial);
 	drm_object_attach_property(obj, p->panel_idle_support, desc->is_panel_idle_supported);
 	drm_object_attach_property(obj, p->panel_orientation, ctx->orientation);
+	drm_object_attach_property(obj, p->vrr_switch_duration, desc->vrr_switch_duration);
 
 	if (desc->brt_capability) {
 		ret = exynos_panel_attach_brightness_capability(&ctx->exynos_connector,
@@ -3256,10 +3255,12 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	const struct drm_connector_state *conn_state = ctx->exynos_connector.base.state;
+	struct exynos_drm_connector_state *exynos_conn_state =
+		to_exynos_connector_state(conn_state);
 	struct drm_crtc_state *crtc_state = !conn_state->crtc ? NULL : conn_state->crtc->state;
 	const bool self_refresh_active = crtc_state && crtc_state->self_refresh_active;
 
-	if (self_refresh_active) {
+	if (self_refresh_active && !exynos_conn_state->blanked_mode) {
 		mutex_lock(&ctx->mode_lock);
 		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
 
@@ -3267,13 +3268,26 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		panel_update_idle_mode_locked(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
-		if (crtc_state && crtc_state->mode_changed &&
-		    drm_atomic_crtc_effectively_active(crtc_state))
-			ctx->panel_state = PANEL_STATE_MODESET;
-		else if (ctx->force_power_on)
+		if (exynos_conn_state->blanked_mode) {
+			/* blanked mode takes precedence over normal modeset */
 			ctx->panel_state = PANEL_STATE_BLANK;
-		else
+		} else if (crtc_state && crtc_state->mode_changed &&
+		    drm_atomic_crtc_effectively_active(crtc_state)) {
+			if (ctx->desc->delay_dsc_reg_init_us) {
+				struct exynos_display_mode *exynos_mode =
+							&exynos_conn_state->exynos_mode;
+
+				exynos_mode->dsc.delay_reg_init_us =
+							ctx->desc->delay_dsc_reg_init_us;
+			}
+
+			ctx->panel_state = PANEL_STATE_MODESET;
+		} else if (ctx->force_power_on) {
+			/* force blank state instead of power off */
+			ctx->panel_state = PANEL_STATE_BLANK;
+		} else {
 			ctx->panel_state = PANEL_STATE_OFF;
+		}
 
 		drm_panel_disable(&ctx->panel);
 	}

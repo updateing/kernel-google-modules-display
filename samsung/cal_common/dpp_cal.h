@@ -261,6 +261,7 @@ struct dpp_params_info {
 	unsigned long rcv_num;
 	enum dpp_comp_type comp_type;
 	enum dpp_sbwc_blk_size blk_size;
+	bool is_lossy;
 };
 
 #ifdef CONFIG_SOC_GS201

@@ -65,6 +65,7 @@ struct exynos_drm_connector_properties {
 	struct drm_property *panel_idle_support;
 	struct drm_property *mipi_sync;
 	struct drm_property *panel_orientation;
+	struct drm_property *vrr_switch_duration;
 };
 
 struct exynos_display_dsc {
@@ -74,6 +75,8 @@ struct exynos_display_dsc {
 	unsigned int slice_height;
 
 	const struct drm_dsc_config *cfg;
+
+	unsigned int delay_reg_init_us;
 };
 
 struct exynos_display_partial {
@@ -180,6 +183,12 @@ struct exynos_drm_connector_state {
 	 *			go into idle after some idle period.
 	 */
 	bool panel_idle_support;
+
+	/*
+	 * @blanked_mode: Display should go into forced blanked mode, where power is on but
+	 *                nothing is being displayed on screen.
+	 */
+	bool blanked_mode;
 };
 
 #define to_exynos_connector_state(connector_state) \
