@@ -1043,29 +1043,9 @@ static DEFINE_EXYNOS_CMD_SET(s6e3hc4_lhbm_extra);
 static void s6e3hc4_set_local_hbm_mode(struct exynos_panel *ctx,
 				 bool local_hbm_en)
 {
-	const struct exynos_panel_mode *pmode;
+	const struct exynos_panel_mode *pmode = ctx->current_mode;
 	const u32 flags = PANEL_CMD_SET_IGNORE_VBLANK | PANEL_CMD_SET_BATCH;
 
-	if (ctx->hbm.local_hbm.enabled == local_hbm_en)
-		return;
-
-	pmode = ctx->current_mode;
-	if (unlikely(pmode == NULL)) {
-		dev_err(ctx->dev, "%s: unknown current mode\n", __func__);
-		return;
-	}
-
-	if (local_hbm_en) {
-		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
-		/* Add check to turn on LHBM @ 120hz only to comply with HW requirement */
-		if (vrefresh != 120) {
-			dev_err(ctx->dev, "unexpected mode `%s` while enabling LHBM, give up\n",
-				pmode->mode.name);
-			return;
-		}
-	}
-
-	ctx->hbm.local_hbm.enabled = local_hbm_en;
 	if (local_hbm_en)
 		exynos_panel_send_cmd_set_flags(ctx,
 			&s6e3hc4_lhbm_extra_cmd_set, flags);
@@ -1075,13 +1055,6 @@ static void s6e3hc4_set_local_hbm_mode(struct exynos_panel *ctx,
 static void s6e3hc4_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
-	if (!is_panel_active(ctx))
-		return;
-
-	if (ctx->hbm.local_hbm.enabled == true)
-		dev_warn(ctx->dev, "do mode change (`%s`) unexpectedly when LHBM is ON\n",
-			pmode->mode.name);
-
 	s6e3hc4_change_frequency(ctx, pmode);
 }
 

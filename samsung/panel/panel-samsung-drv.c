@@ -54,7 +54,7 @@ static ssize_t exynos_panel_parse_byte_buf(char *input_str, size_t input_len,
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len);
 static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
 							     const struct drm_display_mode *mode);
-static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enabled);
+static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enable);
 static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 					 const struct exynos_panel_mode *current_mode,
 					 struct exynos_panel *ctx);
@@ -2683,7 +2683,7 @@ static ssize_t local_hbm_mode_store(struct device *dev,
 
 	dev_info(ctx->dev, "%s: set LHBM to %d\n", __func__, local_hbm_en);
 	mutex_lock(&ctx->mode_lock);
-	funcs->set_local_hbm_mode(ctx, local_hbm_en);
+	panel_update_local_hbm_locked(ctx, local_hbm_en);
 	mutex_unlock(&ctx->mode_lock);
 
 	config = &ctx->exynos_connector.base.dev->mode_config;
@@ -2696,15 +2696,6 @@ static ssize_t local_hbm_mode_store(struct device *dev,
 		drm_crtc_wait_one_vblank(crtc);
 		drm_crtc_wait_one_vblank(crtc);
 		drm_crtc_vblank_put(crtc);
-	}
-
-	sysfs_notify(&bd->dev.kobj, NULL, "local_hbm_mode");
-	if (local_hbm_en) {
-		queue_delayed_work(ctx->hbm.wq,
-			 &ctx->hbm.local_hbm.timeout_work,
-			 msecs_to_jiffies(ctx->hbm.local_hbm.max_timeout_ms));
-	} else {
-		cancel_delayed_work(&ctx->hbm.local_hbm.timeout_work);
 	}
 
 	return count;
@@ -3453,17 +3444,50 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 	DPU_ATRACE_END("mipi_time_window");
 }
 
-static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enabled)
+static bool _panel_update_local_hbm_notimeout(struct exynos_panel *ctx, bool enable)
 {
+	const struct exynos_panel_mode *pmode;
+
 	if (!ctx->desc->exynos_panel_func->set_local_hbm_mode)
+		return false;
+
+	if (ctx->hbm.local_hbm.enabled == enable)
+		return false;
+
+	pmode = ctx->current_mode;
+	if (unlikely(pmode == NULL)) {
+		dev_err(ctx->dev, "%s: unknown current mode\n", __func__);
+		return false;
+	}
+
+	if (enable && !ctx->desc->no_lhbm_rr_constraints) {
+		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+		/* only allow to turn on LHBM at peak refresh rate to comply with HW constraint */
+		if (ctx->peak_vrefresh && vrefresh != ctx->peak_vrefresh) {
+			dev_err(ctx->dev, "unexpected mode `%s` while enabling LHBM, give up\n",
+				pmode->mode.name);
+			return false;
+		}
+	}
+
+	DPU_ATRACE_BEGIN(__func__);
+	ctx->hbm.local_hbm.enabled = enable;
+	ctx->desc->exynos_panel_func->set_local_hbm_mode(ctx, enable);
+	sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
+	DPU_ATRACE_END(__func__);
+
+	return true;
+}
+
+static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enable)
+{
+	if (!_panel_update_local_hbm_notimeout(ctx, enable))
 		return;
 
-	ctx->desc->exynos_panel_func->set_local_hbm_mode(ctx, enabled);
-	sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
-	if (enabled) {
+	if (enable) {
 		queue_delayed_work(ctx->hbm.wq,
-				&ctx->hbm.local_hbm.timeout_work,
-				msecs_to_jiffies(ctx->hbm.local_hbm.max_timeout_ms));
+			&ctx->hbm.local_hbm.timeout_work,
+			msecs_to_jiffies(ctx->hbm.local_hbm.max_timeout_ms));
 	} else {
 		cancel_delayed_work(&ctx->hbm.local_hbm.timeout_work);
 	}
@@ -3539,8 +3563,21 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 			if ((MIPI_CMD_SYNC_REFRESH_RATE & exynos_connector_state->mipi_sync) &&
 					is_active && old_mode)
 				exynos_panel_check_mipi_sync_timing(crtc, old_mode, ctx);
-			funcs->mode_set(ctx, pmode);
-			state_changed = is_active;
+
+			if (is_active) {
+				if (ctx->hbm.local_hbm.enabled &&
+					!ctx->desc->no_lhbm_rr_constraints)
+					dev_warn(ctx->dev,
+						"do mode change (`%s`) unexpectedly when LHBM is ON\n",
+						pmode->mode.name);
+
+				funcs->mode_set(ctx, pmode);
+				state_changed = true;
+			} else {
+				dev_warn(ctx->dev,
+					"don't do mode change (`%s`) when panel isn't in interactive mode\n",
+					pmode->mode.name);
+			}
 		}
 
 		ctx->current_mode = pmode;
@@ -3582,9 +3619,8 @@ static void local_hbm_timeout_work(struct work_struct *work)
 
 	dev_info(ctx->dev, "%s: turn off LHBM\n", __func__);
 	mutex_lock(&ctx->mode_lock);
-	ctx->desc->exynos_panel_func->set_local_hbm_mode(ctx, false);
+	_panel_update_local_hbm_notimeout(ctx, false);
 	mutex_unlock(&ctx->mode_lock);
-	sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 }
 
 static void hbm_data_init(struct exynos_panel *ctx)
@@ -3764,6 +3800,15 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 		for (i = 0; i < ctx->bl_notifier.num_ranges; i++)
 			ctx->bl_notifier.ranges[i] = ctx->desc->bl_range[i];
 	}
+
+	for (i = 0; i < ctx->desc->num_modes; i++) {
+		const struct exynos_panel_mode *pmode = &ctx->desc->modes[i];
+		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+
+		if (ctx->peak_vrefresh < vrefresh)
+			ctx->peak_vrefresh = vrefresh;
+	}
+
 	ctx->panel_idle_enabled = exynos_panel_func && exynos_panel_func->set_self_refresh != NULL;
 	INIT_DELAYED_WORK(&ctx->idle_work, panel_idle_work);
 

@@ -1020,31 +1020,8 @@ static void s6e3hc3_set_dimming_on(struct exynos_panel *ctx,
 static void s6e3hc3_set_local_hbm_mode(struct exynos_panel *ctx,
 				 bool local_hbm_en)
 {
-	const struct exynos_panel_mode *pmode;
+	const struct exynos_panel_mode *pmode = ctx->current_mode;
 
-	if (ctx->hbm.local_hbm.enabled == local_hbm_en)
-		return;
-
-	pmode = ctx->current_mode;
-	if (unlikely(pmode == NULL)) {
-		dev_err(ctx->dev, "%s: unknown current mode\n", __func__);
-		return;
-	}
-
-	if (local_hbm_en) {
-		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
-		/* Start from EVT1, it needs set `freq set` to 120hz for enabling LHBM.
-		 * Therefore we need to make sure current mode is 120hz before turn on
-		 * LHBM to avoid `freq set` out of sync problem.
-		 */
-		if (vrefresh != 120) {
-			dev_err(ctx->dev, "unexpected mode `%s` while enabling LHBM, give up\n",
-				pmode->mode.name);
-			return;
-		}
-	}
-
-	ctx->hbm.local_hbm.enabled = local_hbm_en;
 	s6e3hc3_extra_lhbm_settings(ctx, local_hbm_en);
 	s6e3hc3_write_display_mode(ctx, &pmode->mode);
 }
@@ -1052,14 +1029,6 @@ static void s6e3hc3_set_local_hbm_mode(struct exynos_panel *ctx,
 static void s6e3hc3_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
-	if (!ctx->enabled)
-		return;
-
-	/* Start from EVT1, LHBM requires set `freq set` to 120hz */
-	if (ctx->hbm.local_hbm.enabled == true)
-		dev_warn(ctx->dev, "do mode change (`%s`) unexpectedly when LHBM is ON\n",
-			pmode->mode.name);
-
 	s6e3hc3_change_frequency(ctx, pmode);
 }
 

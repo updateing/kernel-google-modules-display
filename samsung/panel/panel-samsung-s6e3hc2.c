@@ -804,9 +804,6 @@ static void s6e3hc2_set_hbm_mode(struct exynos_panel *exynos_panel,
 static void s6e3hc2_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
-	if (!ctx->enabled)
-		return;
-
 	s6e3hc2_write_display_mode(ctx, &pmode->mode);
 }
 
