@@ -702,6 +702,7 @@ static const struct exynos_panel_mode s6e3fc3_p10_modes[] = {
 	{
 		/* 1080x2400 @ 60Hz */
 		.mode = {
+			.name = "1080x2400x60",
 			.clock = 168498,
 			.hdisplay = 1080,
 			.hsync_start = 1080 + 32, // add hfp
@@ -736,6 +737,7 @@ static const struct exynos_panel_mode s6e3fc3_p10_modes[] = {
 	{
 		/* 1080x2400 @ 90Hz */
 		.mode = {
+			.name = "1080x2400x90",
 			.clock = 252747,
 			.hdisplay = 1080,
 			.hsync_start = 1080 + 32, // add hfp

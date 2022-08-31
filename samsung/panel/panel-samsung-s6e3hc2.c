@@ -146,6 +146,7 @@ static const struct exynos_panel_mode s6e3hc2_fhd_modes[] = {
 	{
 		/* 1080x2340 @ 60Hz */
 		.mode = {
+			.name = "1080x2340x60",
 			.clock = 164358,
 			.hdisplay = 1080,
 			.hsync_start = 1080 + 32, // add hfp
@@ -175,6 +176,7 @@ static const struct exynos_panel_mode s6e3hc2_fhd_modes[] = {
 	{
 		/* 1080x2340 @ 90Hz */
 		.mode = {
+			.name = "1080x2340x90",
 			.clock = 246537,
 			.hdisplay = 1080,
 			.hsync_start = 1080 + 32, // add hfp
@@ -1090,6 +1092,7 @@ static const struct exynos_panel_mode s6e3hc2_wqhd_modes[] = {
 	{
 		/* 1440x3040 @ 60Hz */
 		.mode = {
+			.name = "1440x3040x60",
 			.clock = 266568,
 			.hdisplay = 1440,
 			.hsync_start = 1440 + 2,
@@ -1119,6 +1122,7 @@ static const struct exynos_panel_mode s6e3hc2_wqhd_modes[] = {
 	{
 		/* 1440x3040 @ 90Hz */
 		.mode = {
+			.name = "1440x3040x90",
 			.clock = 399852,
 			.hdisplay = 1440,
 			.hsync_start = 1440 + 2,
