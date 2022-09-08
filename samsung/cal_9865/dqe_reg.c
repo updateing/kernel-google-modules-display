@@ -229,7 +229,7 @@ void dqe_reg_set_regamma_lut(u32 dqe_id, u32 regamma_id, const struct drm_color_
 	for (i = 0; i < DQE_REGAMMALUT_REG_CNT; i++)
 		regamma_write_relaxed(dqe_id, DQE_REGAMMA_B_POSX(regamma_id, i), regs[i]);
 
-	ret = cal_pack_lut_into_reg_pairs(tmp_lut[REGAMMA_BLUE], DQE_REGAMMA_POS_LUT_SIZE,
+	ret = cal_pack_lut_into_reg_pairs(tmp_lut[REGAMMA_BLUE] + 33, DQE_REGAMMA_POS_LUT_SIZE,
 			REGAMMA_LUT_L_MASK, REGAMMA_LUT_H_MASK, regs,
 			DQE_REGAMMALUT_REG_CNT);
 	if (ret) {
