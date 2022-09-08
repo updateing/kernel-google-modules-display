@@ -2589,6 +2589,7 @@ static int dsim_remove(struct platform_device *pdev)
 static int dsim_runtime_suspend(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 
 	DPU_ATRACE_BEGIN(__func__);
 
@@ -2600,6 +2601,8 @@ static int dsim_runtime_suspend(struct device *dev)
 
 	dsim->suspend_state = dsim->state;
 	mutex_unlock(&dsim->state_lock);
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_RUNTIME_SUSPEND, decon->id, dsim);
 	DPU_ATRACE_END(__func__);
 
 	return 0;
@@ -2608,6 +2611,7 @@ static int dsim_runtime_suspend(struct device *dev)
 static int dsim_runtime_resume(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 	int ret = 0;
 
 	DPU_ATRACE_BEGIN(__func__);
@@ -2623,6 +2627,8 @@ static int dsim_runtime_resume(struct device *dev)
 	dsim->suspend_state = dsim->state;
 	mutex_unlock(&dsim->state_lock);
 
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_RUNTIME_RESUME, decon->id, dsim);
 	DPU_ATRACE_END(__func__);
 
 	return ret;
@@ -2631,6 +2637,7 @@ static int dsim_runtime_resume(struct device *dev)
 static int dsim_suspend(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 
 	mutex_lock(&dsim->state_lock);
 	dsim->suspend_state = dsim->state;
@@ -2644,12 +2651,16 @@ static int dsim_suspend(struct device *dev)
 
 	mutex_unlock(&dsim->state_lock);
 
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_SUSPEND, decon->id, dsim);
+
 	return 0;
 }
 
 static int dsim_resume(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 
 	mutex_lock(&dsim->state_lock);
 	if (dsim->suspend_state == DSIM_STATE_HSCLKEN)
@@ -2658,6 +2669,9 @@ static int dsim_resume(struct device *dev)
 	dsim_debug(dsim, "-\n");
 
 	mutex_unlock(&dsim->state_lock);
+
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_RESUME, decon->id, dsim);
 
 	return 0;
 }

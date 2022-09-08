@@ -219,6 +219,12 @@ enum dpu_event_type {
 
 	DPU_EVT_DECON_RUNTIME_SUSPEND,
 	DPU_EVT_DECON_RUNTIME_RESUME,
+	DPU_EVT_DECON_SUSPEND,
+	DPU_EVT_DECON_RESUME,
+	DPU_EVT_DSIM_RUNTIME_SUSPEND,
+	DPU_EVT_DSIM_RUNTIME_RESUME,
+	DPU_EVT_DSIM_SUSPEND,
+	DPU_EVT_DSIM_RESUME,
 	DPU_EVT_ENTER_HIBERNATION_IN,
 	DPU_EVT_ENTER_HIBERNATION_OUT,
 	DPU_EVT_EXIT_HIBERNATION_IN,
@@ -310,6 +316,8 @@ struct dpu_log_atomic {
 struct dpu_log_pd {
 	enum decon_state decon_state;
 	bool rpm_active;
+	enum dsim_state dsim_state;
+	bool dsim_rpm_active;
 };
 
 struct dpu_log_crtc_info {
