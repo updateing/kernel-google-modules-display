@@ -15,6 +15,7 @@
 #include <linux/of_platform.h>
 #include <trace/dpu_trace.h>
 #include <video/mipi_display.h>
+#include <drm/drm_vblank.h>
 
 #include "panel-samsung-drv.h"
 
@@ -871,9 +872,35 @@ static void nt37290_set_lp_mode(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD(ctx, 0x5A, 0x00);
 	EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x1C);
-	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xBA, 0x95, 0x02, 0x02, 0x00, 0x11, 0x02, 0x02, 0x00);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xBA, 0x95, 0x02, 0x02, 0x00, 0x11, 0x02, 0x02, 0x00);
+	/* make sure TE timing is no shift in AOD */
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
 
 	dev_dbg(ctx->dev, "%s: done\n", __func__);
+}
+
+static void nt37290_wait_one_vblank(struct exynos_panel *ctx,
+				    const struct exynos_panel_mode *pmode)
+{
+	struct drm_crtc *crtc = NULL;
+
+	if (ctx->exynos_connector.base.state)
+		crtc = ctx->exynos_connector.base.state->crtc;
+
+	DPU_ATRACE_BEGIN(__func__);
+
+	if (crtc && !drm_crtc_vblank_get(crtc)) {
+		drm_crtc_wait_one_vblank(crtc);
+		drm_crtc_vblank_put(crtc);
+	} else {
+		int vrefresh = drm_mode_vrefresh(&pmode->mode);
+		u32 delay_us = mult_frac(1000, 1020, vrefresh);
+
+		dev_warn(ctx->dev, "%s: failed to get vblank for %dhz\n", __func__, vrefresh);
+		usleep_range(delay_us, delay_us + 10);
+	}
+
+	DPU_ATRACE_END(__func__);
 }
 
 static void nt37290_set_nolp_mode(struct exynos_panel *ctx,
@@ -882,15 +909,22 @@ static void nt37290_set_nolp_mode(struct exynos_panel *ctx,
 	if (!is_panel_active(ctx))
 		return;
 
+	DPU_ATRACE_BEGIN(__func__);
+
 	/* exit AOD */
-	EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, 34, 0x38);
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0x38);
+	nt37290_wait_one_vblank(ctx, ctx->current_mode);
 
 	nt37290_change_frequency(ctx, pmode);
 
 	/* 2Ch needs to be sent twice in next 2 vsync */
-	EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 34, stream_2c);
 	EXYNOS_DCS_WRITE_TABLE(ctx, stream_2c);
+	nt37290_wait_one_vblank(ctx, pmode);
+	EXYNOS_DCS_WRITE_TABLE(ctx, stream_2c);
+
 	EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+
+	DPU_ATRACE_END(__func__);
 
 	dev_info(ctx->dev, "exit LP mode\n");
 }

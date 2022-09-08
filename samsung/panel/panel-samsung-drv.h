@@ -525,7 +525,7 @@ struct exynos_panel_desc {
 	const struct panel_reg_ctrl reg_ctrl_disable[PANEL_REG_COUNT];
 };
 
-#define PANEL_ID_MAX		32
+#define PANEL_ID_MAX		40
 #define PANEL_EXTINFO_MAX	16
 #define LOCAL_HBM_MAX_TIMEOUT_MS 3000 /* 3000 ms */
 #define LOCAL_HBM_GAMMA_CMD_SIZE_MAX 16
