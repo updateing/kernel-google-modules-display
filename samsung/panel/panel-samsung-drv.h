@@ -33,7 +33,7 @@
 #define MAX_HDR_FORMATS		4
 #define MAX_BL_RANGES		10
 
-#define MAX_TE2_TYPE			10
+#define MAX_TE2_TYPE			20
 #define FIXED_TE2_VREFRESH_NORMAL	120
 #define FIXED_TE2_VREFRESH_LP		30
 
