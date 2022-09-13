@@ -254,7 +254,7 @@ static void dqe_reg_print_lut(u32 dqe_id, u32 start, u32 count, const u32 offset
 	const char *end = buf + sizeof(buf);
 
 	for (i = 0; i < DIV_ROUND_UP(count, 2); ++i) {
-		val = dqe_cgc_read(dqe_id, start + i * 4 + offset);
+		val = dqe_read(dqe_id, start + i * 4 + offset);
 
 		p += scnprintf(p, end - p, "[%4d]%4x ", i * 2, GET_LUT_L(val));
 
