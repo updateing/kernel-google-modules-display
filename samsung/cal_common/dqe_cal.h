@@ -18,6 +18,9 @@
 #include <drm/drm_mode.h>
 #include <drm/drm_print.h>
 #include <cal_config.h>
+#if defined(CONFIG_SOC_ZUMA)
+#include <linux/soc/samsung/exynos-smc.h>
+#endif
 
 #ifdef CONFIG_SOC_ZUMA
 #define DEGAMMA_LUT_SIZE		66
@@ -141,6 +144,26 @@ static struct cal_regs_offset regs_dqe_offset[DQE_VERSION_MAX] = {
 #define regamma_write_relaxed(dqe_id, offset, val)	\
 	dqe_write_relaxed(dqe_id, offset + regamma_offset(regs_dqe[dqe_id].version), val)
 
+#if defined(CONFIG_SOC_ZUMA)
+#define exynos_smc_read(dqe_id, offset)	\
+	((u32)exynos_smc(0x82000504, 0x194D0000 + offset, 0, 0))
+#define exynos_smc_write(dqe_id, offset, val)	\
+	((u32)exynos_smc(0x82000504, 0x194D0000 + offset, 1, val))
+#define exynos_smc_read_mask(dqe_id, offset, mask)	\
+	((u32)(exynos_smc_read(dqe_id, offset)) & mask)
+#define exynos_smc_write_mask(dqe_id, offset, val, mask)	\
+	((u32)exynos_smc(0x82000504, 0x194D0000 + offset, 1, (val | mask)))
+
+#define hist_offset(ver)	(regs_dqe_offset[ver].hist_offset)
+#define hist_read(dqe_id, offset)	\
+	exynos_smc_read(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
+#define hist_read_mask(dqe_id, offset, mask)	\
+	exynos_smc_read_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), mask)
+#define hist_write(dqe_id, offset, val)	\
+	exynos_smc_write(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val)
+#define hist_write_mask(dqe_id, offset, val, mask)	\
+	exynos_smc_write_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val, mask)
+#else
 #define hist_offset(ver)				(regs_dqe_offset[ver].hist_offset)
 #define hist_read(dqe_id, offset)			\
 	dqe_read(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
@@ -152,6 +175,7 @@ static struct cal_regs_offset regs_dqe_offset[DQE_VERSION_MAX] = {
 	dqe_write_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val, mask)
 #define hist_read_relaxed(dqe_id, offset)		\
 	dqe_read_relaxed(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
+#endif
 
 enum dqe_dither_type {
 	CGC_DITHER = 0,
