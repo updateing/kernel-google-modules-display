@@ -2504,9 +2504,11 @@ static ssize_t hbm_mode_store(struct device *dev,
 		goto unlock;
 	}
 
-	funcs->set_hbm_mode(ctx, hbm_mode);
+	if (hbm_mode != ctx->hbm_mode) {
+		funcs->set_hbm_mode(ctx, hbm_mode);
+		backlight_state_changed(bd);
+	}
 
-	backlight_state_changed(bd);
 unlock:
 	mutex_unlock(&ctx->mode_lock);
 
@@ -2992,20 +2994,27 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 					enum exynos_panel_state panel_state)
 {
 	struct backlight_device *bl = ctx->bl;
+	unsigned long state;
+	bool state_changed = false;
 
 	if (!bl)
 		return;
 
 	mutex_lock(&ctx->bl_state_lock);
 
-	bl->props.state = get_backlight_state_from_panel(bl, panel_state);
+	state = get_backlight_state_from_panel(bl, panel_state);
+	if (state != bl->props.state) {
+		bl->props.state = state;
+		state_changed = true;
+	}
 
 	mutex_unlock(&ctx->bl_state_lock);
 
-	backlight_state_changed(bl);
-
-	dev_dbg(ctx->dev, "%s: panel:%d, bl:0x%x\n", __func__,
-		 panel_state, bl->props.state);
+	if (state_changed) {
+		backlight_state_changed(bl);
+		dev_info(ctx->dev, "%s: panel:%d, bl:0x%x\n", __func__,
+			 panel_state, bl->props.state);
+	}
 }
 
 static int exynos_panel_attach_properties(struct exynos_panel *ctx)
