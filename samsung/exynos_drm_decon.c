@@ -2113,8 +2113,7 @@ static int decon_suspend(struct device *dev)
 
 	decon_debug(decon, "%s\n", __func__);
 
-	if (decon->state == DECON_STATE_ON)
-		ret = exynos_hibernation_suspend(decon->hibernation);
+	ret = exynos_hibernation_suspend(decon->hibernation);
 
 	DPU_EVENT_LOG(DPU_EVT_DECON_SUSPEND, decon->id, NULL);
 

@@ -342,6 +342,8 @@ static void exynos_hibernation_handler(struct kthread_work *work)
 
 int exynos_hibernation_suspend(struct exynos_hibernation *hiber)
 {
+	int ret = 0;
+
 	if (!hiber)
 		return 0;
 
@@ -351,7 +353,12 @@ int exynos_hibernation_suspend(struct exynos_hibernation *hiber)
 	/* make sure all work is complete (including async commits) */
 	kthread_flush_worker(&hiber->decon->worker);
 
-	return _exynos_hibernation_run(hiber, false);
+	if (atomic_read(&hiber->block_cnt) > 0)
+		ret = -EBUSY;
+	else if (hiber->decon->state == DECON_STATE_ON)
+		ret = _exynos_hibernation_run(hiber, false);
+
+	return ret;
 }
 
 struct exynos_hibernation *

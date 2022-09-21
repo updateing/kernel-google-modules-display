@@ -476,7 +476,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 	struct drm_connector *connector;
 	struct drm_connector_state *old_conn_state;
 	struct drm_connector_state *new_conn_state;
-	unsigned int hibernation_crtc_mask = 0;
 	unsigned int disabling_crtc_mask = 0;
 
 	DPU_ATRACE_BEGIN("exynos_atomic_commit_tail");
@@ -505,12 +504,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 				old_crtc_state);
 		DPU_EVENT_LOG(DPU_EVT_REQ_CRTC_INFO_NEW, decon->id,
 				new_crtc_state);
-
-		if (new_crtc_state->active || old_crtc_state->active) {
-			hibernation_block(decon->hibernation);
-
-			hibernation_crtc_mask |= drm_crtc_mask(crtc);
-		}
 
 		if (drm_atomic_crtc_effectively_active(old_crtc_state) && !new_crtc_state->active) {
 			/* keep runtime vote while disabling is taking place */
@@ -619,8 +612,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 
 	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
 		decon = crtc_to_decon(crtc);
-		if (hibernation_crtc_mask & drm_crtc_mask(crtc))
-			hibernation_unblock_enter(decon->hibernation);
 		if (disabling_crtc_mask & drm_crtc_mask(crtc))
 			pm_runtime_put_sync(decon->dev);
 	}
