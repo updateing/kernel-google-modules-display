@@ -163,8 +163,7 @@ struct dpu_bts {
 	/* includes writeback dpp */
 	struct dpu_bts_bw rt_bw[MAX_DPP_CNT];
 
-	/* each decon must know other decon's BW to get overall BW */
-	u32 ch_bw[MAX_DECON_CNT][MAX_AXI_PORT];
+	u32 ch_bw[MAX_AXI_PORT];
 	int bw_idx;
 	struct dpu_bts_ops *ops;
 #if IS_ENABLED(CONFIG_EXYNOS_PM_QOS) || IS_ENABLED(CONFIG_EXYNOS_PM_QOS_MODULE)
