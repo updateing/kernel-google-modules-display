@@ -58,6 +58,8 @@ static void panel_update_local_hbm_locked(struct exynos_panel *ctx, bool enabled
 static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 					 const struct exynos_panel_mode *current_mode,
 					 struct exynos_panel *ctx);
+static void exynos_panel_post_power_on(struct exynos_panel *ctx);
+static void exynos_panel_pre_power_off(struct exynos_panel *ctx);
 
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
@@ -439,6 +441,8 @@ void exynos_panel_reset(struct exynos_panel *ctx)
 	dev_dbg(ctx->dev, "%s -\n", __func__);
 
 	exynos_panel_init(ctx);
+
+	exynos_panel_post_power_on(ctx);
 }
 EXPORT_SYMBOL(exynos_panel_reset);
 
@@ -520,6 +524,7 @@ static int _exynos_panel_set_power(struct exynos_panel *ctx, bool on)
 		reg_ctrl = IS_VALID_PANEL_REG_ID(ctx->desc->reg_ctrl_enable[0].id) ?
 			ctx->desc->reg_ctrl_enable : default_ctrl_enable;
 	} else {
+		exynos_panel_pre_power_off(ctx);
 		if (!IS_ERR_OR_NULL(ctx->reset_gpio))
 			gpiod_set_value(ctx->reset_gpio, 0);
 		if (!IS_ERR_OR_NULL(ctx->enable_gpio))
@@ -554,6 +559,40 @@ int exynos_panel_set_power(struct exynos_panel *ctx, bool on)
 	return 0;
 }
 EXPORT_SYMBOL(exynos_panel_set_power);
+
+static void exynos_panel_post_power_on(struct exynos_panel *ctx)
+{
+	int ret;
+
+	if (IS_ENABLED(CONFIG_BOARD_EMULATOR))
+		return;
+
+	if (!IS_VALID_PANEL_REG_ID(ctx->desc->reg_ctrl_post_enable[0].id))
+		return;
+
+	ret = _exynos_panel_reg_ctrl(ctx, ctx->desc->reg_ctrl_post_enable, true);
+	if (ret)
+		dev_err(ctx->dev, "failed to set post power on: ret %d\n", ret);
+	else
+		dev_dbg(ctx->dev, "set post power on\n");
+}
+
+static void exynos_panel_pre_power_off(struct exynos_panel *ctx)
+{
+	int ret;
+
+	if (IS_ENABLED(CONFIG_BOARD_EMULATOR))
+		return;
+
+	if (!IS_VALID_PANEL_REG_ID(ctx->desc->reg_ctrl_pre_disable[0].id))
+		return;
+
+	ret = _exynos_panel_reg_ctrl(ctx, ctx->desc->reg_ctrl_pre_disable, false);
+	if (ret)
+		dev_err(ctx->dev, "failed to set pre power off: ret %d\n", ret);
+	else
+		dev_dbg(ctx->dev, "set pre power off\n");
+}
 
 static void exynos_panel_handoff(struct exynos_panel *ctx)
 {

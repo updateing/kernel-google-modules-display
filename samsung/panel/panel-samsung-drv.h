@@ -522,6 +522,8 @@ struct exynos_panel_desc {
 	const struct exynos_panel_funcs *exynos_panel_func;
 	const u32 reset_timing_ms[PANEL_RESET_TIMING_COUNT];
 	const struct panel_reg_ctrl reg_ctrl_enable[PANEL_REG_COUNT];
+	const struct panel_reg_ctrl reg_ctrl_post_enable[PANEL_REG_COUNT];
+	const struct panel_reg_ctrl reg_ctrl_pre_disable[PANEL_REG_COUNT];
 	const struct panel_reg_ctrl reg_ctrl_disable[PANEL_REG_COUNT];
 };
 
