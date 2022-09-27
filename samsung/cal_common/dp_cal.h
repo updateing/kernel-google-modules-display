@@ -23,7 +23,10 @@ enum sst_id {
 enum dp_regs_type {
 	REGS_LINK = 0,
 	REGS_PHY,
-	REGS_DP_TYPE_MAX
+#ifdef CONFIG_SOC_ZUMA
+	REGS_PHY_TCA,
+#endif
+	REGS_DP_TYPE_MAX,
 };
 
 /* DFP_D (USB Type-C) */

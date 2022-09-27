@@ -101,6 +101,10 @@ struct dp_resources {
 	int irq;
 	void __iomem *link_regs;
 	void __iomem *phy_regs;
+#ifdef CONFIG_SOC_ZUMA
+	void __iomem *phy_tca_regs;
+	struct clk *dposc_clk;
+#endif
 };
 
 enum dp_audio_state {
@@ -180,5 +184,10 @@ static inline struct dp_device *get_dp_drvdata(void)
 
 /* Prototypes of export symbol to handshake other modules */
 int dp_audio_config(struct dp_audio_config *audio_config);
+
+// External functions
+void dp_enable_dposc(struct dp_device *dp);
+void dp_disable_dposc(struct dp_device *dp);
+int dp_get_clock(struct dp_device *dp);
 
 #endif // __EXYNOS_DRM_DP_H__

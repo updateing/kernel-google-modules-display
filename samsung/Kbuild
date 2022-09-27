@@ -27,6 +27,8 @@ exynos-drm-$(CONFIG_SOC_ZUMA) += cal_9865/dsim_reg.o
 exynos-drm-$(CONFIG_SOC_ZUMA) += cal_9865/dpp_reg.o
 exynos-drm-$(CONFIG_SOC_ZUMA) += cal_9865/dqe_reg.o
 exynos-drm-$(CONFIG_SOC_ZUMA) += cal_9865/hdr_reg.o
+exynos-drm-$(CONFIG_SOC_ZUMA) += cal_9865/dp_reg.o
+exynos-drm-$(CONFIG_SOC_ZUMA) += displayport/dp_zuma.o
 
 exynos-drm-y += exynos_drm_drv.o
 exynos-drm-y += exynos_drm_crtc.o

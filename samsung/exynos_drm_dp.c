@@ -1149,7 +1149,7 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 					dp_err(dp, "dp_wait_audio_state_change: timeout for disable\n");
 			}
 
-			// Wait DRM/KMS Stop
+			/* Wait DRM/KMS Stop */
 			timeout = dp_wait_state_change(dp, 3000, DP_STATE_ON);
 			if (timeout == -ETIME) {
 				dp_err(dp, "dp_wait_state_change: timeout for disable\n");
@@ -1171,6 +1171,7 @@ static void dp_work_hpd_plug(struct work_struct *work)
 		pm_runtime_get_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_get_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
+		dp_enable_dposc(dp);
 		pm_stay_awake(dp->dev);
 
 		/* PHY power on */
@@ -1201,6 +1202,7 @@ HPD_FAIL:
 	dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
 
 	dp_hw_deinit(&dp->hw_config);
+	dp_disable_dposc(dp);
 	pm_relax(dp->dev);
 
 	dp_init_info(dp);
@@ -1226,6 +1228,7 @@ static void dp_work_hpd_unplug(struct work_struct *work)
 
 		/* PHY power off */
 		dp_hw_deinit(&dp->hw_config);
+		dp_disable_dposc(dp);
 
 		pm_runtime_put_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
@@ -1643,8 +1646,13 @@ static irqreturn_t dp_irq_handler(int irq, void *dev_data)
 static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
 {
 	struct resource *res;
+#ifdef CONFIG_SOC_ZUMA
+	u64 addr_phy = 0x11130000, addr_phy_tca = 0x11140000;
+	u64 size_phy = 0x250, size_phy_tca = 0xFC;
+#else
 	u64 addr_phy = 0x110F0000;
 	u64 size_phy = 0x2800;
+#endif
 	int ret = 0;
 
 	/* DP Link SFR */
@@ -1674,6 +1682,16 @@ static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
 	dp_regs_desc_init(dp->res.phy_regs, (phys_addr_t)addr_phy, "PHY",
 			  REGS_PHY, SST1);
 
+#ifdef CONFIG_SOC_ZUMA
+	dp->res.phy_tca_regs = ioremap((phys_addr_t)addr_phy_tca, size_phy_tca);
+	if (!dp->res.phy_tca_regs) {
+		dp_err(dp, "failed to remap USBDP Combo PHY TCA SFR region\n");
+		return -EINVAL;
+	}
+	dp_regs_desc_init(dp->res.phy_tca_regs, (phys_addr_t)addr_phy_tca,
+			  "PHY TCA", REGS_PHY_TCA, SST1);
+#endif
+
 	/* DP Interrupt */
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
@@ -1689,6 +1707,12 @@ static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
 		return -EINVAL;
 	}
 	disable_irq(dp->res.irq);
+
+	ret = dp_get_clock(dp);
+	if (ret) {
+		dp_err(dp, "failed to get DP clks\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
