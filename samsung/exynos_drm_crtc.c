@@ -162,6 +162,7 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	struct drm_plane *plane;
 	const struct drm_plane_state *plane_state;
 	const struct decon_device *decon = exynos_crtc->ctx;
+	const struct decon_config *cfg = &decon->config;
 	const struct exynos_dqe *dqe = decon->dqe;
 	uint32_t max_bpc;
 
@@ -223,7 +224,8 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 		!new_exynos_state->planes_updated) {
 		new_exynos_state->skip_update = true;
 	} else if (drm_atomic_crtc_effectively_active(old_crtc_state) &&
-		(crtc_state->plane_mask & (~exynos_crtc->rcd_plane_mask)) == 0) {
+		(crtc_state->plane_mask & (~exynos_crtc->rcd_plane_mask)) == 0 &&
+		cfg->mode.op_mode != DECON_VIDEO_MODE) {
 		/* skip plane-less updates unless it's first commit after enabling */
 		new_exynos_state->skip_update = true;
 		DRM_WARN("%s: skip plane-less update, mask=0x%08X\n",

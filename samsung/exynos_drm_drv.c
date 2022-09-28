@@ -420,6 +420,8 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 			pr_err("%s: timeout of waiting for fence, name:%s idx:%d\n",
 				__func__, plane->name ? : "NA", plane->index);
 			if (crtc) {
+				const struct decon_device *decon = crtc_to_decon(crtc);
+				const struct decon_config *cfg = &decon->config;
 				struct exynos_drm_crtc_state *new_exynos_crtc_state;
 				struct drm_crtc_state *new_crtc_state;
 
@@ -428,7 +430,8 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 					!new_crtc_state->enable || !new_crtc_state->active)
 					continue;
 				new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
-				if (!new_exynos_crtc_state->skip_update) {
+				if (!new_exynos_crtc_state->skip_update &&
+					   cfg->mode.op_mode != DECON_VIDEO_MODE) {
 					new_exynos_crtc_state->skip_update = true;
 					pr_warn("%s: skip frame update at %s\n",
 									__func__, crtc->name);
