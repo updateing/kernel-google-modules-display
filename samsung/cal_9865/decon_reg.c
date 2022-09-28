@@ -560,6 +560,10 @@ static void decon_reg_config_win_channel(u32 id, u32 win_idx, int ch)
 {
 	u32 val, mask;
 
+	/* L7 layer is not present in Zuma*/
+	if (ch > 6)
+		ch = ch + 1;
+
 	val = WIN_CHMAP_F(ch);
 	mask = WIN_CHMAP_MASK;
 	wincon_write_mask(id, DECON_CON_WIN(win_idx), val, mask);
