@@ -1983,6 +1983,32 @@ void decon_dump_event_condition(const struct decon_device *decon,
 }
 
 #if IS_ENABLED(CONFIG_EXYNOS_ITMON)
+
+#define MAX_DPU_ITMON_STR_NUM 2
+static bool dpu_itmon_check(struct decon_device *decon, char *str_itmon, char *str_attr)
+{
+	const char *name[MAX_DPU_ITMON_STR_NUM];
+	int count, i;
+
+	if (!str_itmon)
+		return false;
+
+	count = of_property_count_strings(decon->dev->of_node, str_attr);
+	if (count <= 0 || count > MAX_DPU_ITMON_STR_NUM) {
+		pr_warn("%s: invalid number: %d\n", __func__, count);
+		return false;
+	}
+
+	of_property_read_string_array(decon->dev->of_node,
+				      str_attr, name, count);
+	for (i = 0; i < count; i++) {
+		if (strncmp(str_itmon, name[i], strlen(name[i])) == 0)
+			return true;
+	}
+
+	return false;
+}
+
 int dpu_itmon_notifier(struct notifier_block *nb, unsigned long act, void *data)
 {
 	struct decon_device *decon;
@@ -1999,10 +2025,8 @@ int dpu_itmon_notifier(struct notifier_block *nb, unsigned long act, void *data)
 		return NOTIFY_DONE;
 
 	/* port is master and dest is target */
-	if ((itmon_data->port &&
-		(strncmp("DISP", itmon_data->port, sizeof("DISP") - 1) == 0)) ||
-		(itmon_data->dest &&
-		(strncmp("DISP", itmon_data->dest, sizeof("DISP") - 1) == 0))) {
+	if (dpu_itmon_check(decon, itmon_data->port, "itmon,port") ||
+	    dpu_itmon_check(decon, itmon_data->dest, "itmon,dest")) {
 		pr_info("%s: port: %s, dest: %s\n", __func__,
 				itmon_data->port, itmon_data->dest);
 
