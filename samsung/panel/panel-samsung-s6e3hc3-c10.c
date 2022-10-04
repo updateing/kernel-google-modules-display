@@ -1005,7 +1005,6 @@ static const u32 s6e3hc3_c10_bl_range[] = {
 
 static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 	{
-		/* 1440x3120 @ 60Hz */
 		.mode = {
 			.name = "1440x3120x60",
 			.clock = 298620,
@@ -1040,7 +1039,6 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
-		/* 1440x3120 @ 120Hz */
 		.mode = {
 			.name = "1440x3120x120",
 			.clock = 597240,
@@ -1075,7 +1073,6 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 	{
-		/* 1080x2340 @ 60Hz */
 		.mode = {
 			.name = "1080x2340x60",
 			.clock = 173484,
@@ -1110,7 +1107,6 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
-		/* 1080x2340 @ 120Hz */
 		.mode = {
 			.name = "1080x2340x120",
 			.clock = 346968,
@@ -1149,7 +1145,6 @@ static const struct exynos_panel_mode s6e3hc3_c10_modes[] = {
 static const struct exynos_panel_mode s6e3hc3_c10_lp_modes[] = {
 	{
 		.mode = {
-			/* 1440x3120 @ 30Hz */
 			.name = "1440x3120x30",
 			.clock = 149310,
 			.hdisplay = 1440,
@@ -1180,7 +1175,6 @@ static const struct exynos_panel_mode s6e3hc3_c10_lp_modes[] = {
 	},
 	{
 		.mode = {
-			/* 1080x2340 @ 30Hz */
 			.name = "1080x2340x30",
 			.clock = 86742,
 			.hdisplay = 1080,

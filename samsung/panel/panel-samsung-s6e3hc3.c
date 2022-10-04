@@ -1063,7 +1063,6 @@ static const u32 s6e3hc3_bl_range[] = {
 
 static const struct exynos_panel_mode s6e3hc3_modes[] = {
 	{
-		/* 1440x3120 @ 60Hz */
 		.mode = {
 			.name = "1440x3120x60",
 			.clock = 298620,
@@ -1100,7 +1099,6 @@ static const struct exynos_panel_mode s6e3hc3_modes[] = {
 		.idle_mode = IDLE_MODE_UNSUPPORTED,
 	},
 	{
-		/* 1440x3120 @ 120Hz */
 		.mode = {
 			.name = "1440x3120x120",
 			.clock = 597240,
@@ -1140,7 +1138,6 @@ static const struct exynos_panel_mode s6e3hc3_modes[] = {
 
 static const struct exynos_panel_mode s6e3hc3_lp_mode = {
 	.mode = {
-		/* 1440x3120 @ 30Hz */
 		.name = "1440x3120x30",
 		.clock = 149310,
 		.hdisplay = 1440,

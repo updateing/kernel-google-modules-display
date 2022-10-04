@@ -144,7 +144,6 @@ static const struct exynos_display_underrun_param fhd_underrun_param = {
 
 static const struct exynos_panel_mode s6e3hc2_fhd_modes[] = {
 	{
-		/* 1080x2340 @ 60Hz */
 		.mode = {
 			.name = "1080x2340x60",
 			.clock = 164358,
@@ -174,7 +173,6 @@ static const struct exynos_panel_mode s6e3hc2_fhd_modes[] = {
 		},
 	},
 	{
-		/* 1080x2340 @ 90Hz */
 		.mode = {
 			.name = "1080x2340x90",
 			.clock = 246537,
