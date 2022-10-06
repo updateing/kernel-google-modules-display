@@ -19,8 +19,8 @@
 #include "../exynos_drm_format.h"
 
 #if defined(CONFIG_SOC_ZUMA)
-/* 14xRDMA + 2xODMA + 2xRCD */
-#define MAX_DPP_CNT		18
+/* 14xRDMA + 2xODMA + 2xRCD + 2xCGC*/
+#define MAX_DPP_CNT		20
 #elif defined(CONFIG_SOC_GS201)
 /* 6xRDMA + 1xODMA + 2xRCD */
 #define MAX_DPP_CNT		9
@@ -114,10 +114,6 @@ enum dpp_regs_id {
 	REGS_DPP4_ID,
 	REGS_DPP5_ID,
 	REGS_DPP6_ID,
-	/*
-	 * Layer7 is not exist as a real HW.
-	 * But, it is needed to match ID.
-	 */
 	REGS_DPP7_ID,
 	REGS_DPP8_ID,
 	REGS_DPP9_ID,
@@ -125,7 +121,6 @@ enum dpp_regs_id {
 	REGS_DPP11_ID,
 	REGS_DPP12_ID,
 	REGS_DPP13_ID,
-	REGS_DPP14_ID,
 	REGS_RCD0_ID,
 	REGS_RCD1_ID,
 	REGS_WB0_ID,
