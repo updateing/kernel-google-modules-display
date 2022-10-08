@@ -153,6 +153,52 @@ struct video_timing {
 	enum sync_polarity hsync_polarity;
 };
 
+// Audio Config
+enum audio_mode {
+	AUDIO_MODE_ASYNC = 0,	// Asynchronous Clock Mode
+	AUDIO_MODE_SYNC,	// Synchronous Clock Mode
+};
+
+enum audio_sampling_frequency {
+	FS_32KHZ = 0,	// 32 KHz
+	FS_44KHZ,	// 44.1 KHz
+	FS_48KHZ,	// 48 Khz
+	FS_88KHZ,	// 88.2 KHz
+	FS_96KHZ,	// 96 KHz
+	FS_176KHZ,	// 176.4 KHz
+	FS_192KHZ,	// 192 KHz
+};
+
+enum audio_bit_per_channel {
+	AUDIO_16_BIT = 0,
+	AUDIO_20_BIT,
+	AUDIO_24_BIT,
+};
+
+enum audio_16bit_dma_mode {
+	NORMAL_MODE = 0,
+	PACKED_MODE = 1,
+	PACKED_MODE2 = 2,
+};
+
+enum audio_dma_word_length {
+	WORD_LENGTH_1 = 0,
+	WORD_LENGTH_2,
+	WORD_LENGTH_3,
+	WORD_LENGTH_4,
+	WORD_LENGTH_5,
+	WORD_LENGTH_6,
+	WORD_LENGTH_7,
+	WORD_LENGTH_8,
+};
+
+enum audio_clock_accuracy {
+	Level2 = 0,
+	Level1 = 1,
+	Level3 = 2,
+	NOT_MATCH = 3,
+};
+
 // BIST Config
 enum bist_pattern_type {
 	// Normal BIST Patterns
@@ -168,12 +214,16 @@ enum bist_pattern_type {
 
 // InfoFrame
 #define	INFOFRAME_PACKET_TYPE_AVI 0x82		/** Auxiliary Video information InfoFrame */
+#define INFOFRAME_PACKET_TYPE_AUDIO 0x84	/** Audio information InfoFrame */
 #define MAX_INFOFRAME_LENGTH 27
 
 #define AVI_INFOFRAME_VERSION 0x02
 #define AVI_INFOFRAME_LENGTH 0x0D
 #define ACTIVE_FORMAT_INFO_PRESENT (1 << 4)	/* No Active Format Information */
 #define ACTIVE_PORTION_ASPECT_RATIO (0x8 << 0)	/* Same as Picture Aspect Ratio */
+
+#define AUDIO_INFOFRAME_VERSION 0x01
+#define AUDIO_INFOFRAME_LENGTH 0x0A
 
 struct infoframe {
 	u8 type_code;
@@ -203,6 +253,13 @@ struct dp_hw_config {
 	bool enhanced_mode;
 	bool use_fec;
 	bool use_ssc;
+
+	/* Audio */
+	u32 num_audio_ch;
+	enum audio_sampling_frequency audio_fs;
+	enum audio_bit_per_channel audio_bit;
+	enum audio_16bit_dma_mode audio_packed_mode;
+	enum audio_dma_word_length audio_word_length;
 
 	/* BIST Mode */
 	bool bist_mode;
@@ -236,11 +293,20 @@ void dp_hw_get_intr_source(bool *common, bool *str, bool *pcs);
 u32  dp_hw_get_and_clear_common_intr(void);
 u32  dp_hw_get_and_clear_video_intr(void);
 
+void dp_hw_send_audio_infoframe(struct infoframe audio_infoframe);
 void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe);
 void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe);
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern);
 void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config, u8 *voltage, u8 *pre_emphasis);
+
+void dp_hw_init_audio(void);
+void dp_hw_deinit_audio(void);
+void dp_hw_start_audio(void);
+void dp_hw_stop_audio(void);
+void dp_hw_set_audio_config(struct dp_hw_config *hw_config);
+int  dp_hw_set_bist_audio_config(struct dp_hw_config *hw_config);
+void dp_hw_set_audio_dma(u32 en);
 
 /* USB Interface Prototypes for Combo-PHY Handshaking */
 extern int dwc3_exynos_phy_enable(int owner, bool on);

@@ -16,6 +16,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
 #include <linux/irq.h>
+#include <linux/hdmi.h>
 #include <video/videomode.h>
 
 #include <drm/drm_probe_helper.h>
@@ -26,6 +27,10 @@
 
 struct dp_device *dp_drvdata;
 EXPORT_SYMBOL(dp_drvdata);
+
+struct blocking_notifier_head dp_ado_notifier_head =
+		BLOCKING_NOTIFIER_INIT(dp_ado_notifier_head);
+EXPORT_SYMBOL(dp_ado_notifier_head);
 
 #define DP_SUPPORT_TPS(_v) BIT((_v)-1)
 
@@ -42,6 +47,24 @@ static inline struct dp_device *connector_to_dp(struct drm_connector *c)
 static inline struct dp_device *dp_aux_to_dp(struct drm_dp_aux *a)
 {
 	return container_of(a, struct dp_device, dp_aux);
+}
+
+static u32 dp_get_audio_state(struct dp_device *dp)
+{
+	u32 audio_state;
+
+	mutex_lock(&dp->audio_lock);
+	audio_state = dp->audio_state;
+	mutex_unlock(&dp->audio_lock);
+
+	return audio_state;
+}
+
+static void dp_set_audio_state(struct dp_device *dp, u32 state)
+{
+	mutex_lock(&dp->audio_lock);
+	dp->audio_state = state;
+	mutex_unlock(&dp->audio_lock);
 }
 
 static enum hotplug_state dp_get_hpd_state(struct dp_device *dp)
@@ -67,6 +90,7 @@ static void dp_init_info(struct dp_device *dp)
 {
 	dp->state = DP_STATE_INIT;
 	dp->hpd_current_state = EXYNOS_HPD_UNPLUG;
+	dp->audio_state = DP_AUDIO_DISABLE;
 	dp->output_type = EXYNOS_DISPLAY_TYPE_DP0_SST1;
 	dp->bist_used = false;
 }
@@ -788,6 +812,48 @@ static int dp_set_spd_infoframe(void)
 	return 0;
 }
 
+
+static int dp_make_audio_infoframe_data(struct dp_device *dp,
+					struct infoframe *audio_infoframe)
+{
+	int i;
+
+	audio_infoframe->type_code = INFOFRAME_PACKET_TYPE_AUDIO;
+	audio_infoframe->version_number = AUDIO_INFOFRAME_VERSION;
+	audio_infoframe->length = AUDIO_INFOFRAME_LENGTH;
+
+	for (i = 0; i < AUDIO_INFOFRAME_LENGTH; i++)
+		audio_infoframe->data[i] = 0x00;
+
+	/* Data Byte 1, PCM type and audio channel count */
+	audio_infoframe->data[0] = ((u8)dp->hw_config.num_audio_ch - 1);
+
+	/* Data Byte 4, how various speaker locations are allocated */
+	if (dp->hw_config.num_audio_ch == 8)
+		audio_infoframe->data[3] = 0x13;
+	else if (dp->hw_config.num_audio_ch == 6)
+		audio_infoframe->data[3] = 0x0b;
+	else
+		audio_infoframe->data[3] = 0;
+
+	dp_info(dp,
+		"audio_infoframe: type and ch_cnt %02x, SF and bit size %02x, ch_allocation %02x\n",
+		audio_infoframe->data[0], audio_infoframe->data[1], audio_infoframe->data[3]);
+
+	return 0;
+}
+
+static int dp_set_audio_infoframe(struct dp_device *dp)
+{
+	struct infoframe audio_infoframe;
+
+	memset(&audio_infoframe, 0, sizeof(audio_infoframe));
+	dp_make_audio_infoframe_data(dp, &audio_infoframe);
+	dp_hw_send_audio_infoframe(audio_infoframe);
+
+	return 0;
+}
+
 static void dp_enable(struct drm_encoder *encoder)
 {
 	struct dp_device *dp = encoder_to_dp(encoder);
@@ -814,6 +880,21 @@ static void dp_enable(struct drm_encoder *encoder)
 	dp_info(dp, "enabled DP as cur_mode = %s@%d\n", dp->cur_mode.name,
 		drm_mode_vrefresh(&dp->cur_mode));
 
+	if (dp->bist_used) {
+		dp->hw_config.num_audio_ch = dp->sink.audio_ch_num;
+		// To remove HDMI_AUDIO_SAMPLE_FREQUENCY_STREAM, minus 1
+		dp->hw_config.audio_fs = dp->sink.audio_sample_rates - 1;
+		dp->hw_config.audio_bit = AUDIO_16_BIT;
+		dp->hw_config.audio_packed_mode = NORMAL_MODE;
+		dp->hw_config.audio_word_length = WORD_LENGTH_1;
+
+		dp_hw_init_audio();
+		dp_hw_set_bist_audio_config(&dp->hw_config);
+		dp_hw_start_audio();
+
+		dp_set_audio_infoframe(dp);
+	}
+
 	dp->state = DP_STATE_RUN;
 	dp_info(dp, "%s: DP State changed to RUN\n", __func__);
 
@@ -828,6 +909,10 @@ static void dp_disable(struct drm_encoder *encoder)
 
 	if (dp->state == DP_STATE_RUN) {
 		disable_irq(dp->res.irq);
+		if (dp->bist_used) {
+			dp_hw_stop_audio();
+			dp_hw_deinit_audio();
+		}
 		dp_hw_stop();
 		dp_info(dp, "disabled DP\n");
 
@@ -922,16 +1007,36 @@ static bool dp_find_prefer_mode(struct dp_device *dp)
 	return found;
 }
 
+static void dp_sad_to_audio_info(struct dp_device *dp, struct cea_sad *sads, int num)
+{
+	int i;
+
+	/* enum hdmi_audio_coding_type & enum hdmi_audio_sample_frequency are defined in hdmi.h */
+	for (i = 0; i < num; i++) {
+		dp_info(dp, "audio format: %u, ch: %u, freq: %u, byte2: 0x%08X\n",
+			sads[i].format, sads[i].channels, sads[i].freq, sads[i].byte2);
+
+		if (sads[i].format == HDMI_AUDIO_CODING_TYPE_PCM) {
+			dp->sink.audio_ch_num |= 1 << sads[i].channels;
+			dp->sink.audio_sample_rates |= sads[i].freq;
+			dp->sink.audio_bit_rates |= sads[i].byte2;
+		}
+	}
+	dp_info(dp, "HDMI Audio ch: %u, sample_rates: %u, bit_rates: %u bps\n",
+		dp->sink.audio_ch_num, dp->sink.audio_sample_rates, dp->sink.audio_bit_rates);
+}
+
 static void dp_on_by_hpd_plug(struct dp_device *dp)
 {
 	struct drm_connector *connector = &dp->connector;
 	struct drm_device *dev = connector->dev;
 
 	if (dp->bist_used) {
-		/* Parse EDID for BIST video */
+		/* Parse EDID for BIST video/audio */
 		struct edid *edid =
 			drm_do_get_edid(connector, dp_get_edid_block, dp);
-		int num_modes;
+		struct cea_sad *sads;
+		int num_modes, num_sad;
 
 		if (edid) {
 			dp_parse_edid(dp, edid);
@@ -939,11 +1044,15 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 			mutex_lock(&dev->mode_config.mutex);
 			dp_clean_drm_modes(dp);
 			num_modes = drm_add_edid_modes(connector, edid);
+			num_sad = drm_edid_to_sad(edid, &sads);
 			mutex_unlock(&dev->mode_config.mutex);
 			kfree(edid);
 
 			if (num_modes)
 				dp_find_prefer_mode(dp);
+
+			if (num_sad > 0)
+				dp_sad_to_audio_info(dp, sads, num_sad);
 		}
 
 		dp->state = DP_STATE_ON;
@@ -961,7 +1070,34 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 				"call drm_kms_helper_hotplug_event (connected)\n");
 			drm_kms_helper_hotplug_event(dev);
 		}
+
+		dp_info(dp, "call DP audio notifier (connected)\n");
+		blocking_notifier_call_chain(&dp_ado_notifier_head, (unsigned long)1, NULL);
 	}
+}
+
+static int dp_wait_audio_state_change(struct dp_device *dp, int max_wait_time,
+				      enum dp_audio_state state)
+{
+	int ret = 0;
+	int wait_cnt = max_wait_time;
+
+	do {
+		wait_cnt--;
+		usleep_range(1000, 1030);
+	} while ((dp_get_audio_state(dp) != state) && (wait_cnt > 0));
+
+	dp_info(dp, "dp_wait_audio_state_change: time = %d ms, state = %d\n",
+		max_wait_time - wait_cnt, state);
+
+	if (wait_cnt == 0) {
+		dp_err(dp, "dp_wait_audio_state_change: timeout\n");
+		ret =  -ETIME;
+	} else
+		ret = wait_cnt;
+
+	return ret;
+
 }
 
 static int dp_wait_state_change(struct dp_device *dp, int max_wait_time,
@@ -1001,6 +1137,16 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 				dp_info(dp,
 					"call drm_kms_helper_hotplug_event (disconnected)\n");
 				drm_kms_helper_hotplug_event(dev);
+			}
+
+			dp_info(dp, "call DP audio notifier (disconnected)\n");
+			blocking_notifier_call_chain(&dp_ado_notifier_head, (unsigned long)-1, NULL);
+
+			/* Wait Audio is stopped if Audio is working. */
+			if (dp_get_audio_state(dp) != DP_AUDIO_DISABLE) {
+				timeout = dp_wait_audio_state_change(dp, 3000, DP_AUDIO_DISABLE);
+				if (timeout == -ETIME)
+					dp_err(dp, "dp_wait_audio_state_change: timeout for disable\n");
 			}
 
 			// Wait DRM/KMS Stop
@@ -1215,6 +1361,63 @@ static void dp_register_extcon_notifier(void)
 		dp_debug(dp, "PDIC Notifier has been registered\n");
 	}
 }
+
+/* Audio(ALSA) Handshaking Functions */
+int dp_audio_config(struct dp_audio_config *audio_config)
+{
+	struct dp_device *dp = get_dp_drvdata();
+
+	if (dp->state == DP_STATE_INIT) {
+		dp_warn(dp, "DP Power Status is off\n");
+		return -EINVAL;
+	}
+
+	dp_info(dp, "audio state (%d ==> %d)\n",
+		dp_get_audio_state(dp), audio_config->audio_state);
+
+	if (audio_config->audio_state == dp_get_audio_state(dp))
+		return 0;
+
+	dp_set_audio_state(dp, audio_config->audio_state);
+
+	switch (dp_get_audio_state(dp)) {
+	case DP_AUDIO_ENABLE:
+		dp_hw_init_audio();
+		break;
+	case DP_AUDIO_START:
+		dp_info(dp, "audio_config: ch(%d), fs(%d), bit(%d), packed(%d), word_len(%d)\n",
+				audio_config->num_audio_ch, audio_config->audio_fs,
+				audio_config->audio_bit, audio_config->audio_packed_mode,
+				audio_config->audio_word_length);
+
+		dp->hw_config.num_audio_ch = audio_config->num_audio_ch;
+		dp->hw_config.audio_fs = audio_config->audio_fs;
+		dp->hw_config.audio_bit = audio_config->audio_bit;
+		dp->hw_config.audio_packed_mode = audio_config->audio_packed_mode;
+		dp->hw_config.audio_word_length = audio_config->audio_word_length;
+
+		dp_hw_set_audio_config(&dp->hw_config);
+		dp_hw_start_audio();
+		dp_set_audio_infoframe(dp);
+		break;
+	case DP_AUDIO_REQ_BUF_READ:
+		dp_hw_set_audio_dma(1);
+		break;
+	case DP_AUDIO_WAIT_BUF_FULL:
+		dp_hw_set_audio_dma(0);
+		break;
+	case DP_AUDIO_STOP:
+		dp_hw_stop_audio();
+		dp_set_audio_infoframe(dp);
+		break;
+	case DP_AUDIO_DISABLE:
+		dp_hw_deinit_audio();
+		break;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(dp_audio_config);
 
 /* DP DRM Connector Helper Functions */
 static enum drm_mode_status dp_mode_valid(struct drm_encoder *encoder,
@@ -1526,6 +1729,7 @@ static int dp_probe(struct platform_device *pdev)
 	mutex_init(&dp->cmd_lock);
 	mutex_init(&dp->hpd_lock);
 	mutex_init(&dp->hpd_state_lock);
+	mutex_init(&dp->audio_lock);
 	mutex_init(&dp->training_lock);
 
 	/* Create WorkQueue & Delayed Works*/

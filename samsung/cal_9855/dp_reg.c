@@ -77,6 +77,45 @@ u32 phy_tune_parameters[4][4][5] = {
 	},
 };
 
+static u32 m_aud_master[7] = {
+	32000, 44100, 48000, 88200, 96000, 176000, 192000
+};
+static u32 n_aud_master[4] = { 81000000, 135000000, 270000000, 405000000 };
+
+static u32 audio_async_m_n[2][4][7] = {
+	{
+		/* M value set */
+		{ 3314, 4567, 4971, 9134, 9942, 18269, 19884 },
+		{ 1988, 2740, 2983, 5481, 5695, 10961, 11930 },
+		{ 994, 1370, 1491, 2740, 2983, 5481, 5965 },
+		{ 663, 913, 994, 1827, 1988, 3654, 3977 },
+	},
+	{
+		/* N value set */
+		{ 32768, 32768, 32768, 32768, 32768, 32768, 32768 },
+		{ 32768, 32768, 32768, 32768, 32768, 32768, 32768 },
+		{ 32768, 32768, 32768, 32768, 32768, 32768, 32768 },
+		{ 32768, 32768, 32768, 32768, 32768, 32768, 32768 },
+	}
+};
+
+static u32 audio_sync_m_n[2][4][7] = {
+	{
+		/* M value set */
+		{ 1024, 784, 512, 1568, 1024, 3136, 2048 },
+		{ 1024, 784, 512, 1568, 1024, 3136, 2048 },
+		{ 1024, 784, 512, 784, 512, 1568, 1024 },
+		{ 1024, 784, 512, 1568, 1024, 3136, 2048 },
+	},
+	{
+		/* N value set */
+		{ 10125, 5625, 3375, 5625, 3375, 5625, 3375 },
+		{ 16875, 9375, 5625, 9375, 5625, 9375, 5625 },
+		{ 33750, 18750, 11250, 9375, 5625, 9375, 5625 },
+		{ 50625, 28125, 16875, 28125, 16875, 28125, 16875 },
+	}
+};
+
 /*
  * USBDP Combo PHY Control Functions
  */
@@ -425,6 +464,19 @@ static void dp_reg_set_sst1_longhop_power(u32 on)
 		      SST1_LH_PWR_ON_MASK);
 }
 
+static void dp_reg_set_sst1_audio_fifo_func_en(u32 en)
+{
+	dp_write_mask(SST1, SYSTEM_SST1_FUNCTION_ENABLE,
+		      SST1_AUDIO_FIFO_FUNC_EN_SET(en),
+		      SST1_AUDIO_FIFO_FUNC_EN_MASK);
+}
+
+static void dp_reg_set_sst1_audio_func_en(u32 en)
+{
+	dp_write_mask(SST1, SYSTEM_SST1_FUNCTION_ENABLE,
+		      SST1_AUDIO_FUNC_EN_SET(en), SST1_AUDIO_FUNC_EN_MASK);
+}
+
 static void dp_reg_set_sst1_video_func_en(u32 en)
 {
 	dp_write_mask(SST1, SYSTEM_SST1_FUNCTION_ENABLE,
@@ -710,6 +762,12 @@ static void dp_reg_set_quality_pattern(u32 en)
 
 /* SST1 Control Registers */
 // SST1 Main
+static void dp_reg_set_audio_mode(enum audio_mode mode)
+{
+	dp_write_mask(SST1, SST1_MAIN_CONTROL, AUDIO_MODE_SET(mode),
+		      AUDIO_MODE_MASK);
+}
+
 static void dp_reg_set_video_mode(enum video_mode mode)
 {
 	dp_write_mask(SST1, SST1_MAIN_CONTROL, VIDEO_MODE_SET(mode),
@@ -720,6 +778,12 @@ static void dp_reg_set_enhanced_mode(u32 en)
 {
 	dp_write_mask(SST1, SST1_MAIN_CONTROL, ENHANCED_MODE_SET(en),
 		      ENHANCED_MODE_MASK);
+}
+
+static void dp_reg_set_clear_audio_fifo(void)
+{
+	dp_write_mask(SST1, SST1_MAIN_FIFO_CONTROL, CLEAR_AUDIO_1_FIFO_SET(1),
+		      CLEAR_AUDIO_1_FIFO_MASK);
 }
 
 // SST1 Interrupts
@@ -766,6 +830,34 @@ static void dp_reg_set_mn_config(u32 strm_clk, u32 ls_clk)
 		      MNVID_SFR_CONFIG_MASK);
 	dp_write_mask(SST1, SST1_NVID_SFR_CONFIGURE, ls_clk,
 		      MNVID_SFR_CONFIG_MASK);
+}
+
+// SST1 Audio M/N Value
+static void dp_reg_set_audio_mn_value(enum audio_sampling_frequency fs,
+				      enum dp_link_rate_type rate)
+{
+	dp_write(SST1, SST1_MAUD_MASTER_MODE, m_aud_master[fs]);
+	dp_write(SST1, SST1_NAUD_MASTER_MODE, n_aud_master[rate]);
+}
+
+static void dp_reg_set_audio_mn_config(enum audio_mode mode,
+				       enum dp_link_rate_type rate,
+				       enum audio_sampling_frequency fs)
+{
+	u32 m_value, n_value;
+
+	if (mode == AUDIO_MODE_ASYNC) {
+		m_value = audio_async_m_n[0][rate][fs];
+		n_value = audio_async_m_n[1][rate][fs];
+	} else {
+		m_value = audio_sync_m_n[0][rate][fs];
+		n_value = audio_sync_m_n[1][rate][fs];
+	}
+
+	dp_write_mask(SST1, SST1_MAUD_SFR_CONFIGURE, m_value,
+		      MNAUD_SFR_CONFIG_MASK);
+	dp_write_mask(SST1, SST1_NAUD_SFR_CONFIGURE, n_value,
+		      MNAUD_SFR_CONFIG_MASK);
 }
 
 static u32 dp_get_ls_clk(struct dp_hw_config *hw_config)
@@ -1002,8 +1094,156 @@ static void dp_reg_set_video_bist_type(enum bist_pattern_type type)
 }
 
 // SST1 Audio Control
+static void dp_reg_set_audio_dma_req_gen(u32 en)
+{
+	dp_write_mask(SST1, SST1_AUDIO_CONTROL, DMA_REQ_GEN_EN_SET(en),
+		      DMA_REQ_GEN_EN_MASK);
+}
+
+static void
+dp_reg_set_audio_dma_burst_size(enum audio_dma_word_length word_length)
+{
+	dp_write_mask(SST1, SST1_AUDIO_CONTROL, DMA_BURST_SEL_SET(word_length),
+		      DMA_BURST_SEL_MASK);
+}
+
+static void dp_reg_set_audio_pack_mode(enum audio_16bit_dma_mode dma_mode)
+{
+	dp_write_mask(SST1, SST1_AUDIO_CONTROL,
+		      AUDIO_BIT_MAPPING_TYPE_SET(dma_mode),
+		      AUDIO_BIT_MAPPING_TYPE_MASK);
+}
+
+static void dp_reg_set_audio_pcm_size(enum audio_bit_per_channel audio_bit_size)
+{
+	dp_write_mask(SST1, SST1_AUDIO_CONTROL, PCM_SIZE_SET(audio_bit_size),
+		      PCM_SIZE_MASK);
+}
+
+static void dp_reg_set_audio_ch_status_same(u32 en)
+{
+	dp_write_mask(SST1, SST1_AUDIO_CONTROL, AUDIO_CH_STATUS_SAME_SET(en),
+		      AUDIO_CH_STATUS_SAME_MASK);
+}
+
+static bool dp_reg_is_audio_enabled(void)
+{
+	return AUDIO_EN_GET(dp_read(SST1, SST1_AUDIO_ENABLE)) ? true : false;
+}
+
+static void dp_reg_set_audio_en(u32 en)
+{
+	dp_write_mask(SST1, SST1_AUDIO_ENABLE, AUDIO_EN_SET(en), AUDIO_EN_MASK);
+}
+
+static void dp_reg_set_audio_master_timing_gen(u32 en)
+{
+	dp_write_mask(SST1, SST1_AUDIO_MASTER_TIMING_GEN,
+		      AUDIO_MASTER_TIME_GEN_SET(en),
+		      AUDIO_MASTER_TIME_GEN_MASK);
+}
+
+// SST1 Audio BIST Control
+static void dp_reg_set_audio_bist_en(u32 en)
+{
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CONTROL, SIN_AMPL_SET(0x0F),
+		      SIN_AMPL_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CONTROL, AUD_BIST_EN_SET(en),
+		      AUD_BIST_EN_MASK);
+}
+
+static void dp_map_audio_word_size(enum audio_bit_per_channel audio_bpc,
+				   u32 *word_max, u32 *word_length)
+{
+	switch (audio_bpc) {
+	case AUDIO_24_BIT:
+		*word_max = 1;
+		*word_length = 0x05;
+		break;
+
+	case AUDIO_16_BIT:
+		*word_max = 0;
+		*word_length = 0x01;
+		break;
+
+	case AUDIO_20_BIT:
+		*word_max = 0;
+		*word_length = 0x05;
+		break;
+
+	default:
+		*word_max = 0;
+		*word_length = 0x00;
+		break;
+	}
+}
+
+static void
+dp_reg_set_audio_bist_ch_status(enum audio_clock_accuracy clock_accuracy,
+				enum audio_sampling_frequency fs_freq,
+				u32 num_audio_ch,
+				enum audio_bit_per_channel audio_bpc)
+{
+	u32 word_max = 0;
+	u32 word_length = 0;
+
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CHANNEL_STATUS_SET0,
+		      CLK_ACCUR_SET(clock_accuracy), CLK_ACCUR_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CHANNEL_STATUS_SET0,
+		      FS_FREQ_SET(fs_freq), FS_FREQ_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CHANNEL_STATUS_SET0,
+		      CH_NUM_SET(num_audio_ch), CH_NUM_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CHANNEL_STATUS_SET0,
+		      SOURCE_NUM_SET(num_audio_ch), SOURCE_NUM_MASK);
+
+	dp_map_audio_word_size(audio_bpc, &word_max, &word_length);
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CHANNEL_STATUS_SET1,
+		      WORD_LENGTH_SET(word_length), WORD_LENGTH_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_BIST_CHANNEL_STATUS_SET1,
+		      WORD_MAX_SET(word_max), WORD_MAX_MASK);
+}
+
+// SST1 Audio Channel Control
+static void dp_reg_set_audio_ch(u32 audio_ch_cnt)
+{
+	dp_write_mask(SST1, SST1_AUDIO_BUFFER_CONTROL,
+		      MASTER_AUDIO_CHANNEL_COUNT_SET(audio_ch_cnt - 1),
+		      MASTER_AUDIO_CHANNEL_COUNT_MASK);
+}
+
+static void dp_reg_set_audio_ch_status(enum audio_clock_accuracy clock_accuracy,
+				       enum audio_sampling_frequency fs_freq,
+				       u32 num_audio_ch,
+				       enum audio_bit_per_channel audio_bpc)
+{
+	u32 word_max = 0;
+	u32 word_length = 0;
+
+	dp_write_mask(SST1, SST1_AUDIO_CHANNEL_1_2_STATUS_CTRL_0,
+		      CLK_ACCUR_SET(clock_accuracy), CLK_ACCUR_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_CHANNEL_1_2_STATUS_CTRL_0,
+		      FS_FREQ_SET(fs_freq), FS_FREQ_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_CHANNEL_1_2_STATUS_CTRL_0,
+		      CH_NUM_SET(num_audio_ch), CH_NUM_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_CHANNEL_1_2_STATUS_CTRL_0,
+		      SOURCE_NUM_SET(num_audio_ch), SOURCE_NUM_MASK);
+
+	dp_map_audio_word_size(audio_bpc, &word_max, &word_length);
+	dp_write_mask(SST1, SST1_AUDIO_CHANNEL_1_2_STATUS_CTRL_1,
+		      WORD_LENGTH_SET(word_length), WORD_LENGTH_MASK);
+	dp_write_mask(SST1, SST1_AUDIO_CHANNEL_1_2_STATUS_CTRL_1,
+		      WORD_MAX_SET(word_max), WORD_MAX_MASK);
+
+	/* Other channels should be same configurations by dp_reg_set_audio_ch_status_same() */
+}
 
 // SST1 InfoFrame Control
+static void dp_reg_set_audio_infoframe_update(u32 en)
+{
+	dp_write_mask(SST1, SST1_INFOFRAME_UPDATE_CONTROL,
+		      AUDIO_INFO_UPDATE_SET(en), AUDIO_INFO_UPDATE_MASK);
+}
+
 static void dp_reg_set_avi_infoframe_update(u32 en)
 {
 	dp_write_mask(SST1, SST1_INFOFRAME_UPDATE_CONTROL,
@@ -1014,6 +1254,12 @@ static void dp_reg_set_spd_infoframe_update(u32 en)
 {
 	dp_write_mask(SST1, SST1_INFOFRAME_UPDATE_CONTROL,
 		      SPD_INFO_UPDATE_SET(en), SPD_INFO_UPDATE_MASK);
+}
+
+static void dp_reg_set_audio_infoframe_send(u32 en)
+{
+	dp_write_mask(SST1, SST1_INFOFRAME_SEND_CONTROL,
+		      AUDIO_INFO_SEND_SET(en), AUDIO_INFO_SEND_MASK);
 }
 
 static void dp_reg_set_avi_infoframe_send(u32 en)
@@ -1062,6 +1308,13 @@ static void dp_reg_set_avi_infoframe_data(u8 *packet_data)
 	dp_reg_set_infoframe_data(SST1_INFOFRAME_AVI_PACKET_DATA_SET0,
 				  packet_data,
 				  MAX_AVI_INFOFRAME_DATA_BYTE_SIZE);
+}
+
+static void dp_reg_set_audio_infoframe_data(u8 *packet_data)
+{
+	dp_reg_set_infoframe_data(SST1_INFOFRAME_AUDIO_PACKET_DATA_SET0,
+				  packet_data,
+				  MAX_AUDIO_INFOFRAME_DATA_BYTE_SIZE);
 }
 
 static void dp_reg_set_spd_infoframe_data(u8 *packet_data)
@@ -1467,6 +1720,13 @@ u32 dp_hw_get_and_clear_video_intr(void)
 	return val;
 }
 
+void dp_hw_send_audio_infoframe(struct infoframe audio_infoframe)
+{
+	dp_reg_set_audio_infoframe_data(audio_infoframe.data);
+	dp_reg_set_audio_infoframe_update(1);
+	dp_reg_set_audio_infoframe_send(1);
+}
+
 void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe)
 {
 	dp_reg_set_avi_infoframe_data(avi_infoframe.data);
@@ -1577,4 +1837,80 @@ void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config,
 	default:
 		break;
 	}
+}
+
+// DP Audio Configuration Interfaces
+void dp_hw_init_audio(void)
+{
+	dp_reg_set_sst1_audio_func_en(1);
+	dp_reg_set_sst1_audio_fifo_func_en(1);
+
+	cal_log_info(0, "%s: dp_audio_init_config\n", __func__);
+}
+
+void dp_hw_deinit_audio(void)
+{
+	dp_reg_set_sst1_audio_fifo_func_en(0);
+	dp_reg_set_sst1_audio_func_en(0);
+}
+
+void dp_hw_start_audio(void)
+{
+	dp_reg_set_audio_en(1);
+	dp_reg_set_audio_master_timing_gen(1);
+
+	cal_log_info(0, "%s: dp_audio is started\n", __func__);
+}
+
+void dp_hw_stop_audio(void)
+{
+	if (dp_reg_is_audio_enabled()) {
+		udelay(1000);
+		dp_reg_set_audio_master_timing_gen(0);
+		dp_reg_set_audio_en(0);
+		dp_reg_set_clear_audio_fifo();
+		cal_log_info(0, "%s: dp_audio is disabled\n", __func__);
+	} else
+		cal_log_info(0,
+			     "%s: dp_audio is already disabled, AUDIO_EN = 0\n",
+			     __func__);
+}
+
+void dp_hw_set_audio_config(struct dp_hw_config *hw_config)
+{
+	dp_reg_set_audio_mode(AUDIO_MODE_ASYNC);
+	dp_reg_set_audio_mn_config(AUDIO_MODE_ASYNC, hw_config->link_rate,
+				   hw_config->audio_fs);
+	dp_reg_set_audio_mn_value(hw_config->audio_fs, hw_config->link_rate);
+
+	dp_reg_set_audio_dma_burst_size(hw_config->audio_word_length);
+	dp_reg_set_audio_pcm_size(hw_config->audio_bit);
+	dp_reg_set_audio_pack_mode(hw_config->audio_packed_mode);
+
+	dp_reg_set_audio_ch(hw_config->num_audio_ch);
+	dp_reg_set_audio_ch_status(NOT_MATCH, hw_config->audio_fs,
+				   hw_config->num_audio_ch,
+				   hw_config->audio_bit);
+	dp_reg_set_audio_ch_status_same(1);
+}
+
+int dp_hw_set_bist_audio_config(struct dp_hw_config *hw_config)
+{
+	if (!hw_config->bist_mode)
+		return -EINVAL;
+
+	dp_hw_set_audio_config(hw_config);
+
+	dp_reg_set_audio_bist_ch_status(NOT_MATCH, hw_config->audio_fs,
+					hw_config->num_audio_ch,
+					hw_config->audio_bit);
+	dp_reg_set_audio_bist_en(1);
+
+	cal_log_info(0, "%s: dp_audio is configured for BIST mode\n", __func__);
+	return 0;
+}
+
+void dp_hw_set_audio_dma(u32 en)
+{
+	dp_reg_set_audio_dma_req_gen(en);
 }

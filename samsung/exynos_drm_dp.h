@@ -90,6 +90,10 @@ struct dp_sink {
 	u8   edid_manufacturer[4];
 	u32  edid_product;
 	u32  edid_serial;
+
+	u32 audio_ch_num;
+	u32 audio_sample_rates;
+	u32 audio_bit_rates;
 };
 
 struct dp_resources {
@@ -97,6 +101,24 @@ struct dp_resources {
 	int irq;
 	void __iomem *link_regs;
 	void __iomem *phy_regs;
+};
+
+enum dp_audio_state {
+	DP_AUDIO_DISABLE = 0,
+	DP_AUDIO_ENABLE,
+	DP_AUDIO_START,
+	DP_AUDIO_REQ_BUF_READ,
+	DP_AUDIO_WAIT_BUF_FULL,
+	DP_AUDIO_STOP,
+};
+
+struct dp_audio_config {
+	enum dp_audio_state audio_state;
+	u32 num_audio_ch;
+	enum audio_sampling_frequency audio_fs;
+	enum audio_bit_per_channel audio_bit;
+	enum audio_16bit_dma_mode audio_packed_mode;
+	enum audio_dma_word_length audio_word_length;
 };
 
 struct dp_device {
@@ -143,6 +165,10 @@ struct dp_device {
 	/* BIST */
 	bool bist_used;
 
+	/* Audio */
+	enum dp_audio_state audio_state;
+	struct mutex audio_lock;
+
 	/* DP HW Configurations */
 	struct dp_hw_config hw_config;
 };
@@ -151,5 +177,8 @@ static inline struct dp_device *get_dp_drvdata(void)
 {
 	return dp_drvdata;
 }
+
+/* Prototypes of export symbol to handshake other modules */
+int dp_audio_config(struct dp_audio_config *audio_config);
 
 #endif // __EXYNOS_DRM_DP_H__
