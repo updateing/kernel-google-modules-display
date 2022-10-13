@@ -50,8 +50,14 @@ int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us)
 	return 0;
 }
 
-void dqe_reg_set_histogram_pos_internal(u32 dqe_id, enum exynos_prog_pos pos)
+void dqe_reg_set_histogram_pos_internal(u32 dqe_id, enum exynos_histogram_id hist_id,
+					enum exynos_prog_pos pos)
 {
-	pr_debug("%s: %d: pos(%d)\n", __func__, __LINE__, pos);
+	if (hist_id >= HISTOGRAM_MAX) {
+		pr_warn("%s: invalid hist_id(%d)\n", __func__, hist_id);
+		return;
+	}
+
+	pr_debug("%s: pos(%d)\n", __func__, pos);
 	hist_write_mask(dqe_id, DQE_HIST, HIST_POS_SEL(pos), HIST_POS_SEL_MASK);
 }

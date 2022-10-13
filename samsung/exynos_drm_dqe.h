@@ -35,6 +35,9 @@ struct exynos_dqe_state {
 	struct dither_config *disp_dither_config;
 	struct dither_config *cgc_dither_config;
 	bool enabled;
+	bool rcd_enabled;
+	struct drm_gem_object *cgc_gem;
+
 	struct histogram_roi *roi;
 	struct histogram_weights *weights;
 	struct histogram_bins *bins;
@@ -42,8 +45,7 @@ struct exynos_dqe_state {
 	u32 histogram_threshold;
 	spinlock_t histogram_slock;
 	enum exynos_prog_pos histogram_pos;
-	bool rcd_enabled;
-	struct drm_gem_object *cgc_gem;
+	enum exynos_histogram_id histogram_id;
 };
 
 struct dither_debug_override {

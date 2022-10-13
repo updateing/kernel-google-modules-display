@@ -541,7 +541,8 @@ bool dqe_reg_dimming_in_progress(u32 dqe_id)
 			ATC_DIMMING_IN_PROGRESS);
 }
 
-void dqe_reg_set_histogram_roi(u32 dqe_id, struct histogram_roi *roi)
+void dqe_reg_set_histogram_roi(u32 dqe_id, enum exynos_histogram_id hist_id,
+			       struct histogram_roi *roi)
 {
 	u32 val;
 
@@ -552,24 +553,33 @@ void dqe_reg_set_histogram_roi(u32 dqe_id, struct histogram_roi *roi)
 	hist_write(dqe_id, DQE_HIST_SIZE, val);
 }
 
-void dqe_reg_set_histogram_weights(u32 dqe_id, struct histogram_weights *weights)
+void dqe_reg_set_histogram_weights(u32 dqe_id, enum exynos_histogram_id hist_id,
+				   struct histogram_weights *weights)
 {
 	u32 val;
 
-	val = HIST_WEIGHT_R(weights->weight_r) |
-		HIST_WEIGHT_G(weights->weight_g);
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
+
+	val = HIST_WEIGHT_R(weights->weight_r) | HIST_WEIGHT_G(weights->weight_g);
 	hist_write(dqe_id, DQE_HIST_WEIGHT_0, val);
 	hist_write(dqe_id, DQE_HIST_WEIGHT_1, HIST_WEIGHT_B(weights->weight_b));
 }
 
-void dqe_reg_set_histogram_threshold(u32 dqe_id, u32 threshold)
+void dqe_reg_set_histogram_threshold(u32 dqe_id, enum exynos_histogram_id hist_id, u32 threshold)
 {
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
+
 	hist_write(dqe_id, DQE_HIST_THRESH, threshold);
 }
 
-void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
+void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id, enum histogram_state state)
 {
 	u32 val = 0;
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
 
 	if (regs_dqe[dqe_id].desc.write_protected) {
 		cal_log_debug(0, "%s: ignored in protected status\n", __func__);
@@ -586,11 +596,15 @@ void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
 	hist_write_mask(dqe_id, DQE_HIST, val, HIST_EN | HIST_ROI_ON);
 }
 
-void dqe_reg_get_histogram_bins(u32 dqe_id, struct histogram_bins *bins)
+void dqe_reg_get_histogram_bins(u32 dqe_id, enum exynos_histogram_id hist_id,
+				struct histogram_bins *bins)
 {
 	int regs_cnt = DIV_ROUND_UP(HISTOGRAM_BIN_COUNT, 2);
 	int i;
 	u32 val;
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
 
 	for (i = 0; i < regs_cnt; ++i) {
 		val = hist_read_relaxed(dqe_id, DQE_HIST_BIN(i));

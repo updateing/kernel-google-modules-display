@@ -59,6 +59,21 @@ enum dqe_regs_id {
 	REGS_DQE_ID_MAX,
 };
 
+#ifdef CONFIG_SOC_ZUMA
+enum exynos_histogram_id {
+	HISTOGRAM_0,
+	HISTOGRAM_1,
+	HISTOGRAM_2,
+	HISTOGRAM_3,
+	HISTOGRAM_MAX,
+};
+#else
+enum exynos_histogram_id {
+	HISTOGRAM_0,
+	HISTOGRAM_MAX,
+};
+#endif
+
 extern struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
 extern struct cal_regs_dqe regs_dqe_cgc[REGS_DQE_ID_MAX];
 
@@ -214,14 +229,23 @@ struct exynos_atc {
 	__u8 lt_calc_ab_shift;
 };
 
-#ifdef CONFIG_SOC_GS201
+#if defined(CONFIG_SOC_GS201)
 void dqe_reg_set_rcd_en_internal(u32 id, bool en);
-void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_prog_pos histogram_pos);
+void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
+					enum exynos_prog_pos pos);
+#elif defined(CONFIG_SOC_ZUMA)
+static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
+void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
+					enum exynos_prog_pos pos);
+void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p);
 #else
 /* Stubs for non-gs201 SoCs */
 static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
-static inline void dqe_reg_set_histogram_pos_internal(u32 id,
-		enum exynos_prog_pos histogram_pos) {return;}
+static inline void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
+						      enum exynos_prog_pos pos)
+{
+	return;
+}
 #endif
 
 
@@ -263,14 +287,19 @@ void dqe_reg_print_atc(u32 dqe_id, struct drm_printer *p);
 void dqe_reg_save_lpd_atc(u32 dqe_id, u32 *lpd_atc_regs);
 void dqe_reg_restore_lpd_atc(u32 dqe_id, u32 *lpd_atc_regs);
 bool dqe_reg_dimming_in_progress(u32 dqe_id);
-void dqe_reg_set_histogram_roi(u32 dqe_id, struct histogram_roi *roi);
-void dqe_reg_set_histogram_weights(u32 dqe_id, struct histogram_weights *weights);
-void dqe_reg_set_histogram_threshold(u32 dqe_id, u32 threshold);
-void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state);
-void dqe_reg_get_histogram_bins(u32 dqe_id, struct histogram_bins *bins);
-static inline void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_prog_pos pos)
+void dqe_reg_set_histogram_roi(u32 dqe_id, enum exynos_histogram_id hist_id,
+			       struct histogram_roi *roi);
+void dqe_reg_set_histogram_weights(u32 dqe_id, enum exynos_histogram_id hist_id,
+				   struct histogram_weights *weights);
+void dqe_reg_set_histogram_threshold(u32 dqe_id, enum exynos_histogram_id hist_id, u32 threshold);
+void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id,
+			   enum histogram_state state);
+void dqe_reg_get_histogram_bins(u32 dqe_id, enum exynos_histogram_id hist_id,
+				struct histogram_bins *bins);
+static inline void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_histogram_id hist_id,
+					     enum exynos_prog_pos pos)
 {
-	dqe_reg_set_histogram_pos_internal(dqe_id, pos);
+	dqe_reg_set_histogram_pos_internal(dqe_id, hist_id, pos);
 }
 void dqe_reg_set_size(u32 dqe_id, u32 width, u32 height);
 void dqe_dump(struct drm_printer *p, u32 dqe_id);
