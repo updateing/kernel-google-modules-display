@@ -1841,6 +1841,7 @@ int exynos_drm_debugfs_plane_add(struct exynos_drm_plane *exynos_plane)
 				DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN, ELEM_SIZE_32,
 				DUMP_TYPE_HDR_EOTF, plane_index, drm);
 		debugfs_create_u16("scaler", 0664, ent, &hdr->eotf.force_lut.scaler);
+		debugfs_create_bool("lut_en", 0664, ent, &hdr->eotf.force_lut.lut_en);
 #else
 		ent = exynos_debugfs_add_hdr_lut("eotf", hdr_dent,
 				&hdr->eotf.info, hdr->eotf.force_lut.posx,

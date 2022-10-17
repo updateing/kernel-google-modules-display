@@ -70,6 +70,7 @@ void hdr_reg_set_eotf_lut(u32 id, struct hdr_eotf_lut_v2p2 *lut)
 	}
 
 	hdr_write_relaxed(id, HDR_EOTF_SCALER, EOTF_SCALER(lut->scaler));
+	hdr_write_mask(id, HDR_HDR_CON, EOTF_LUT_EN(lut->lut_en), EOTF_LUT_EN_MASK);
 
 	hdr_write_mask(id, HDR_HDR_CON, EOTF_EN(1), EOTF_EN_MASK);
 

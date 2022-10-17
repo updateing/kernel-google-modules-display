@@ -40,6 +40,7 @@ struct hdr_eotf_lut_v2p2 {
 	struct hdr_v2p2_element ts[DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN];
 	struct hdr_v2p2_element vs[DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN];
 	__u16 scaler;
+	bool lut_en;
 };
 
 #define DRM_SAMSUNG_HDR_OETF_LUT_LEN	33
