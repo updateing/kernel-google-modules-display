@@ -88,7 +88,8 @@ struct dpu_bts_win_config {
 	bool is_rot;
 	bool is_comp;
 	bool is_secure;
-	int dpp_ch;
+	u32 dpp_id;
+	u32 zpos;
 	u32 format;
 	u64 comp_src;
 };
@@ -302,8 +303,8 @@ struct dpu_log_win {
 };
 
 struct dpu_log_rsc_occupancy {
-	u32 rsc_ch;
-	u32 rsc_win;
+	u64 rsc_ch;
+	u64 rsc_win;
 };
 
 struct dpu_log_atomic {

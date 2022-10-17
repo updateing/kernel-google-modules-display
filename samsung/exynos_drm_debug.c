@@ -232,7 +232,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 				exynos_drm_fb_dma_addr(plane_state->fb, 0);
 		log->data.plane_info.width = plane_state->fb->width;
 		log->data.plane_info.height = plane_state->fb->height;
-		log->data.plane_info.zpos = plane_state->zpos;
+		log->data.plane_info.zpos = plane_state->normalized_zpos;
 		log->data.plane_info.format = fb_format->format;
 		log->data.plane_info.index = plane_state->plane->index;
 		break;
@@ -317,7 +317,7 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 	struct decon_device *decon;
 	struct dpu_log *log;
 	unsigned long flags;
-	int idx, i, dpp_ch;
+	int idx, i, dpp_id;
 
 	if (index < 0) {
 		DRM_ERROR("%s: decon id is not valid(%d)\n", __func__, index);
@@ -345,10 +345,10 @@ void DPU_EVENT_LOG_ATOMIC_COMMIT(int index)
 				sizeof(struct dpu_bts_win_config));
 
 		if (decon->bts.win_config[i].state == DPU_WIN_STATE_BUFFER) {
-			dpp_ch = decon->bts.win_config[i].dpp_ch;
+			dpp_id = decon->bts.win_config[i].dpp_id;
 
 			log->data.atomic.win_config[i].dma_addr =
-				decon->dpp[dpp_ch]->dbg_dma_addr;
+				decon->dpp[DPPCH2PLANE(dpp_id)]->dbg_dma_addr;
 		}
 	}
 
@@ -417,7 +417,7 @@ DPU_EVENT_LOG_CMD(struct dsim_device *dsim, u8 type, u8 d0, u16 len)
 	log->type = DPU_EVT_DSIM_COMMAND;
 }
 
-static void dpu_print_log_win_config(const struct decon_win_config *const win_config, int index,
+static void dpu_print_log_win_config(const struct decon_win_config *const win_config,
 				     bool is_rcd, struct drm_printer *p)
 {
 	static const char *const str_state[3] = { "DISABLED", "COLOR", "BUFFER" };
@@ -425,17 +425,17 @@ static void dpu_print_log_win_config(const struct decon_win_config *const win_co
 	const struct dpu_fmt *const fmt = dpu_find_fmt_info(win->format);
 
 	char buf[128];
-	int len = scnprintf(buf, sizeof(buf), "\t\t\t\t\t%s%d: %s[0x%llx] SRC[%d %d %d %d] %s%s%s",
-			    is_rcd ? "RCD" : "WIN", index, str_state[win->state],
-			    (win->state == DPU_WIN_STATE_BUFFER) ? win_config->dma_addr : 0,
-			    win->src_x, win->src_y, win->src_w, win->src_h,
-			    (win->is_comp) ? "AFBC " : "", (win->is_rot) ? "ROT " : "",
-			    (win->is_secure) ? "SECURE " : "");
+	int len = scnprintf(buf, sizeof(buf),
+			"\t\t\t\t\t%s: %s[0x%llx] CH%d SRC[%d %d %d %d] %s%s%s",
+			is_rcd ? "RCD" : "WIN", str_state[win->state],
+			(win->state == DPU_WIN_STATE_BUFFER) ? win_config->dma_addr : 0,
+			(win->state == DPU_WIN_STATE_COLOR) ? -1 : win->dpp_id,
+			win->src_x, win->src_y, win->src_w, win->src_h,
+			(win->is_comp) ? "AFBC " : "", (win->is_rot) ? "ROT " : "",
+			(win->is_secure) ? "SECURE " : "");
 	len += scnprintf(buf + len, sizeof(buf) - len, "DST[%d %d %d %d] ", win->dst_x, win->dst_y,
 			 win->dst_w, win->dst_h);
-	if (win->state == DPU_WIN_STATE_BUFFER)
-		len += scnprintf(buf + len, sizeof(buf) - len, "CH%d", win->dpp_ch);
-
+	len += scnprintf(buf + len, sizeof(buf) - len, "ZPOS%d", win->zpos);
 	drm_printf(p, "%s %s %s\n", buf, dpu_get_fmt_name(fmt), get_comp_src_name(win->comp_src));
 }
 
@@ -456,16 +456,16 @@ static void dpu_print_log_atomic(struct dpu_log_atomic *atomic,
 			pr_warn("%s: invalid win state %d\n", __func__, win->state);
 			continue;
 		}
-		dpu_print_log_win_config(&atomic->win_config[i], i, false, p);
+		dpu_print_log_win_config(&atomic->win_config[i], false, p);
 	}
 
 	win = &atomic->rcd_win_config.win;
 	if (win->state == DPU_WIN_STATE_BUFFER) {
-		dpu_print_log_win_config(&atomic->rcd_win_config, 0, true, p);
+		dpu_print_log_win_config(&atomic->rcd_win_config, true, p);
 	}
 }
 
-static void dpu_print_log_rsc(char *buf, int len, struct dpu_log_rsc_occupancy *rsc)
+static void dpu_print_log_rsc(char *buf, int len, u32 decon_id, struct dpu_log_rsc_occupancy *rsc)
 {
 	int i, len_chs, len_wins;
 	char str_chs[128];
@@ -476,11 +476,11 @@ static void dpu_print_log_rsc(char *buf, int len, struct dpu_log_rsc_occupancy *
 	len_wins = sprintf(str_wins, "WINs: ");
 
 	for (i = 0; i < MAX_PLANE; ++i) {
-		using_ch = is_decon_using_ch(0, rsc->rsc_ch, i);
+		using_ch = is_decon_using_ch(decon_id, rsc->rsc_ch, i);
 		len_chs += sprintf(str_chs + len_chs, "%d[%c] ", i,
 				using_ch ? 'O' : 'X');
 
-		using_win = is_decon_using_win(0, rsc->rsc_win, i);
+		using_win = is_decon_using_win(decon_id, rsc->rsc_win, i);
 		len_wins += sprintf(str_wins + len_wins, "%d[%c] ", i,
 				using_win ? 'O' : 'X');
 	}
@@ -768,7 +768,7 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 
 		switch (log->type) {
 		case DPU_EVT_DECON_RSC_OCCUPANCY:
-			dpu_print_log_rsc(buf, len, &log->data.rsc);
+			dpu_print_log_rsc(buf, len, decon->id, &log->data.rsc);
 			break;
 		case DPU_EVT_DSIM_COMMAND:
 			scnprintf(buf + len, sizeof(buf) - len,
@@ -778,12 +778,12 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 			break;
 		case DPU_EVT_DPP_FRAMEDONE:
 			scnprintf(buf + len, sizeof(buf) - len,
-					"\tID:%u WIN:%u", log->data.dpp.id, log->data.dpp.win_id);
+					"\tCH:%u WIN:%u", log->data.dpp.id, log->data.dpp.win_id);
 			break;
 		case DPU_EVT_DMA_RECOVERY:
 			str_comp = get_comp_src_name(log->data.dpp.comp_src);
 			scnprintf(buf + len, sizeof(buf) - len,
-					"\tID:%u WIN:%u SRC:%s COUNT:%u",
+					"\tCH:%u WIN:%u SRC:%s COUNT:%u",
 					log->data.dpp.id, log->data.dpp.win_id,
 					str_comp, log->data.dpp.recovery_cnt);
 			break;
@@ -822,10 +822,11 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_PLANE_PREPARE_FB:
 		case DPU_EVT_PLANE_CLEANUP_FB:
 			fmt = dpu_find_fmt_info(log->data.plane_info.format);
-			scnprintf(buf + len, sizeof(buf) - len, "\tWIN%u: 0x%llx, %ux%u, CH%u, %s",
-				  log->data.plane_info.zpos, log->data.plane_info.dma_addr,
-				  log->data.plane_info.width, log->data.plane_info.height,
-				  log->data.plane_info.index, dpu_get_fmt_name(fmt));
+			scnprintf(buf + len, sizeof(buf) - len, "\tCH%u: 0x%llx, %ux%u, ZPOS%u, %s",
+				PLANE2DPPCH(log->data.plane_info.index),
+				log->data.plane_info.dma_addr,
+				log->data.plane_info.width, log->data.plane_info.height,
+				log->data.plane_info.zpos, dpu_get_fmt_name(fmt));
 			break;
 		case DPU_EVT_PLANE_UPDATE:
 		case DPU_EVT_PLANE_DISABLE:

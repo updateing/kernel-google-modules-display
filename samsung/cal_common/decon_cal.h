@@ -440,18 +440,18 @@ void decon_reg_update_req_global(u32 id);
 void decon_reg_set_pll_sleep(u32 id, u32 en);
 void decon_reg_set_pll_wakeup(u32 id, u32 en);
 
-u32 decon_reg_get_rsc_ch(u32 id);
-u32 decon_reg_get_rsc_win(u32 id);
+u64 decon_reg_get_rsc_ch(u32 id);
+u64 decon_reg_get_rsc_win(u32 id);
 
-static inline u32 DPU_DMA2CH(u32 dma) { return dma; }
-static inline u32 DPU_CH2DMA(u32 ch) { return ch; }
+static inline u32 PLANE2DPPCH(u32 plane_index) { return plane_index; }
+static inline u32 DPPCH2PLANE(u32 ch) { return ch; }
 #ifdef __linux__
 struct decon_device;
 int __decon_init_resources(struct decon_device *decon);
 void __decon_unmap_regs(struct decon_device *decon);
 #endif
-bool is_decon_using_ch(u32 id, u32 rsc_ch, u32 ch);
-bool is_decon_using_win(u32 id, u32 rsc_win, u32 win);
+bool is_decon_using_ch(u32 id, u64 rsc_ch, u32 ch);
+bool is_decon_using_win(u32 id, u64 rsc_win, u32 win);
 
 static inline void decon_reg_set_rcd_enable(u32 dqe_id, bool en)
 {

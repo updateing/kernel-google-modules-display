@@ -498,6 +498,14 @@ static bool is_win_half_covered(const struct dpu_bts_win_config *config0,
 	return false;
 }
 
+static u32 dpu_bts_get_rt_bw(struct decon_device *decon,
+				const struct dpu_bts_win_config *win_config)
+{
+	const u32 plane_id = DPPCH2PLANE(win_config->dpp_id);
+
+	return decon->bts.rt_bw[plane_id].val;
+}
+
 static void dpu_bts_update_overlap_bw(struct decon_device *decon,
 				       const struct dpu_bts_win_config *win_config,
 				       const struct dpu_bts_win_config *rcd_config)
@@ -518,33 +526,24 @@ static void dpu_bts_update_overlap_bw(struct decon_device *decon,
 			if (win_config[j].state != DPU_WIN_STATE_BUFFER)
 				continue;
 
-			if (is_win_half_covered(&win_config[i], &win_config[j])) {
-				int dpp_ch = win_config[j].dpp_ch;
-
-				overlap_bw += decon->bts.rt_bw[dpp_ch].val;
-			}
+			if (is_win_half_covered(&win_config[i], &win_config[j]))
+				overlap_bw += dpu_bts_get_rt_bw(decon, &win_config[j]);
 		}
 
 		if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
-			int dpp_ch = win_config[i].dpp_ch;
-			int rcd_dpp_ch = rcd_config->dpp_ch;
-
 			if (is_win_half_covered(&win_config[i], rcd_config))
-				overlap_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
+				overlap_bw += dpu_bts_get_rt_bw(decon, rcd_config);
 
 			if (is_win_half_covered(rcd_config, &win_config[i]))
-				rcd_max_overlap_bw += decon->bts.rt_bw[dpp_ch].val;
+				rcd_max_overlap_bw += dpu_bts_get_rt_bw(decon, &win_config[i]);
 		}
 
 		DPU_DEBUG_BTS("  Overlap BW%d = %u\n", i, overlap_bw);
 		win_max_overlap_bw = max(win_max_overlap_bw, overlap_bw);
 	}
 
-	if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
-		int rcd_dpp_ch = rcd_config->dpp_ch;
-
-		rcd_max_overlap_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
-	}
+	if (rcd_config->state == DPU_WIN_STATE_BUFFER)
+		rcd_max_overlap_bw += dpu_bts_get_rt_bw(decon, rcd_config);
 
 	decon->bts.rt_avg_bw = max(win_max_overlap_bw, rcd_max_overlap_bw);
 }
@@ -561,8 +560,8 @@ static void dpu_bts_update_disp_ch_bw(struct decon_device *decon,
 	/* TODO: take write rt bandwidth into account */
 	memset(disp_ch_bw, 0, sizeof(disp_ch_bw));
 	for (i = 0; i < decon->win_cnt; i++) {
-		int dpp_ch = win_config[i].dpp_ch;
-		u32 ch_num = decon->bts.rt_bw[dpp_ch].ch_num;
+		u32 dpp_id = win_config[i].dpp_id;
+		u32 ch_num = decon->bts.rt_bw[DPPCH2PLANE(dpp_id)].ch_num;
 		u32 overlap_ch_bw;
 
 		if (win_config[i].state != DPU_WIN_STATE_BUFFER)
@@ -575,38 +574,39 @@ static void dpu_bts_update_disp_ch_bw(struct decon_device *decon,
 
 		overlap_ch_bw = 0;
 		for (j = 0; j < decon->win_cnt; j++) {
-			int dpp_ch = win_config[j].dpp_ch;
+			int dpp_id = win_config[j].dpp_id;
 
 			if (win_config[j].state != DPU_WIN_STATE_BUFFER)
 				continue;
 
-			if (ch_num == decon->bts.rt_bw[dpp_ch].ch_num &&
+			if (ch_num == decon->bts.rt_bw[DPPCH2PLANE(dpp_id)].ch_num &&
 				(is_win_half_covered(&win_config[i], &win_config[j])))
-				overlap_ch_bw += decon->bts.rt_bw[dpp_ch].val;
+				overlap_ch_bw += dpu_bts_get_rt_bw(decon, &win_config[j]);
 		}
 
 		if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
-			int rcd_dpp_ch = rcd_config->dpp_ch;
+			u32 rcd_dpp_id = rcd_config->dpp_id;
 
-			if (ch_num == decon->bts.rt_bw[rcd_dpp_ch].ch_num) {
+			if (ch_num == decon->bts.rt_bw[DPPCH2PLANE(rcd_dpp_id)].ch_num) {
 				if (is_win_half_covered(&win_config[i], rcd_config))
-					overlap_ch_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
+					overlap_ch_bw += dpu_bts_get_rt_bw(decon, rcd_config);
 
 				if (is_win_half_covered(rcd_config, &win_config[i]))
-					rcd_overlap_ch_bw += decon->bts.rt_bw[dpp_ch].val;
+					rcd_overlap_ch_bw +=
+						dpu_bts_get_rt_bw(decon, &win_config[i]);
 			}
 		}
 		disp_ch_bw[ch_num] = max(disp_ch_bw[ch_num], overlap_ch_bw);
 	}
 
 	if (rcd_config->state == DPU_WIN_STATE_BUFFER) {
-		int rcd_dpp_ch = rcd_config->dpp_ch;
-		u32 rcd_ch_num = decon->bts.rt_bw[rcd_dpp_ch].ch_num;
+		u32 rcd_dpp_id = rcd_config->dpp_id;
+		u32 rcd_ch_num = decon->bts.rt_bw[DPPCH2PLANE(rcd_dpp_id)].ch_num;
 
 		if (rcd_ch_num >= MAX_AXI_PORT) {
 			pr_err("invalid RCD AXI channel number %u\n", rcd_ch_num);
 		} else {
-			rcd_overlap_ch_bw += decon->bts.rt_bw[rcd_dpp_ch].val;
+			rcd_overlap_ch_bw += dpu_bts_get_rt_bw(decon, rcd_config);
 			disp_ch_bw[rcd_ch_num] = max(disp_ch_bw[rcd_ch_num], rcd_overlap_ch_bw);
 		}
 	}
@@ -671,7 +671,7 @@ static void dpu_bts_find_max_disp_freq(struct decon_device *decon)
 }
 
 static void
-dpu_bts_calc_dpp_bw(struct bts_dpp_info *dpp, u32 fps, u32 lcd_h, u32 vblank_us, int idx,
+dpu_bts_calc_dpp_bw(struct bts_dpp_info *dpp, u32 fps, u32 lcd_h, u32 vblank_us, u32 dpp_id,
 		const struct dpu_bts *bts)
 {
 	u32 avg_bw, rt_bw, rot_bw = 0;
@@ -693,7 +693,7 @@ dpu_bts_calc_dpp_bw(struct bts_dpp_info *dpp, u32 fps, u32 lcd_h, u32 vblank_us,
 				USEC_PER_SEC, vblank_us) / 1000;
 	}
 
-	DPU_DEBUG_BTS("  DPP%d bandwidth: avg %u, rt %u, rot %u\n", idx, avg_bw, rt_bw, rot_bw);
+	DPU_DEBUG_BTS("  DPP%d bandwidth: avg %u, rt %u, rot %u\n", dpp_id, avg_bw, rt_bw, rot_bw);
 
 	rt_bw = max(rt_bw, rot_bw);
 	if (dpp->is_afbc) {
@@ -734,7 +734,7 @@ static void dpu_bts_convert_config_to_info(struct bts_dpp_info *dpp,
 	dpp->is_yuv = IS_YUV(fmt_info);
 
 	DPU_DEBUG_BTS("  DPP%d : bpp(%u) src w(%u) h(%u) rot(%d) afbc(%d) yuv(%d)\n",
-			DPU_DMA2CH(config->dpp_ch), dpp->bpp, dpp->src_w,
+			config->dpp_id, dpp->bpp, dpp->src_w,
 			dpp->src_h, dpp->rotation, dpp->is_afbc, dpp->is_yuv);
 	DPU_DEBUG_BTS("        dst x(%u) right(%u) y(%u) bottom(%u)\n",
 			dpp->dst.x1, dpp->dst.x2, dpp->dst.y1, dpp->dst.y2);
@@ -775,20 +775,21 @@ static void dpu_bts_calc_bw(struct decon_device *decon)
 		if (config[i].state != DPU_WIN_STATE_BUFFER)
 			continue;
 
-		idx = config[i].dpp_ch;
+		idx = DPPCH2PLANE(config[i].dpp_id);
 		dpu_bts_convert_config_to_info(&bts_info.rdma[idx], &config[i]);
 		dpu_bts_calc_dpp_bw(&bts_info.rdma[idx], decon->bts.fps,
-				decon->config.image_height, vblank_us, idx, &decon->bts);
+				decon->config.image_height, vblank_us,
+				config[i].dpp_id, &decon->bts);
 		read_bw += bts_info.rdma[idx].bw;
 	}
 
 	/* write bw calculation */
 	config = &decon->bts.wb_config;
 	if (config->state == DPU_WIN_STATE_BUFFER) {
-		wb_idx = config->dpp_ch;
+		wb_idx = DPPCH2PLANE(config->dpp_id);
 		dpu_bts_convert_config_to_info(&bts_info.odma, config);
 		dpu_bts_calc_dpp_bw(&bts_info.odma, decon->bts.fps, bts_info.lcd_h,
-				vblank_us, wb_idx, &decon->bts);
+				vblank_us, config->dpp_id, &decon->bts);
 		write_bw = bts_info.odma.bw;
 	} else {
 		wb_idx = -1;
@@ -798,10 +799,10 @@ static void dpu_bts_calc_bw(struct decon_device *decon)
 	/* rcd bw calculation */
 	config = &decon->bts.rcd_win_config.win;
 	if (config->state == DPU_WIN_STATE_BUFFER) {
-		rcd_idx = config->dpp_ch;
+		rcd_idx = DPPCH2PLANE(config->dpp_id);
 		dpu_bts_convert_config_to_info(&bts_info.rcddma, config);
 		dpu_bts_calc_dpp_bw(&bts_info.rcddma, decon->bts.fps, bts_info.lcd_h,
-				vblank_us, rcd_idx, &decon->bts);
+				vblank_us, config->dpp_id, &decon->bts);
 		read_bw += bts_info.rcddma.bw;
 	} else {
 		rcd_idx = -1;
@@ -974,9 +975,9 @@ static void dpu_bts_init(struct decon_device *decon)
 					PM_QOS_DISPLAY_THROUGHPUT, 0);
 
 	for (i = 0; i < decon->dpp_cnt; ++i) { /* dma type order */
-		decon->bts.rt_bw[i].ch_num = decon->dpp[DPU_DMA2CH(i)]->port;
+		decon->bts.rt_bw[i].ch_num = decon->dpp[i]->port;
 		DPU_INFO_BTS("IDMA_TYPE(%d) CH(%d) Port(%u)\n", i,
-				DPU_DMA2CH(i), decon->bts.rt_bw[i].ch_num);
+				PLANE2DPPCH(i), decon->bts.rt_bw[i].ch_num);
 	}
 
 	drm_for_each_encoder(encoder, decon->drm_dev) {
@@ -984,7 +985,7 @@ static void dpu_bts_init(struct decon_device *decon)
 
 		if (encoder->encoder_type == DRM_MODE_ENCODER_VIRTUAL) {
 			wb = enc_to_wb_dev(encoder);
-			decon->bts.rt_bw[wb->id].ch_num = wb->port;
+			decon->bts.rt_bw[DPPCH2PLANE(wb->id)].ch_num = wb->port;
 			break;
 		}
 	}
