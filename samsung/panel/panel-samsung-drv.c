@@ -602,6 +602,8 @@ static void exynos_panel_handoff(struct exynos_panel *ctx)
 		dev_info(ctx->dev, "panel enabled at boot\n");
 		ctx->panel_state = PANEL_STATE_HANDOFF;
 		exynos_panel_set_power(ctx, true);
+		/* We don't do panel reset while booting, so call post power here */
+		exynos_panel_post_power_on(ctx);
 	} else {
 		ctx->panel_state = PANEL_STATE_UNINITIALIZED;
 		gpiod_direction_output(ctx->reset_gpio, 0);
