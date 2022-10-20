@@ -324,7 +324,7 @@ static void decon_update_dsi_config(struct decon_config *config,
 	}
 }
 
-static int decon_get_main_dsim_id()
+static int decon_get_main_dsim_id(void)
 {
 	const struct dsim_device *dsim = exynos_get_dual_dsi(DSIM_DUAL_DSI_MAIN);
 
