@@ -161,13 +161,13 @@ static struct cal_regs_offset regs_dqe_offset[DQE_VERSION_MAX] = {
 
 #if defined(CONFIG_SOC_ZUMA)
 #define exynos_smc_read(dqe_id, offset)	\
-	((u32)exynos_smc(0x82000504, 0x194D0000 + offset, 0, 0))
+	((u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, 0x194D0000 + offset, 0, 0))
 #define exynos_smc_write(dqe_id, offset, val)	\
-	((u32)exynos_smc(0x82000504, 0x194D0000 + offset, 1, val))
+	((u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, 0x194D0000 + offset, 1, val))
 #define exynos_smc_read_mask(dqe_id, offset, mask)	\
 	((u32)(exynos_smc_read(dqe_id, offset)) & mask)
 #define exynos_smc_write_mask(dqe_id, offset, val, mask)	\
-	((u32)exynos_smc(0x82000504, 0x194D0000 + offset, 1, (val | mask)))
+	((u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, 0x194D0000 + offset, 1, (val | mask)))
 
 #define hist_offset(ver)	(regs_dqe_offset[ver].hist_offset)
 #define hist_read(dqe_id, offset)	\
