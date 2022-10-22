@@ -132,8 +132,8 @@ static const struct exynos_display_underrun_param underrun_param = {
 
 static const struct exynos_panel_mode sofef01_modes[] = {
 	{
-		/* 1080x2340 @ 60Hz */
 		.mode = {
+			.name = "1080x2340x60",
 			.clock = 162633,
 			.hdisplay = 1080,
 			.hsync_start = 1080 + 32,

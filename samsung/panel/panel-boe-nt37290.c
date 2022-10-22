@@ -871,7 +871,9 @@ static void nt37290_set_lp_mode(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD(ctx, 0x5A, 0x00);
 	EXYNOS_DCS_BUF_ADD_SET(ctx, cmd2_page0);
 	EXYNOS_DCS_BUF_ADD(ctx, 0x6F, 0x1C);
-	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0xBA, 0x95, 0x02, 0x02, 0x00, 0x11, 0x02, 0x02, 0x00);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xBA, 0x95, 0x02, 0x02, 0x00, 0x11, 0x02, 0x02, 0x00);
+	/* make sure TE timing is no shift in AOD */
+	EXYNOS_DCS_BUF_ADD_AND_FLUSH(ctx, 0x44, 0x00, 0x00);
 
 	dev_dbg(ctx->dev, "%s: done\n", __func__);
 }
@@ -1324,29 +1326,6 @@ static void nt37290_set_hbm_mode(struct exynos_panel *ctx,
 static void nt37290_set_local_hbm_mode(struct exynos_panel *ctx,
 				       bool local_hbm_en)
 {
-	const struct exynos_panel_mode *pmode;
-
-	if (ctx->hbm.local_hbm.enabled == local_hbm_en)
-		return;
-
-	pmode = ctx->current_mode;
-	if (unlikely(pmode == NULL)) {
-		dev_err(ctx->dev, "%s: unknown current mode\n", __func__);
-		return;
-	}
-
-	if (local_hbm_en) {
-		const int vrefresh = drm_mode_vrefresh(&pmode->mode);
-		/* Add check to turn on LHBM @ 120hz only to comply with HW requirement */
-		if (vrefresh != 120) {
-			dev_err(ctx->dev, "unexpected mode `%s` while enabling LHBM, give up\n",
-				pmode->mode.name);
-			return;
-		}
-	}
-
-	ctx->hbm.local_hbm.enabled = local_hbm_en;
-
 	if (local_hbm_en) {
 		if (ctx->panel_rev >= PANEL_REV_EVT1) {
 			struct nt37290_panel *spanel = to_spanel(ctx);
@@ -1384,9 +1363,6 @@ static void nt37290_set_local_hbm_mode(struct exynos_panel *ctx,
 static void nt37290_mode_set(struct exynos_panel *ctx,
 			     const struct exynos_panel_mode *pmode)
 {
-	if (!is_panel_active(ctx))
-		return;
-
 	nt37290_change_frequency(ctx, pmode);
 }
 
@@ -1551,7 +1527,6 @@ static const struct drm_dsc_config nt37290_dsc_cfg = {
 
 static const struct exynos_panel_mode nt37290_modes[] = {
 	{
-		/* 1440x3120 @ 60Hz */
 		.mode = {
 			.name = "1440x3120x60",
 			.clock = 298620,
@@ -1581,7 +1556,6 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
-		/* 1440x3120 @ 120Hz */
 		.mode = {
 			.name = "1440x3120x120",
 			.clock = 597240,
@@ -1611,7 +1585,6 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
 	{
-		/* 1080x2340 @ 60Hz */
 		.mode = {
 			.name = "1080x2340x60",
 			.clock = 173484,
@@ -1641,7 +1614,6 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 		.idle_mode = IDLE_MODE_ON_SELF_REFRESH,
 	},
 	{
-		/* 1080x2340 @ 120Hz */
 		.mode = {
 			.name = "1080x2340x120",
 			.clock = 346968,
@@ -1675,7 +1647,6 @@ static const struct exynos_panel_mode nt37290_modes[] = {
 static const struct exynos_panel_mode nt37290_lp_modes[] = {
 	{
 		.mode = {
-			/* 1440x3120 @ 30Hz */
 			.name = "1440x3120x30",
 			.clock = 149310,
 			.hdisplay = 1440,
@@ -1701,7 +1672,6 @@ static const struct exynos_panel_mode nt37290_lp_modes[] = {
 	},
 	{
 		.mode = {
-			/* 1080x2340 @ 30Hz */
 			.name = "1080x2340x30",
 			.clock = 86742,
 			.hdisplay = 1080,

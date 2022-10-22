@@ -545,34 +545,36 @@
 
 /*----------------------[HIST]-----------------------------------------------*/
 
-#define DQE_HIST			(0x3000)
+#define DQE_HIST(_i)			((0x3000) + ((_i) * 0x600))
+#define HIST_POS_SEL_MASK		(0x1 << 3)
+#define HIST_POS_SEL(_v)		((_v) << 3)
 #define HIST_LUMA_SEL			(0x1 << 2)
 #define HIST_ROI_ON			(0x1 << 1)
 #define HIST_EN				(0x1 << 0)
 
-#define DQE_HIST_SIZE			(0x3004)
+#define DQE_HIST_SIZE(_i)			(0x3004 + ((_i) * 0x600))
 #define HIST_VSIZE(_v)			((_v) << 16)
 #define HIST_VSIZE_MASK			(0x3FFF << 16)
 #define HIST_HSIZE(_v)			((_v) << 0)
 #define HIST_HSIZE_MASK			(0x3FFF << 0)
 
-#define DQE_HIST_START			(0x3008)
+#define DQE_HIST_START(_i)			(0x3008 + ((_i) * 0x600))
 #define HIST_START_Y(_v)		((_v) << 16)
 #define HIST_START_Y_MASK		(0x3FFF << 16)
 #define HIST_START_X(_v)		((_v) << 0)
 #define HIST_START_X_MASK		(0x3FFF << 0)
 
-#define DQE_HIST_WEIGHT_0		(0x300C)
+#define DQE_HIST_WEIGHT_0(_i)		(0x300C + ((_i) * 0x600))
 #define HIST_WEIGHT_G(_v)		((_v) << 16)
 #define HIST_WEIGHT_G_MASK		(0x7FF << 16)
 #define HIST_WEIGHT_R(_v)		((_v) << 0)
 #define HIST_WEIGHT_R_MASK		(0x7FF << 0)
 
-#define DQE_HIST_WEIGHT_1		(0x3010)
+#define DQE_HIST_WEIGHT_1(_i)		(0x3010 + ((_i) * 0x600))
 #define HIST_WEIGHT_B(_v)		((_v) << 0)
 #define HIST_WEIGHT_B_MASK		(0x7FF << 0)
 
-#define DQE_HIST_THRESH		(0x3014)
+#define DQE_HIST_THRESH(_i)		(0x3014 + ((_i) * 0x600))
 #define HIST_THRESHOLD(_v)		((_v) << 0)
 #define HIST_THRESHOLD_MASK		(0x3FF << 0)
 
@@ -580,8 +582,8 @@
  * HIST_BIN (0~127) : 0x3400 ~ 0x35FC
  * _n: [0, 127] / _x: [0, 255]
  */
-#define DQE_HIST_BIN(_n)		(0x3400 + ((_n) * 0x4))
-
+#define DQE_HIST_BASE(_i)		(0x3400 + ((_i) * 0x600))
+#define DQE_HIST_BIN(_i, _n)		(DQE_HIST_BASE(_i) + ((_n) * 0x4))
 #define HIST_BIN_H(_v)			((_v) << 16)
 #define HIST_BIN_H_MASK			(0xFFFF << 16)
 #define HIST_BIN_L(_v)			((_v) << 0)

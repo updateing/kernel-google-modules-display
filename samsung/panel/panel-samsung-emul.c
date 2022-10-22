@@ -72,8 +72,8 @@ static int emul_enable(struct drm_panel *panel)
 static const struct exynos_panel_mode emul_modes[] = {
 #ifdef CONFIG_BOARD_EMULATOR
 	{
-		/* 720x1280 @ 60 */
 		.mode = {
+			.name = "720x1280x60",
 			.clock = 71604,
 			.hdisplay = 720,
 			.hsync_start = 720 + 4,
@@ -98,8 +98,8 @@ static const struct exynos_panel_mode emul_modes[] = {
 	},
 #endif
 	{
-		/* 1440x2960 @ 60 */
 		.mode = {
+			.name = "1440x2960x60",
 			.clock = 269280,
 			.hdisplay = 1440,
 			.hsync_start = 1440 + 32,
@@ -125,8 +125,8 @@ static const struct exynos_panel_mode emul_modes[] = {
 		},
 	},
 	{
-		/* 1440x2960 @ 120 */
 		.mode = {
+			.name = "1440x2960x120",
 			.clock = 538560,
 			.hdisplay = 1440,
 			.hsync_start = 1440 + 32,

@@ -1704,14 +1704,14 @@ void decon_reg_set_pll_wakeup(u32 id, u32 en)
 #endif
 
 /******************** EXPORTED DECON CAL APIs ********************/
-u32 decon_reg_get_rsc_ch(u32 id)
+u64 decon_reg_get_rsc_ch(u32 id)
 {
-	return decon_read(id, RESOURCE_OCCUPANCY_INFO_1);
+	return (u64)decon_read(id, RESOURCE_OCCUPANCY_INFO_1);
 }
 
-u32 decon_reg_get_rsc_win(u32 id)
+u64 decon_reg_get_rsc_win(u32 id)
 {
-	return decon_read(id, RESOURCE_OCCUPANCY_INFO_2);
+	return (u64)decon_read(id, RESOURCE_OCCUPANCY_INFO_2);
 }
 
 /* TODO: maybe this function will be moved to internal DECON CAL function */
@@ -2207,12 +2207,12 @@ u32 DPU_CH2DMA(u32 ch)
 }
 
 #define OCCUPIED_BY_DECON(id)	(id)
-bool is_decon_using_ch(u32 id, u32 rsc_ch, u32 ch)
+bool is_decon_using_ch(u32 id, u64 rsc_ch, u32 ch)
 {
 	return ((rsc_ch >> (ch * 4 + 4)) & 0xF) == OCCUPIED_BY_DECON(id);
 }
 
-bool is_decon_using_win(u32 id, u32 rsc_win, u32 win)
+bool is_decon_using_win(u32 id, u64 rsc_win, u32 win)
 {
 	return ((rsc_win >> (win * 4 + 4)) & 0xF) == OCCUPIED_BY_DECON(id);
 }

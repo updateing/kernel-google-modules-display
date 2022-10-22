@@ -505,6 +505,17 @@ struct exynos_panel_desc {
 	bool dbv_extra_frame;
 	bool is_partial;
 	bool is_panel_idle_supported;
+	/**
+	 * set true if the panel doesn't have lhbm common hw constraints, include
+	 * 1. only allow turn on lhbm at peak refresh rate
+	 *    - `freq set` may set to peak when enabling lhbm cause underrun at
+	 *      non-peak refresh rate.
+	 *    - abnormal display (like green tint) when enabling lhbm at non-peak
+	 *      refresh rate.
+	 * 2. not allow switch refresh rate when lhbm is on
+	 *    - if `freq set` is changed when lhbm is on, lhbm may not work normally.
+	 */
+	bool no_lhbm_rr_constraints;
 	const unsigned int delay_dsc_reg_init_us;
 	const struct brightness_capability *brt_capability;
 	const u32 *bl_range;
@@ -522,6 +533,8 @@ struct exynos_panel_desc {
 	const struct exynos_panel_funcs *exynos_panel_func;
 	const u32 reset_timing_ms[PANEL_RESET_TIMING_COUNT];
 	const struct panel_reg_ctrl reg_ctrl_enable[PANEL_REG_COUNT];
+	const struct panel_reg_ctrl reg_ctrl_post_enable[PANEL_REG_COUNT];
+	const struct panel_reg_ctrl reg_ctrl_pre_disable[PANEL_REG_COUNT];
 	const struct panel_reg_ctrl reg_ctrl_disable[PANEL_REG_COUNT];
 };
 
@@ -597,6 +610,10 @@ struct exynos_panel {
 	 * refresh rate while idle.
 	 */
 	int min_vrefresh;
+	/**
+	 * indicates the supported max refresh rate in the panel.
+	 */
+	int peak_vrefresh;
 	/**
 	 * When the value is set to non-zero value, the panel
 	 * driver kernel idle timer will be disabled internally

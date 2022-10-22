@@ -162,6 +162,7 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	struct drm_plane *plane;
 	const struct drm_plane_state *plane_state;
 	const struct decon_device *decon = exynos_crtc->ctx;
+	const struct decon_config *cfg = &decon->config;
 	const struct exynos_dqe *dqe = decon->dqe;
 	uint32_t max_bpc;
 
@@ -223,7 +224,8 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 		!new_exynos_state->planes_updated) {
 		new_exynos_state->skip_update = true;
 	} else if (drm_atomic_crtc_effectively_active(old_crtc_state) &&
-		(crtc_state->plane_mask & (~exynos_crtc->rcd_plane_mask)) == 0) {
+		(crtc_state->plane_mask & (~exynos_crtc->rcd_plane_mask)) == 0 &&
+		cfg->mode.op_mode != DECON_VIDEO_MODE) {
 		/* skip plane-less updates unless it's first commit after enabling */
 		new_exynos_state->skip_update = true;
 		DRM_WARN("%s: skip plane-less update, mask=0x%08X\n",
@@ -559,6 +561,10 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 			exynos_crtc_state->dqe.histogram_pos = val;
 			replaced = true;
 		}
+	} else if (property == exynos_crtc->props.histogram_id) {
+		if (val != exynos_crtc_state->dqe.histogram_id) {
+			exynos_crtc_state->dqe.histogram_id = val;
+		}
 	} else if (property == exynos_crtc->props.partial) {
 		ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
 				&exynos_crtc_state->partial, val,
@@ -627,6 +633,8 @@ static int exynos_drm_crtc_get_property(struct drm_crtc *crtc,
 			exynos_crtc_state->histogram_weights->base.id : 0;
 	else if (property == exynos_crtc->props.histogram_pos)
 		*val = exynos_crtc_state->dqe.histogram_pos;
+	else if (property == exynos_crtc->props.histogram_id)
+		*val = exynos_crtc_state->dqe.histogram_id;
 	else if (property == exynos_crtc->props.partial)
 		*val = (exynos_crtc_state->partial) ?
 			exynos_crtc_state->partial->base.id : 0;
@@ -845,6 +853,30 @@ static int exynos_drm_crtc_histogram_pos_property(struct exynos_drm_crtc *exynos
 	return 0;
 }
 
+static int exynos_drm_crtc_histogram_id_property(struct exynos_drm_crtc *exynos_crtc)
+{
+	struct drm_crtc *crtc = &exynos_crtc->base;
+	struct drm_property *prop;
+	static const struct drm_prop_enum_list histogram_id_list[] = {
+		{ HISTOGRAM_0, "HISTOGRAM 0" },
+#ifdef CONFIG_SOC_ZUMA
+		{ HISTOGRAM_1, "HISTOGRAM 1" },
+		{ HISTOGRAM_2, "HISTOGRAM 2" },
+		{ HISTOGRAM_3, "HISTOGRAM 3" },
+#endif
+	};
+	u32 flags = 0;
+
+	prop = drm_property_create_enum(crtc->dev, flags, "histogram_id",
+				histogram_id_list, ARRAY_SIZE(histogram_id_list));
+	if (!prop)
+		return -ENOMEM;
+
+	drm_object_attach_property(&crtc->base, prop, HISTOGRAM_0);
+	exynos_crtc->props.histogram_id = prop;
+
+	return 0;
+}
 
 static int exynos_drm_crtc_create_histogram_properties(
 			struct exynos_drm_crtc *exynos_crtc)
@@ -869,6 +901,10 @@ static int exynos_drm_crtc_create_histogram_properties(
 		return ret;
 
 	ret = exynos_drm_crtc_histogram_pos_property(exynos_crtc);
+	if (ret)
+		return ret;
+
+	ret = exynos_drm_crtc_histogram_id_property(exynos_crtc);
 	if (ret)
 		return ret;
 

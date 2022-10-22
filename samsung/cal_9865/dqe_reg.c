@@ -245,7 +245,7 @@ void dqe_reg_set_regamma_lut(u32 dqe_id, u32 regamma_id, const struct drm_color_
 }
 
 static void dqe_reg_print_lut(u32 dqe_id, u32 start, u32 count, const u32 offset,
-						struct drm_printer *pr)
+			      struct drm_printer *pr)
 {
 	u32 val;
 	int i;
@@ -259,8 +259,7 @@ static void dqe_reg_print_lut(u32 dqe_id, u32 start, u32 count, const u32 offset
 		p += scnprintf(p, end - p, "[%4d]%4x ", i * 2, GET_LUT_L(val));
 
 		if ((i * 2 + 1) != count)
-			p += scnprintf(p, end - p, "[%4d]%4x ", i * 2 + 1,
-					GET_LUT_H(val));
+			p += scnprintf(p, end - p, "[%4d]%4x ", i * 2 + 1, GET_LUT_H(val));
 
 		if ((i % 5) == 4) {
 			cal_drm_printf(pr, 0, "%s\n", buf);
@@ -272,35 +271,75 @@ static void dqe_reg_print_lut(u32 dqe_id, u32 start, u32 count, const u32 offset
 		cal_drm_printf(pr, 0, "%s\n", buf);
 }
 
-void dqe_reg_print_hist(u32 dqe_id, struct drm_printer *p)
+static void dqe_reg_print_hist_lut(u32 dqe_id, u32 start, u32 count, const u32 offset,
+				   struct drm_printer *pr)
 {
 	u32 val;
-	const u32 offset = hist_offset(regs_dqe[dqe_id].version);
+	int i;
+	char buf[128];
+	char *p = buf;
+	const char *end = buf + (sizeof(buf) - 1);
 
-	val = hist_read(dqe_id, DQE_HIST);
-	cal_drm_printf(p, 0, "DQE: histogram EN(%d) ROI_ON(%d) LUMA_SEL(%d)\n",
-			cal_mask(val, HIST_EN), cal_mask(val, HIST_ROI_ON),
-			cal_mask(val, HIST_LUMA_SEL));
+	for (i = 0; i < DIV_ROUND_UP(count, 2); ++i) {
+		val = hist_read(dqe_id, start + i * 4 + offset);
+		p += scnprintf(p, end - p, "[%4d]%4x ", i * 2, GET_LUT_L(val));
 
-	val = hist_read(dqe_id, DQE_HIST_SIZE);
-	cal_drm_printf(p, 0, "image size: %d x %d\n", cal_mask(val, HIST_HSIZE_MASK),
-			cal_mask(val, HIST_VSIZE_MASK));
+		if ((i * 2 + 1) != count)
+			p += scnprintf(p, end - p, "[%4d]%4x ", i * 2 + 1, GET_LUT_H(val));
 
-	val = hist_read(dqe_id, DQE_HIST_START);
-	cal_drm_printf(p, 0, "ROI position start x,y(%d,%d)\n",
-			cal_mask(val, HIST_START_X_MASK),
-			cal_mask(val, HIST_START_Y_MASK));
+		if ((i % 5) == 4) {
+			cal_drm_printf(pr, 0, "%s\n", buf);
+			p = buf;
+		}
+	}
 
-	val = hist_read(dqe_id, DQE_HIST_WEIGHT_0);
-	cal_drm_printf(p, 0, "weight red(%d) green(%d) blue(%d)\n",
-			cal_mask(val, HIST_WEIGHT_R_MASK),
-			cal_mask(val, HIST_WEIGHT_G_MASK),
-			hist_read_mask(dqe_id, DQE_HIST_WEIGHT_1, HIST_WEIGHT_B_MASK));
+	if (p != buf)
+		cal_drm_printf(pr, 0, "%s\n", buf);
+}
 
-	cal_drm_printf(p, 0, "threshold: %d\n",
-			hist_read_mask(dqe_id, DQE_HIST_THRESH, HIST_THRESHOLD_MASK));
+void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p)
+{
+	u32 val, val1, en;
 
-	dqe_reg_print_lut(dqe_id, DQE_HIST_BIN(0), HIST_BIN_SIZE, offset, p);
+	val = hist_read(dqe_id, DQE_HIST(hist_id));
+	en = cal_mask(val, HIST_EN);
+	cal_drm_printf(p, 0, "Histogram%u: %s\n", hist_id, en ? "enabled" : "disabled");
+	if (en) {
+		cal_drm_printf(p, 0, "DQE: histogram EN(%u) ROI_ON(%u) LUMA_SEL(%u)\n",
+				cal_mask(val, HIST_EN),
+				cal_mask(val, HIST_ROI_ON),
+				cal_mask(val, HIST_LUMA_SEL));
+
+		val = hist_read(dqe_id, DQE_HIST_SIZE(hist_id));
+		cal_drm_printf(p, 0, "image size: %u x %u\n",
+				cal_mask(val, HIST_HSIZE_MASK),
+				cal_mask(val, HIST_VSIZE_MASK));
+
+		val = hist_read(dqe_id, DQE_HIST_START(hist_id));
+		cal_drm_printf(p, 0, "ROI position start x,y(%u,%u)\n",
+				cal_mask(val, HIST_START_X_MASK),
+				cal_mask(val, HIST_START_Y_MASK));
+
+		val = hist_read(dqe_id, DQE_HIST_WEIGHT_0(hist_id));
+		val1 = hist_read(dqe_id, DQE_HIST_WEIGHT_1(hist_id));
+		cal_drm_printf(p, 0, "weight red(%u) green(%u) blue(%u)\n",
+				cal_mask(val, HIST_WEIGHT_R_MASK),
+				cal_mask(val, HIST_WEIGHT_G_MASK),
+				cal_mask(val1, HIST_WEIGHT_B_MASK));
+
+		val = hist_read(dqe_id, DQE_HIST_THRESH(hist_id));
+		cal_drm_printf(p, 0, "threshold: %u\n", cal_mask(val, HIST_THRESHOLD_MASK));
+
+		dqe_reg_print_hist_lut(dqe_id, DQE_HIST_BIN(hist_id, 0), HIST_BIN_SIZE, 0, p);
+	}
+}
+
+void dqe_reg_print_hist(u32 dqe_id, struct drm_printer *p)
+{
+	int i;
+
+	for (i = 0; i < HISTOGRAM_MAX; i++)
+		dqe_reg_print_hist_ch(dqe_id, i, p);
 }
 
 void dqe_reg_print_gamma_matrix(u32 dqe_id, struct drm_printer *p)
@@ -612,35 +651,48 @@ bool dqe_reg_dimming_in_progress(u32 dqe_id)
 			ATC_DIMMING_IN_PROGRESS);
 }
 
-void dqe_reg_set_histogram_roi(u32 dqe_id, struct histogram_roi *roi)
+void dqe_reg_set_histogram_roi(u32 dqe_id, enum exynos_histogram_id hist_id,
+			       struct histogram_roi *roi)
 {
 	u32 val;
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
 
 	val = HIST_START_X(roi->start_x) | HIST_START_Y(roi->start_y);
-	hist_write(dqe_id, DQE_HIST_START, val);
+	hist_write(dqe_id, DQE_HIST_START(hist_id), val);
 
 	val = HIST_HSIZE(roi->hsize) | HIST_VSIZE(roi->vsize);
-	hist_write(dqe_id, DQE_HIST_SIZE, val);
+	hist_write(dqe_id, DQE_HIST_SIZE(hist_id), val);
 }
 
-void dqe_reg_set_histogram_weights(u32 dqe_id, struct histogram_weights *weights)
+void dqe_reg_set_histogram_weights(u32 dqe_id, enum exynos_histogram_id hist_id,
+				   struct histogram_weights *weights)
 {
 	u32 val;
 
-	val = HIST_WEIGHT_R(weights->weight_r) |
-		HIST_WEIGHT_G(weights->weight_g);
-	hist_write(dqe_id, DQE_HIST_WEIGHT_0, val);
-	hist_write(dqe_id, DQE_HIST_WEIGHT_1, HIST_WEIGHT_B(weights->weight_b));
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
+
+	val = HIST_WEIGHT_R(weights->weight_r) | HIST_WEIGHT_G(weights->weight_g);
+	hist_write(dqe_id, DQE_HIST_WEIGHT_0(hist_id), val);
+	hist_write(dqe_id, DQE_HIST_WEIGHT_1(hist_id), HIST_WEIGHT_B(weights->weight_b));
 }
 
-void dqe_reg_set_histogram_threshold(u32 dqe_id, u32 threshold)
+void dqe_reg_set_histogram_threshold(u32 dqe_id, enum exynos_histogram_id hist_id, u32 threshold)
 {
-	hist_write(dqe_id, DQE_HIST_THRESH, threshold);
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
+
+	hist_write(dqe_id, DQE_HIST_THRESH(hist_id), threshold);
 }
 
-void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
+void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id, enum histogram_state state)
 {
 	u32 val = 0;
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
 
 	if (regs_dqe[dqe_id].desc.write_protected) {
 		cal_log_debug(0, "%s: ignored in protected status\n", __func__);
@@ -654,17 +706,21 @@ void dqe_reg_set_histogram(u32 dqe_id, enum histogram_state state)
 	else if (state == HISTOGRAM_ROI)
 		val = HIST_EN | HIST_ROI_ON;
 
-	hist_write_mask(dqe_id, DQE_HIST, val, HIST_EN | HIST_ROI_ON);
+	hist_write_mask(dqe_id, DQE_HIST(hist_id), val, HIST_EN | HIST_ROI_ON);
 }
 
-void dqe_reg_get_histogram_bins(u32 dqe_id, struct histogram_bins *bins)
+void dqe_reg_get_histogram_bins(u32 dqe_id, enum exynos_histogram_id hist_id,
+				struct histogram_bins *bins)
 {
 	int regs_cnt = DIV_ROUND_UP(HISTOGRAM_BIN_COUNT, 2);
 	int i;
 	u32 val;
 
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
+
 	for (i = 0; i < regs_cnt; ++i) {
-		val = hist_read_relaxed(dqe_id, DQE_HIST_BIN(i));
+		val = hist_read(dqe_id, DQE_HIST_BIN(hist_id, i));
 		bins->data[i * 2] = HIST_BIN_L_GET(val);
 		bins->data[i * 2 + 1] = HIST_BIN_H_GET(val);
 	}
@@ -732,4 +788,17 @@ void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id)
 {
 	dqe_cgc_write_mask(dqe_id, DQE_CGC_CON, CGC_COEF_DMA_REQ,
 			CGC_COEF_DMA_REQ_MASK);
+}
+
+void dqe_reg_set_histogram_pos_internal(u32 dqe_id, enum exynos_histogram_id hist_id,
+					enum exynos_prog_pos pos)
+{
+
+	if (hist_id >= HISTOGRAM_MAX) {
+		pr_warn("%s: invalid hist_id(%d)\n", __func__, hist_id);
+		return;
+	}
+
+	pr_debug("%s: pos(%d)\n", __func__, pos);
+	hist_write_mask(dqe_id, DQE_HIST(hist_id), HIST_POS_SEL(pos), HIST_POS_SEL_MASK);
 }

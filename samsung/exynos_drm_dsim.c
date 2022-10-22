@@ -1498,11 +1498,14 @@ err:
 #if IS_ENABLED(CONFIG_ARM_EXYNOS_DEVFREQ)
 static void dsim_underrun_info(struct dsim_device *dsim, u32 underrun_cnt)
 {
-	printk_ratelimited("underrun irq occurs(%u): MIF(%lu), INT(%lu), DISP(%lu)\n",
+	printk_ratelimited("underrun irq occurs(%u): MIF(%lu, %d), INT(%lu, %d), DISP(%lu, %d)\n",
 			underrun_cnt,
 			exynos_devfreq_get_domain_freq(DEVFREQ_MIF),
+			exynos_pm_qos_request(PM_QOS_BUS_THROUGHPUT),
 			exynos_devfreq_get_domain_freq(DEVFREQ_INT),
-			exynos_devfreq_get_domain_freq(DEVFREQ_DISP));
+			exynos_pm_qos_request(PM_QOS_DEVICE_THROUGHPUT),
+			exynos_devfreq_get_domain_freq(DEVFREQ_DISP),
+			exynos_pm_qos_request(PM_QOS_DISPLAY_THROUGHPUT));
 }
 #else
 static void dsim_underrun_info(struct dsim_device *dsim, u32 underrun_cnt)
@@ -2586,6 +2589,7 @@ static int dsim_remove(struct platform_device *pdev)
 static int dsim_runtime_suspend(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 
 	DPU_ATRACE_BEGIN(__func__);
 
@@ -2597,6 +2601,8 @@ static int dsim_runtime_suspend(struct device *dev)
 
 	dsim->suspend_state = dsim->state;
 	mutex_unlock(&dsim->state_lock);
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_RUNTIME_SUSPEND, decon->id, dsim);
 	DPU_ATRACE_END(__func__);
 
 	return 0;
@@ -2605,6 +2611,7 @@ static int dsim_runtime_suspend(struct device *dev)
 static int dsim_runtime_resume(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 	int ret = 0;
 
 	DPU_ATRACE_BEGIN(__func__);
@@ -2620,6 +2627,8 @@ static int dsim_runtime_resume(struct device *dev)
 	dsim->suspend_state = dsim->state;
 	mutex_unlock(&dsim->state_lock);
 
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_RUNTIME_RESUME, decon->id, dsim);
 	DPU_ATRACE_END(__func__);
 
 	return ret;
@@ -2628,6 +2637,7 @@ static int dsim_runtime_resume(struct device *dev)
 static int dsim_suspend(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 
 	mutex_lock(&dsim->state_lock);
 	dsim->suspend_state = dsim->state;
@@ -2641,12 +2651,16 @@ static int dsim_suspend(struct device *dev)
 
 	mutex_unlock(&dsim->state_lock);
 
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_SUSPEND, decon->id, dsim);
+
 	return 0;
 }
 
 static int dsim_resume(struct device *dev)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	const struct decon_device *decon = dsim_get_decon(dsim);
 
 	mutex_lock(&dsim->state_lock);
 	if (dsim->suspend_state == DSIM_STATE_HSCLKEN)
@@ -2655,6 +2669,9 @@ static int dsim_resume(struct device *dev)
 	dsim_debug(dsim, "-\n");
 
 	mutex_unlock(&dsim->state_lock);
+
+	if (decon)
+		DPU_EVENT_LOG(DPU_EVT_DSIM_RESUME, decon->id, dsim);
 
 	return 0;
 }

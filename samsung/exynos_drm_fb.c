@@ -227,7 +227,8 @@ void *exynos_drm_fb_to_vaddr(const struct drm_framebuffer *fb)
 }
 
 static void plane_state_to_win_config(struct dpu_bts_win_config *win_config,
-				      const struct drm_plane_state *plane_state)
+				      const struct drm_plane_state *plane_state,
+				      const u32 dpp_id)
 {
 	const struct drm_framebuffer *fb = plane_state->fb;
 	unsigned int simplified_rot;
@@ -255,7 +256,8 @@ static void plane_state_to_win_config(struct dpu_bts_win_config *win_config,
 		win_config->state = DPU_WIN_STATE_BUFFER;
 
 	win_config->format = fb->format->format;
-	win_config->dpp_ch = plane_state->plane->index;
+	win_config->dpp_id = dpp_id;
+	win_config->zpos = plane_state->normalized_zpos;
 
 	win_config->comp_src = 0;
 	if (has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), fb->modifier))
@@ -276,9 +278,9 @@ static void plane_state_to_win_config(struct dpu_bts_win_config *win_config,
 			win_config->src_w, win_config->src_h,
 			win_config->dst_x, win_config->dst_y,
 			win_config->dst_w, win_config->dst_h);
-	DRM_DEBUG("rot[%d] afbc[%d] format[%d] ch[%d] zpos[%d] comp_src[%llu]\n",
+	DRM_DEBUG("rot[%d] afbc[%d] format[%d] ch[%u] zpos[%u] comp_src[%llu]\n",
 			win_config->is_rot, win_config->is_comp,
-			win_config->format, win_config->dpp_ch,
+			win_config->format, win_config->dpp_id,
 			plane_state->normalized_zpos,
 			win_config->comp_src);
 	DRM_DEBUG("alpha[%d] blend mode[%d]\n",
@@ -304,19 +306,19 @@ static void conn_state_to_win_config(struct dpu_bts_win_config *win_config,
 	win_config->is_comp = false;
 	win_config->state = DPU_WIN_STATE_BUFFER;
 	win_config->format = fb->format->format;
-	win_config->dpp_ch = wb->id;
+	win_config->dpp_id = wb->id;
 	win_config->comp_src = 0;
 	win_config->is_rot = false;
 	win_config->is_secure = (fb->modifier & DRM_FORMAT_MOD_PROTECTION) != 0;
 
-	DRM_DEBUG("src[%d %d %d %d], dst[%d %d %d %d]\n",
+	DRM_DEBUG("src[%u %u %u %u], dst[%d %d %u %u]\n",
 			win_config->src_x, win_config->src_y,
 			win_config->src_w, win_config->src_h,
 			win_config->dst_x, win_config->dst_y,
 			win_config->dst_w, win_config->dst_h);
-	DRM_DEBUG("rot[%d] afbc[%d] format[%d] ch[%d] comp_src[%llu]\n",
+	DRM_DEBUG("rot[%d] afbc[%d] format[%u] ch[%u] comp_src[%llu]\n",
 			win_config->is_rot, win_config->is_comp,
-			win_config->format, win_config->dpp_ch,
+			win_config->format, win_config->dpp_id,
 			win_config->comp_src);
 }
 
@@ -345,7 +347,7 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 			if (new_plane_state->crtc) {
 				decon = crtc_to_decon(new_plane_state->crtc);
 				win_config = &decon->bts.rcd_win_config.win;
-				plane_state_to_win_config(win_config, new_plane_state);
+				plane_state_to_win_config(win_config, new_plane_state, dpp->id);
 
 				decon->bts.rcd_win_config.dma_addr =
 					exynos_drm_fb_dma_addr(new_plane_state->fb, 0);
@@ -358,7 +360,7 @@ static void exynos_atomic_bts_pre_update(struct drm_device *dev,
 			decon = crtc_to_decon(new_plane_state->crtc);
 			win_config = &decon->bts.win_config[zpos];
 
-			plane_state_to_win_config(win_config, new_plane_state);
+			plane_state_to_win_config(win_config, new_plane_state, dpp->id);
 
 			decon->dpp[i]->dbg_dma_addr =
 				exynos_drm_fb_dma_addr(new_plane_state->fb, 0);
@@ -476,7 +478,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 	struct drm_connector *connector;
 	struct drm_connector_state *old_conn_state;
 	struct drm_connector_state *new_conn_state;
-	unsigned int hibernation_crtc_mask = 0;
 	unsigned int disabling_crtc_mask = 0;
 
 	DPU_ATRACE_BEGIN("exynos_atomic_commit_tail");
@@ -505,12 +506,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 				old_crtc_state);
 		DPU_EVENT_LOG(DPU_EVT_REQ_CRTC_INFO_NEW, decon->id,
 				new_crtc_state);
-
-		if (new_crtc_state->active || old_crtc_state->active) {
-			hibernation_block(decon->hibernation);
-
-			hibernation_crtc_mask |= drm_crtc_mask(crtc);
-		}
 
 		if (drm_atomic_crtc_effectively_active(old_crtc_state) && !new_crtc_state->active) {
 			/* keep runtime vote while disabling is taking place */
@@ -619,8 +614,6 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 
 	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
 		decon = crtc_to_decon(crtc);
-		if (hibernation_crtc_mask & drm_crtc_mask(crtc))
-			hibernation_unblock_enter(decon->hibernation);
 		if (disabling_crtc_mask & drm_crtc_mask(crtc))
 			pm_runtime_put_sync(decon->dev);
 	}

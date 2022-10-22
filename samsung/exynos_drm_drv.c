@@ -420,6 +420,8 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 			pr_err("%s: timeout of waiting for fence, name:%s idx:%d\n",
 				__func__, plane->name ? : "NA", plane->index);
 			if (crtc) {
+				const struct decon_device *decon = crtc_to_decon(crtc);
+				const struct decon_config *cfg = &decon->config;
 				struct exynos_drm_crtc_state *new_exynos_crtc_state;
 				struct drm_crtc_state *new_crtc_state;
 
@@ -428,7 +430,8 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 					!new_crtc_state->enable || !new_crtc_state->active)
 					continue;
 				new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
-				if (!new_exynos_crtc_state->skip_update) {
+				if (!new_exynos_crtc_state->skip_update &&
+					   cfg->mode.op_mode != DECON_VIDEO_MODE) {
 					new_exynos_crtc_state->skip_update = true;
 					pr_warn("%s: skip frame update at %s\n",
 									__func__, crtc->name);
@@ -467,10 +470,25 @@ static int exynos_atomic_helper_wait_for_fences(struct drm_device *dev,
 
 static void commit_tail(struct drm_atomic_state *old_state)
 {
-	struct drm_device *dev = old_state->dev;
+	int i;
 	const struct drm_mode_config_helper_funcs *funcs;
+	struct decon_device *decon;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+	struct drm_device *dev = old_state->dev;
+	unsigned int hibernation_crtc_mask = 0;
 
 	funcs = dev->mode_config.helper_private;
+
+	for_each_oldnew_crtc_in_state(old_state, crtc, old_crtc_state,
+			new_crtc_state, i) {
+		decon = crtc_to_decon(crtc);
+		if (new_crtc_state->active || old_crtc_state->active) {
+			hibernation_block(decon->hibernation);
+
+			hibernation_crtc_mask |= drm_crtc_mask(crtc);
+		}
+	}
 
 	DPU_ATRACE_BEGIN("wait_for_fences");
 	exynos_atomic_helper_wait_for_fences(dev, old_state, false);
@@ -482,6 +500,12 @@ static void commit_tail(struct drm_atomic_state *old_state)
 		funcs->atomic_commit_tail(old_state);
 	else
 		drm_atomic_helper_commit_tail(old_state);
+
+	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
+		decon = crtc_to_decon(crtc);
+		if (hibernation_crtc_mask & drm_crtc_mask(crtc))
+			hibernation_unblock_enter(decon->hibernation);
+	}
 
 	drm_atomic_helper_commit_cleanup_done(old_state);
 

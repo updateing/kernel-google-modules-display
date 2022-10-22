@@ -34,7 +34,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/console.h>
 #include <linux/iommu.h>
-#include <trace/dpu_trace.h>
 #include <uapi/linux/sched/types.h>
 
 #include <soc/google/exynos-cpupm.h>
@@ -2114,8 +2113,9 @@ static int decon_suspend(struct device *dev)
 
 	decon_debug(decon, "%s\n", __func__);
 
-	if (decon->state == DECON_STATE_ON)
-		ret = exynos_hibernation_suspend(decon->hibernation);
+	ret = exynos_hibernation_suspend(decon->hibernation);
+
+	DPU_EVENT_LOG(DPU_EVT_DECON_SUSPEND, decon->id, NULL);
 
 	return ret;
 }
@@ -2125,6 +2125,8 @@ static int decon_resume(struct device *dev)
 	struct decon_device *decon = dev_get_drvdata(dev);
 
 	decon_debug(decon, "%s\n", __func__);
+
+	DPU_EVENT_LOG(DPU_EVT_DECON_RESUME, decon->id, NULL);
 
 	return 0;
 }

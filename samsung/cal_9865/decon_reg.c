@@ -560,6 +560,10 @@ static void decon_reg_config_win_channel(u32 id, u32 win_idx, int ch)
 {
 	u32 val, mask;
 
+	/* L7 layer is not present in Zuma*/
+	if (ch > 6)
+		ch = ch + 1;
+
 	val = WIN_CHMAP_F(ch);
 	mask = WIN_CHMAP_MASK;
 	wincon_write_mask(id, DECON_CON_WIN(win_idx), val, mask);
@@ -2334,14 +2338,20 @@ void __decon_dump(struct drm_printer *p, u32 id, struct decon_regs *regs, bool d
 		dqe_dump(p, id);
 }
 
-u32 decon_reg_get_rsc_ch(u32 id)
+u64 decon_reg_get_rsc_ch(u32 id)
 {
-	return decon_read(id, RSC_STATUS_0);
+	/* L7 does not exist in real HW. SW CHs is CH0 to CH13 map to L0-L6, L8-L14. But
+	 * L14 mapping is not connected to RSC_STATUS, so this register can't provide
+	 * resource status information for L14.
+	 */
+	return (decon_read(id, RSC_STATUS_0) & 0xFFFFFFF) |
+		(u64)(decon_read(id, RSC_STATUS_1)) << 28;
 }
 
-u32 decon_reg_get_rsc_win(u32 id)
+u64 decon_reg_get_rsc_win(u32 id)
 {
-	return decon_read(id, RSC_STATUS_2);
+	return decon_read(id, RSC_STATUS_2) |
+		(u64)(decon_read(id, RSC_STATUS_3)) << 32;
 }
 
 #ifdef __linux__
@@ -2413,12 +2423,12 @@ void __decon_unmap_regs(struct decon_device *decon)
 #endif
 
 #define OCCUPIED_BY_DECON(id)	(id)
-bool is_decon_using_ch(u32 id, u32 rsc_ch, u32 ch)
+bool is_decon_using_ch(u32 id, u64 rsc_ch, u32 ch)
 {
 	return ((rsc_ch >> (ch * 4)) & 0xF) == OCCUPIED_BY_DECON(id);
 }
 
-bool is_decon_using_win(u32 id, u32 rsc_win, u32 win)
+bool is_decon_using_win(u32 id, u64 rsc_win, u32 win)
 {
 	return ((rsc_win >> (win * 4)) & 0xF) == OCCUPIED_BY_DECON(id);
 }
