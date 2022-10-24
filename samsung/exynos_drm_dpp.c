@@ -544,8 +544,14 @@ static int set_protection(struct dpp_device *dpp, uint64_t modifier)
 	u32 protection_id;
 	int ret = 0;
 	bool res_protection_changed = false;
+#if defined(CONFIG_SOC_ZUMA)
+	static const u32 protection_ids[] = { PROT_L0,	PROT_L1,  PROT_L2,  PROT_L3, PROT_L4,
+					      PROT_L5,	PROT_L6,  PROT_L8,  PROT_L9, PROT_L10,
+					      PROT_L11, PROT_L12, PROT_L13, PROT_L14 };
+#else
 	static const u32 protection_ids[] = { PROT_L0, PROT_L1, PROT_L2,
 					PROT_L3, PROT_L4, PROT_L5, PROT_L12 };
+#endif
 
 	protection = (modifier & DRM_FORMAT_MOD_PROTECTION) != 0;
 	if (dpp->protection == protection)
