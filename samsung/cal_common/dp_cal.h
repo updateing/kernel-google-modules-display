@@ -207,6 +207,9 @@ struct dp_hw_config {
 	/* BIST Mode */
 	bool bist_mode;
 	enum bist_pattern_type bist_type;
+
+	/* USBDP combo phy enable ref count */
+	atomic_t usbdp_phy_en_cnt;
 };
 
 
@@ -222,7 +225,7 @@ int dp_hw_read_edid(u8 block_cnt, u32 length, u8 *data);
 /* DP Hardware Control Interfaces */
 void dp_hw_init(struct dp_hw_config *hw_config);
 void dp_hw_reinit(struct dp_hw_config *hw_config);
-void dp_hw_deinit(void);
+void dp_hw_deinit(struct dp_hw_config *hw_config);
 void dp_hw_start(void);
 void dp_hw_stop(void);
 
@@ -238,5 +241,8 @@ void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe);
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern);
 void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config, u8 *voltage, u8 *pre_emphasis);
+
+/* USB Interface Prototypes for Combo-PHY Handshaking */
+extern int dwc3_exynos_phy_enable(int owner, bool on);
 
 #endif /* __SAMSUNG_DP_CAL_H__ */

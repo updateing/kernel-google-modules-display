@@ -1054,7 +1054,7 @@ HPD_FAIL:
 	dp_set_hpd_state(dp, EXYNOS_HPD_UNPLUG);
 	dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
 
-	dp_hw_deinit();
+	dp_hw_deinit(&dp->hw_config);
 	pm_relax(dp->dev);
 
 	dp_init_info(dp);
@@ -1079,7 +1079,7 @@ static void dp_work_hpd_unplug(struct work_struct *work)
 		dp_link_down(dp);
 
 		/* PHY power off */
-		dp_hw_deinit();
+		dp_hw_deinit(&dp->hw_config);
 
 		pm_runtime_put_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",

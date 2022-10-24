@@ -183,7 +183,7 @@ static void dpphy_reg_set_lane_config(struct dp_hw_config *hw_config)
 	case PIN_TYPE_B:
 	case PIN_TYPE_D:
 	case PIN_TYPE_F:
-		/* 4 Lanes Mode Configuration */
+		/* 2 Lanes Mode Configuration */
 		if (hw_config->orient_type == PLUG_NORMAL) {
 			lane_mux_config =
 				LANE_MUX_SEL_DP_LN3 | LANE_MUX_SEL_DP_LN2;
@@ -1295,6 +1295,9 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 	/*
 	 * USBDP PHY Initialization
 	 */
+	dwc3_exynos_phy_enable(1, 1);
+	atomic_inc(&hw_config->usbdp_phy_en_cnt);
+
 	dpphy_reg_init(hw_config);
 	cal_log_debug(0, "init USBDP Combo PHY\n");
 
@@ -1331,6 +1334,7 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 
 void dp_hw_reinit(struct dp_hw_config *hw_config)
 {
+	/* Set system clock to OSC */
 	dp_reg_set_txclk_osc();
 	cal_log_debug(0, "set system clk to OSC: Mux(%u)\n",
 		      dp_reg_get_gfmux_status());
@@ -1343,6 +1347,7 @@ void dp_hw_reinit(struct dp_hw_config *hw_config)
 	dp_reg_wait_phy_pll_lock();
 	cal_log_debug(0, "locked PHY PLL\n");
 
+	/* Set system clock to TXCLK */
 	dp_reg_set_txclk_txclk();
 	cal_log_debug(0, "set system clk to TX: Mux(%u)\n",
 		      dp_reg_get_gfmux_status());
@@ -1363,13 +1368,18 @@ void dp_hw_reinit(struct dp_hw_config *hw_config)
 	cal_log_debug(0, "set sst function\n");
 }
 
-void dp_hw_deinit(void)
+void dp_hw_deinit(struct dp_hw_config *hw_config)
 {
+	/* DP Link De-initialization */
 	dp_hw_set_common_interrupt(0);
 	dp_reg_set_sw_func_en(0);
 	dp_reg_set_txclk_osc();
 	cal_log_debug(0, "set system clk to OSC: Mux(%u)\n",
 		      dp_reg_get_gfmux_status());
+
+	/* USBDP PHY De-initialization */
+	dwc3_exynos_phy_enable(1, 0);
+	atomic_dec(&hw_config->usbdp_phy_en_cnt);
 }
 
 void dp_hw_start(void)
