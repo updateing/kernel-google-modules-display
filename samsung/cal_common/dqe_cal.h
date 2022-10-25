@@ -160,35 +160,51 @@ static struct cal_regs_offset regs_dqe_offset[DQE_VERSION_MAX] = {
 	dqe_write_relaxed(dqe_id, offset + regamma_offset(regs_dqe[dqe_id].version), val)
 
 #if defined(CONFIG_SOC_ZUMA)
-#define exynos_smc_read(dqe_id, offset)	\
-	((u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, 0x194D0000 + offset, 0, 0))
-#define exynos_smc_write(dqe_id, offset, val)	\
-	((u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, 0x194D0000 + offset, 1, val))
-#define exynos_smc_read_mask(dqe_id, offset, mask)	\
-	((u32)(exynos_smc_read(dqe_id, offset)) & mask)
-#define exynos_smc_write_mask(dqe_id, offset, val, mask)	\
-	((u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, 0x194D0000 + offset, 1, (val | mask)))
+static inline uint32_t dqe_smc_read(u32 dqe_id, u32 offset)
+{
+	struct cal_regs_desc *rdesc = dqe_regs_desc(dqe_id);
+	return (u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, (u32)rdesc->start + offset, 0, 0);
+}
+
+static inline uint32_t dqe_smc_read_mask(u32 dqe_id, u32 offset, u32 mask)
+{
+	return (dqe_smc_read(dqe_id, offset) & mask);
+}
+
+static inline uint32_t dqe_smc_write(u32 dqe_id, u32 offset, u32 val)
+{
+	struct cal_regs_desc *rdesc = dqe_regs_desc(dqe_id);
+	return ((u32)exynos_smc(SMC_DRM_HISTOGRAM_SEC, (u32)rdesc->start + offset, 1, val));
+}
+
+static inline uint32_t dqe_smc_write_mask(u32 dqe_id, u32 offset, u32 val, u32 mask)
+{
+	uint32_t cur = dqe_smc_read(dqe_id, offset);
+
+	val = (val & mask) | (cur & ~mask);
+	return dqe_smc_write(dqe_id, offset, val);
+}
 
 #define hist_offset(ver)	(regs_dqe_offset[ver].hist_offset)
 #define hist_read(dqe_id, offset)	\
-	exynos_smc_read(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
+	dqe_smc_read(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
 #define hist_read_mask(dqe_id, offset, mask)	\
-	exynos_smc_read_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), mask)
+	dqe_smc_read_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), mask)
 #define hist_write(dqe_id, offset, val)	\
-	exynos_smc_write(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val)
+	dqe_smc_write(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val)
 #define hist_write_mask(dqe_id, offset, val, mask)	\
-	exynos_smc_write_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val, mask)
+	dqe_smc_write_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val, mask)
 #else
-#define hist_offset(ver)				(regs_dqe_offset[ver].hist_offset)
-#define hist_read(dqe_id, offset)			\
+#define hist_offset(ver)	(regs_dqe_offset[ver].hist_offset)
+#define hist_read(dqe_id, offset)	\
 	dqe_read(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
-#define hist_read_mask(dqe_id, offset, mask)		\
+#define hist_read_mask(dqe_id, offset, mask)	\
 	dqe_read_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), mask)
-#define hist_write(dqe_id, offset, val)			\
+#define hist_write(dqe_id, offset, val)	\
 	dqe_write(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val)
 #define hist_write_mask(dqe_id, offset, val, mask)	\
 	dqe_write_mask(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version), val, mask)
-#define hist_read_relaxed(dqe_id, offset)		\
+#define hist_read_relaxed(dqe_id, offset)	\
 	dqe_read_relaxed(dqe_id, offset + hist_offset(regs_dqe[dqe_id].version))
 #endif
 
