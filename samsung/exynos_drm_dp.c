@@ -19,6 +19,7 @@
 #include <linux/hdmi.h>
 #include <video/videomode.h>
 
+#include <drm/drm_modes.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
@@ -1511,9 +1512,35 @@ static int dp_get_modes(struct drm_connector *connector)
 	return num_modes;
 }
 
+static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector, struct drm_display_mode *mode)
+{
+	struct dp_device *dp = connector_to_dp(connector);
+
+	/*
+	 * DP link max data rate in Kbps
+	 *
+	 * dp->link.link_rate unit is weird: Mbps * 100
+	 * The calculation becomes:
+	 * (dp->link.link_rate * 10) * dp->link.num_lanes * (8 / 10)
+	 */
+	u32 link_data_rate = dp->link.link_rate * dp->link.num_lanes * 8;
+
+	/* DRM display mode data rate (@ 8 bpc) in Kbps */
+	u32 mode_data_rate = mode->clock * 24;
+
+	if (link_data_rate < mode_data_rate) {
+		dp_info(dp, "DROP: " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
+		return MODE_CLOCK_HIGH;
+	}
+
+	dp_info(dp, "PICK: " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
+	return MODE_OK;
+}
+
 static const struct drm_connector_helper_funcs dp_connector_helper_funcs = {
 	.detect_ctx = dp_detect,
 	.get_modes = dp_get_modes,
+	.mode_valid = dp_conn_mode_valid,
 };
 
 /* DP DRM Component Functions */
