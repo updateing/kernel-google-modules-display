@@ -924,6 +924,7 @@ int exynos_panel_init(struct exynos_panel *ctx);
 void exynos_panel_reset(struct exynos_panel *ctx);
 int exynos_panel_set_power(struct exynos_panel *ctx, bool on);
 int exynos_panel_set_brightness(struct exynos_panel *exynos_panel, u16 br);
+u16 exynos_panel_get_brightness(struct exynos_panel *exynos_panel);
 void exynos_panel_debugfs_create_cmdset(struct exynos_panel *ctx,
 					struct dentry *parent,
 					const struct exynos_dsi_cmd_set *cmdset,

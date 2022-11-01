@@ -899,6 +899,12 @@ static int exynos_get_brightness(struct backlight_device *bl)
 	return bl->props.brightness;
 }
 
+u16 exynos_panel_get_brightness(struct exynos_panel *exynos_panel)
+{
+	return exynos_get_brightness(exynos_panel->bl);
+}
+EXPORT_SYMBOL(exynos_panel_get_brightness);
+
 static int exynos_bl_find_range(struct exynos_panel *ctx,
 				int brightness, u32 *range)
 {
