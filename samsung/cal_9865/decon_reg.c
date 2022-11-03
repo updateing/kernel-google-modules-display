@@ -1549,6 +1549,23 @@ void decon_reg_set_win_enable(u32 id, u32 win_idx, u32 en)
 			wincon_read(id, DECON_CON_WIN(win_idx)));
 }
 
+int decon_reg_get_win_ch(u32 id, u32 win_idx, u32 *ch)
+{
+	u32 val, mask;
+
+	if (!ch)
+		return -EINVAL;
+
+	mask = _WIN_EN_F | WIN_CHMAP_MASK;
+	val = wincon_read_mask(id, DECON_CON_WIN(win_idx), mask);
+	if ((val & _WIN_EN_F) == 0)
+		return -ENOENT;
+
+	*ch = WIN_CHMAP_GET(val);
+
+	return 0;
+}
+
 /*
  * argb_color : 32-bit
  * A[31:24] - R[23:16] - G[15:8] - B[7:0]

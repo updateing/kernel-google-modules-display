@@ -49,6 +49,7 @@ enum decon_state {
 	DECON_STATE_ON,
 	DECON_STATE_HIBERNATION,
 	DECON_STATE_OFF,
+	DECON_STATE_HANDOVER,
 };
 
 enum dpu_win_state {

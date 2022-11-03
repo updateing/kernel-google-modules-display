@@ -432,6 +432,65 @@ static int decon_check_modeset(struct exynos_drm_crtc *exynos_crtc,
 	return 0;
 }
 
+static int _decon_handover_check(struct exynos_drm_crtc *exynos_crtc,
+				 struct drm_crtc_state *crtc_state)
+{
+	const struct decon_device *decon = exynos_crtc->ctx;
+	struct exynos_drm_crtc_state *exynos_crtc_state = to_exynos_crtc_state(crtc_state);
+	unsigned long win_mask = 0;
+	u32 ch;
+	int i, j, ret;
+	bool found_handover_dpp = false;
+
+	if (exynos_crtc_state->planes_updated) {
+		drm_info(decon, "%s: planes updated on commit, skipping handover\n", __func__);
+		return 0;
+	}
+
+	for (i = 0; i < MAX_WIN_PER_DECON; ++i) {
+		ret = decon_reg_get_win_ch(decon->id, i, &ch);
+		if (ret)
+			continue;
+
+		decon_debug(decon, "%s: win=%d enabled dpp_ch=%d\n", __func__, i, ch);
+		win_mask = BIT(i);
+
+		for (j = 0; j < decon->dpp_cnt; ++j) {
+			struct dpp_device *dpp = decon->dpp[j];
+
+			if (dpp->id != ch)
+				continue;
+
+			if ((dpp->decon_id >= 0) && (dpp->decon_id != decon->id)) {
+				decon_warn(decon, "%s: dpp is owned by decon #%d\n", __func__,
+					   dpp->decon_id);
+				continue;
+			}
+
+			dpp->state = DPP_STATE_HANDOVER;
+			dpp->win_id = i;
+			dpp->decon_id = decon->id;
+			found_handover_dpp = true;
+		}
+	}
+
+	decon_debug(decon, "%s: final win_mask=0x%lx\n", __func__, win_mask);
+
+	if (!win_mask) {
+		drm_warn(decon, "%s: handover memory defined, but no windows attached\n", __func__);
+		return -ENOENT;
+	}
+
+	if (!found_handover_dpp) {
+		drm_warn(decon, "%s: handover memory defined, but cannot find handover dpp\n",
+				__func__);
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+
 static int decon_atomic_check(struct exynos_drm_crtc *exynos_crtc,
 			      struct drm_crtc_state *crtc_state)
 {
@@ -475,6 +534,9 @@ static int decon_atomic_check(struct exynos_drm_crtc *exynos_crtc,
 	if (crtc_state->active) {
 		hibernation_block(decon->hibernation);
 		hibernation_unblock_enter(decon->hibernation);
+
+		if (decon->state == DECON_STATE_HANDOVER)
+			ret = _decon_handover_check(exynos_crtc, crtc_state);
 	}
 
 	return ret;
@@ -901,6 +963,39 @@ static void _decon_enable(struct decon_device *decon)
 }
 
 #if IS_ENABLED(CONFIG_EXYNOS_BTS)
+static void _decon_mode_update_bts_handover(struct decon_device *decon,
+					    const struct drm_display_mode *mode)
+{
+	int i, j;
+	struct dpu_bts_win_config *config;
+
+	decon_debug(decon, "%s: configure bts for handover\n", __func__);
+
+	for (i = 0, j = 0; i < decon->dpp_cnt; i++) {
+		struct dpp_device *dpp = decon->dpp[i];
+
+		if (dpp->state != DPP_STATE_HANDOVER)
+			continue;
+
+		config = &decon->bts.win_config[j];
+		if (config->state != DPU_WIN_STATE_DISABLED) {
+			decon_warn(decon, "win config[%d] set during handover\n", j);
+			return;
+		}
+
+		memset(config, 0, sizeof(*config));
+
+		config->state = DPU_WIN_STATE_BUFFER;
+		config->src_w = mode->hdisplay;
+		config->src_h = mode->vdisplay;
+		config->dst_w = mode->hdisplay;
+		config->dst_h = mode->vdisplay;
+		config->format = DRM_FORMAT_ARGB8888;
+		config->dpp_id = dpp->id;
+		j++;
+	}
+}
+
 static void decon_mode_update_bts(struct decon_device *decon,
 				const struct drm_display_mode *mode,
 				const unsigned int vblank_usec)
@@ -922,6 +1017,9 @@ static void decon_mode_update_bts(struct decon_device *decon,
 		    mode->hdisplay, mode->vdisplay, decon->bts.fps);
 
 	atomic_set(&decon->bts.delayed_update, 0);
+
+	if (decon->state == DECON_STATE_HANDOVER)
+		_decon_mode_update_bts_handover(decon, mode);
 }
 
 static void decon_seamless_mode_bts_update(struct decon_device *decon,
@@ -1027,27 +1125,17 @@ static void decon_seamless_mode_set(struct exynos_drm_crtc *exynos_crtc,
 	}
 }
 
-static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
+static int _decon_reinit(struct decon_device *decon)
 {
 	int i;
-	const u32 fps = min(decon->bts.fps, vrefresh) ? : 60;
 
-	/*
-	 * Make sure all window connections are disabled when getting disabled,
-	 * in case there are any stale mappings.
-	 */
-	for (i = 0; i < MAX_WIN_PER_DECON; ++i) {
-		decon->bts.win_config[i].state = DPU_WIN_STATE_DISABLED;
+	for (i = 0; i < MAX_WIN_PER_DECON; ++i)
 		decon_reg_set_win_enable(decon->id, i, 0);
-	}
-
-	decon->bts.rcd_win_config.win.state = DPU_WIN_STATE_DISABLED;
-	decon->bts.rcd_win_config.dma_addr = 0;
 
 	for (i = 0; i < decon->dpp_cnt; ++i) {
 		struct dpp_device *dpp = decon->dpp[i];
 
-		if (!dpp)
+		if (dpp->state == DPP_STATE_HANDOVER)
 			continue;
 
 		if ((dpp->decon_id >= 0) && (dpp->decon_id != decon->id))
@@ -1063,6 +1151,28 @@ static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
 
 	if (decon->rcd)
 		_dpp_disable(decon->rcd);
+
+	return 0;
+}
+
+static void _decon_stop(struct decon_device *decon, bool reset, u32 vrefresh)
+{
+	int i;
+	const u32 fps = min(decon->bts.fps, vrefresh) ? : 60;
+
+	decon_debug(decon, "%s: reset=%d\n", __func__, reset);
+
+	/*
+	 * Make sure all window connections are disabled when getting disabled,
+	 * in case there are any stale mappings.
+	 */
+	for (i = 0; i < MAX_WIN_PER_DECON; ++i)
+		decon->bts.win_config[i].state = DPU_WIN_STATE_DISABLED;
+
+	decon->bts.rcd_win_config.win.state = DPU_WIN_STATE_DISABLED;
+	decon->bts.rcd_win_config.dma_addr = 0;
+
+	_decon_reinit(decon);
 
 	decon_reg_stop(decon->id, &decon->config, reset, fps);
 
@@ -1147,8 +1257,13 @@ static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_st
 
 	pm_runtime_get_sync(decon->dev);
 
-	if (decon->state == DECON_STATE_INIT)
+	if (decon->state == DECON_STATE_HANDOVER) {
+		_decon_reinit(decon);
+		/* remove pm_runtime ref taken during probe */
+		pm_runtime_put_sync(decon->dev);
+	} else if (decon->state == DECON_STATE_INIT) {
 		_decon_stop(decon, true, drm_mode_vrefresh(&old_crtc_state->mode));
+	}
 
 	_decon_enable(decon);
 
@@ -2033,9 +2148,6 @@ static int decon_probe(struct platform_device *pdev)
 	init_waitqueue_head(&decon->framedone_wait);
 	init_completion(&decon->te_rising);
 
-	decon->state = DECON_STATE_INIT;
-	pm_runtime_enable(decon->dev);
-
 	ret = decon_init_resources(decon);
 	if (ret)
 		goto err;
@@ -2060,6 +2172,12 @@ static int decon_probe(struct platform_device *pdev)
 
 	decon->cgc_dma = exynos_cgc_dma_register(decon);
 	exynos_rmem_register(decon);
+
+	decon->state = decon->fb_handover.rmem ? DECON_STATE_HANDOVER : DECON_STATE_INIT;
+	pm_runtime_enable(decon->dev);
+
+	if (decon->state == DECON_STATE_HANDOVER)
+		pm_runtime_get_sync(decon->dev);
 
 	ret = component_add(dev, &decon_component_ops);
 	if (ret)
