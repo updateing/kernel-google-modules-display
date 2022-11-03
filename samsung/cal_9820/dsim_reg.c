@@ -800,16 +800,14 @@ static void dsim_reg_set_pll(u32 id, u32 en)
 	dsim_phy_write_mask(id, DSIM_PHY_PLL_CON0, val, DSIM_PHY_PLL_EN_MASK);
 }
 
-static u32 dsim_reg_is_pll_stable(u32 id)
+bool dsim_reg_is_pll_stable(u32 id)
 {
 	u32 val, pll_lock;
 
 	val = dsim_phy_read(id, DSIM_PHY_PLL_STAT0);
 	pll_lock = DSIM_PHY_PLL_LOCK_GET(val);
-	if (pll_lock)
-		return 1;
 
-	return 0;
+	return pll_lock != 0;
 }
 
 static int dsim_reg_enable_pll(u32 id, u32 en)

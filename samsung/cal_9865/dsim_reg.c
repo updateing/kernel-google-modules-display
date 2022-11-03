@@ -789,7 +789,7 @@ static void dsim_reg_set_pll(u32 id, u32 en)
 	dsim_phy_write_mask(id, DSIM_PHY_PLL_CON0, val, DSIM_PHY_PLL_EN_MASK);
 }
 
-static bool dsim_reg_is_pll_stable(u32 id)
+bool dsim_reg_is_pll_stable(u32 id)
 {
 	u32 val, pll_lock;
 
