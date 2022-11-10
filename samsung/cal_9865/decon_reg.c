@@ -197,6 +197,8 @@ static void decon_reg_set_sram_enable(u32 id,
 		/* sram32 */
 		if (pri[32])
 			decon_write(id, SRAM_EN_OF_PRI_4, SRAM32_EN_F);
+		if (sec[32])
+			decon_write(id, SRAM_EN_OF_SEC_4, SRAM32_EN_F);
 	}
 
 }
@@ -421,6 +423,11 @@ void decon_reg_set_cwb_enable(u32 id, u32 en)
 
 	mask = COMP_OUTIF_PATH_MASK;
 	decon_write_mask(id, DATA_PATH_CON_0, d_path, mask);
+	/* Select OUTFIFO2, WBIF0 for CWB path*/
+	decon_write_mask(id, DATA_PATH_CON_1,
+					CWB_OF_IDX_F(CWB_OF_IDX_OF2) |
+					WB_SEL_IF_F(WB_SEL_IF_0),
+					CWB_OF_IDX_MASK | WB_SEL_IF_MASK);
 }
 
 void decon_reg_set_dqe_enable(u32 id, bool en)
@@ -1794,13 +1801,13 @@ int decon_reg_init(u32 id, struct decon_config *config)
 		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 		 1, 1, 1, 1, 1, 1, 1}, /* decon1 : 33 */
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 1, 1, 1, 1}, /* decon1 : 33 */
-	};
-	u32 sec_sram[3][MAX_SRAM_EN_CNT] = {
 		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		 0, 0, 0, 0, 0, 0, 0}, /* decon1 : 33 */
+	};
+	u32 sec_sram[3][MAX_SRAM_EN_CNT] = {
+		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 33 */
 		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

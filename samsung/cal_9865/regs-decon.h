@@ -299,7 +299,15 @@
 #define DATA_PATH_CON_1				(0x0204)
 #define CWB_SRC_F(_v)				((_v) << 7)
 #define CWB_OF_IDX_F(_v)			((_v) << 4)
+#define CWB_OF_IDX_MASK             (7 << 4)
+#define CWB_OF_IDX_OF0              (0)
+#define CWB_OF_IDX_OF1              (1)
+#define CWB_OF_IDX_OF2              (2)
 #define WB_SEL_IF_F(_v)				((_v) << 0)
+#define WB_SEL_IF_MASK              (3 << 0)
+#define WB_SEL_IF_0             (0)
+#define WB_SEL_IF_1             (1)
+
 
 #define BLD_BG_IMG_SIZE_PRI			(0x0220)
 #define BLENDER_BG_HEIGHT_F(_v)			((_v) << 16)
