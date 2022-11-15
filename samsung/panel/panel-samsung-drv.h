@@ -254,6 +254,15 @@ struct exynos_panel_funcs {
 	 */
 	void (*set_local_hbm_mode)(struct exynos_panel *exynos_panel,
 				 bool local_hbm_en);
+
+	/**
+	 * @set_local_hbm_mode_post:
+	 *
+	 * This callback is used to implement panel specific logic at some time after enabling
+	 * local high brightness mode.
+	 */
+	void (*set_local_hbm_mode_post)(struct exynos_panel *exynos_panel);
+
 	/**
 	 * @set_power:
 	 *
@@ -525,6 +534,7 @@ struct exynos_panel_desc {
 	 *    - if `freq set` is changed when lhbm is on, lhbm may not work normally.
 	 */
 	bool no_lhbm_rr_constraints;
+	const u32 lhbm_post_cmd_delay_frames;
 	const u32 lhbm_effective_delay_frames;
 	const unsigned int delay_dsc_reg_init_us;
 	const struct brightness_capability *brt_capability;
@@ -690,6 +700,8 @@ struct exynos_panel {
 			struct kthread_work post_work;
 			ktime_t en_cmd_ts;
 			ktime_t next_vblank_ts;
+			u32 frame_index;
+			ktime_t last_vblank_ts;
 		} local_hbm;
 
 		struct workqueue_struct *wq;
@@ -810,7 +822,9 @@ static inline u32 get_current_frame_duration_us(struct exynos_panel *ctx)
 
 static inline bool is_local_hbm_post_enabling_supported(struct exynos_panel *ctx)
 {
-	return (ctx->desc && ctx->desc->lhbm_effective_delay_frames);
+	return (ctx->desc && (ctx->desc->lhbm_effective_delay_frames ||
+			      (ctx->desc->lhbm_post_cmd_delay_frames &&
+			       ctx->desc->exynos_panel_func->set_local_hbm_mode_post)));
 }
 
 static inline bool is_local_hbm_disabled(struct exynos_panel *ctx)

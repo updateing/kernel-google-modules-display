@@ -3661,38 +3661,89 @@ static void local_hbm_timeout_work(struct work_struct *work)
 	mutex_unlock(&ctx->mode_lock);
 }
 
-static void local_hbm_wait_and_notify_effectiveness(struct exynos_panel *ctx, struct drm_crtc *crtc,
-						    u32 frames)
+static void usleep_since_ts(ktime_t ts, u32 offset_us)
+{
+	u32 us = ktime_us_delta(ktime_get(), ts);
+
+	if (offset_us <= us)
+		return;
+	us = offset_us - us;
+	usleep_range(us, us + 10);
+}
+
+static void local_hbm_wait_vblank_and_delay(struct exynos_panel *ctx, struct drm_crtc *crtc,
+					    int frames, u32 offset_us)
+{
+	struct local_hbm *lhbm = &ctx->hbm.local_hbm;
+
+	frames -= lhbm->frame_index;
+	while (frames > 0) {
+		ktime_t now;
+
+		drm_crtc_wait_one_vblank(crtc);
+		now = ktime_get();
+		if (lhbm->frame_index == 0)
+			lhbm->next_vblank_ts = now;
+		lhbm->frame_index++;
+		frames--;
+		lhbm->last_vblank_ts = now;
+	}
+
+	usleep_since_ts(lhbm->last_vblank_ts, offset_us);
+}
+
+static void local_hbm_wait_and_send_post_cmd(struct exynos_panel *ctx, struct drm_crtc *crtc)
 {
 	const u32 per_frame_us = get_current_frame_duration_us(ctx);
+	u32 frames = ctx->desc->lhbm_post_cmd_delay_frames;
+	struct local_hbm *lhbm = &ctx->hbm.local_hbm;
+
 	if (frames == 0)
 		return;
-	if (crtc) {
-		u32 i;
-		for (i = 0; i < frames; i++) {
-			drm_crtc_wait_one_vblank(crtc);
-			if (ctx->hbm.local_hbm.next_vblank_ts == 0)
-				ctx->hbm.local_hbm.next_vblank_ts = ktime_get();
-		}
-	} else {
-		u32 delay_us = ktime_us_delta(ktime_get(), ctx->hbm.local_hbm.en_cmd_ts);
-		int remaining_us = (per_frame_us * frames) - delay_us;
-		if (remaining_us > 0)
-			usleep_range(remaining_us, remaining_us + 10);
+
+	if (crtc)
+		/* wait for 0.5 frame time to ensure panel internal scanout or vsync has started */
+		local_hbm_wait_vblank_and_delay(ctx, crtc, frames, per_frame_us / 2);
+	else
+		/* align with the time of sending enabling cmd */
+		usleep_since_ts(lhbm->en_cmd_ts, per_frame_us * frames);
+
+	dev_dbg(ctx->dev, "%s: delay(us): %lld(EN), %lld(TE)\n", __func__,
+		ktime_us_delta(ktime_get(), lhbm->en_cmd_ts),
+		lhbm->next_vblank_ts ? ktime_us_delta(ktime_get(), lhbm->next_vblank_ts) : 0);
+	if (ctx->desc->exynos_panel_func->set_local_hbm_mode_post) {
+		mutex_lock(&ctx->mode_lock);
+		ctx->desc->exynos_panel_func->set_local_hbm_mode_post(ctx);
+		mutex_unlock(&ctx->mode_lock);
 	}
-	/* wait for 0.8 frame time to ensure finishing LHBM spot scanout */
-	usleep_range(per_frame_us * 4 / 5, (per_frame_us * 4 / 5) + 10);
-	dev_dbg(ctx->dev, "%s: effectiveness delay(us): %lld(EN), %lld(TE)\n", __func__,
-		ktime_us_delta(ktime_get(), ctx->hbm.local_hbm.en_cmd_ts),
-		ctx->hbm.local_hbm.next_vblank_ts ?
-			ktime_us_delta(ktime_get(), ctx->hbm.local_hbm.next_vblank_ts) :
-			0);
-	if (ctx->hbm.local_hbm.state == LOCAL_HBM_ENABLING) {
-		ctx->hbm.local_hbm.state = LOCAL_HBM_ENABLED;
+}
+
+static void local_hbm_wait_and_notify_effectiveness(struct exynos_panel *ctx, struct drm_crtc *crtc)
+{
+	const u32 per_frame_us = get_current_frame_duration_us(ctx);
+	const u32 offset_us = per_frame_us * 4 / 5;
+	u32 frames = ctx->desc->lhbm_effective_delay_frames;
+	struct local_hbm *lhbm = &ctx->hbm.local_hbm;
+
+	if (frames == 0)
+		return;
+
+	if (crtc)
+		/* wait for 0.8 frame time to ensure finishing LHBM spot scanout */
+		local_hbm_wait_vblank_and_delay(ctx, crtc, frames, offset_us);
+	else
+		/* take worst case (cmd sent immediately after last vsync) into account */
+		usleep_since_ts(lhbm->en_cmd_ts, per_frame_us * frames + offset_us);
+
+	dev_dbg(ctx->dev, "%s: delay(us): %lld(EN), %lld(TE)\n", __func__,
+		ktime_us_delta(ktime_get(), lhbm->en_cmd_ts),
+		lhbm->next_vblank_ts ? ktime_us_delta(ktime_get(), lhbm->next_vblank_ts) : 0);
+	if (lhbm->state == LOCAL_HBM_ENABLING) {
+		lhbm->state = LOCAL_HBM_ENABLED;
 		sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
 	} else {
 		dev_warn(ctx->dev, "%s: LHBM state = %d before becoming effective\n", __func__,
-			 ctx->hbm.local_hbm.state);
+			 lhbm->state);
 	}
 }
 
@@ -3705,8 +3756,15 @@ static void local_hbm_post_work(struct kthread_work *work)
 	if (crtc && drm_crtc_vblank_get(crtc))
 		crtc = NULL;
 	ctx->hbm.local_hbm.next_vblank_ts = 0;
+	ctx->hbm.local_hbm.frame_index = 0;
 	/* TODO: delay time might be inaccurate if refresh rate changes around here */
-	local_hbm_wait_and_notify_effectiveness(ctx, crtc, desc->lhbm_effective_delay_frames);
+	if (desc->lhbm_post_cmd_delay_frames <= desc->lhbm_effective_delay_frames) {
+		local_hbm_wait_and_send_post_cmd(ctx, crtc);
+		local_hbm_wait_and_notify_effectiveness(ctx, crtc);
+	} else {
+		local_hbm_wait_and_notify_effectiveness(ctx, crtc);
+		local_hbm_wait_and_send_post_cmd(ctx, crtc);
+	}
 	if (crtc)
 		drm_crtc_vblank_put(crtc);
 	DPU_ATRACE_END(__func__);
