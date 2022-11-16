@@ -209,6 +209,14 @@ struct exynos_panel_funcs {
 	void (*set_binned_lp)(struct exynos_panel *exynos_panel, u16 br);
 
 	/**
+	 * @set_post_lp_mode:
+	 *
+	 * This callback is used to handle additional operations after set_lp_mode and
+	 * first set_binned_lp are called.
+	 */
+	void (*set_post_lp_mode)(struct exynos_panel *exynos_panel);
+
+	/**
 	 * @set_hbm_mode:
 	 *
 	 * This callback is used to implement panel specific logic for high brightness
