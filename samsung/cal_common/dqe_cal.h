@@ -247,6 +247,22 @@ struct exynos_atc {
 	__u16 gain_limit;
 	__u8 lt_calc_ab_shift;
 	__u16 dim_ratio;
+#ifdef CONFIG_SOC_ZUMA
+	bool la_w_on;
+	__u8 la_w;
+	bool lt_calc_mode;
+	__u8 gt_lamda_dstep;
+	__u16 gt_lamda;
+	bool gt_he_enable;
+	__u32 he_clip_min_0;
+	__u32 he_clip_min_1;
+	__u32 he_clip_min_2;
+	__u32 he_clip_min_3;
+	__u32 he_clip_max_0;
+	__u32 he_clip_max_1;
+	__u32 he_clip_max_2;
+	__u32 he_clip_max_3;
+#endif
 };
 
 #if defined(CONFIG_SOC_GS201)
@@ -256,6 +272,8 @@ void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id
 void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
 					enum exynos_prog_pos pos);
 void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p);
+void dqe_reg_set_atc_he(u32 dqe_id, const struct exynos_atc *atc);
+void dqe_reg_print_atc_he(u32 dqe_id, struct drm_printer *p);
 #else
 /* Stubs for non-gs201 SoCs */
 static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
@@ -264,6 +282,8 @@ static inline void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histog
 {
 	return;
 }
+void dqe_reg_set_atc_he(u32 dqe_id, const struct exynos_atc *atc) {}
+void dqe_reg_print_atc_he(u32 dqe_id, struct drm_printer *p) {}
 #endif
 
 #if defined(CONFIG_SOC_GS201) || defined(CONFIG_SOC_ZUMA)

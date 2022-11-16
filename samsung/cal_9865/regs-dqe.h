@@ -116,7 +116,6 @@
 #define DQE_ATC_EN(_v)				((_v) << 0)
 #define DQE_ATC_EN_MASK				(0x1 << 0)
 
-
 #define DQE_ATC_GAIN			(0x0404)
 #define ATC_ONE_DITHER(_v)		((_v) << 24)
 #define ATC_ONE_DITHER_MASK		(0x1 << 24)
@@ -131,6 +130,10 @@
 #define ATC_LA_W_ON(_v)			((_v) << 24)
 #define ATC_LA_W_ON_MASK		(0x1 << 24)
 #define ATC_PL_W2_MASK			(0xF << 16)
+#define ATC_LT_CALC_MODE_MASK			(0x1 << 31)
+#define ATC_LT_CALC_MODE(_v)			((_v) << 31)
+#define ATC_LA_W(_v)			((_v) << 28)
+#define ATC_LA_W_MASK		(0x7 << 28)
 #define ATC_PL_W2(_v)			((_v) << 16)
 #define ATC_PL_W2_MASK			(0xF << 16)
 #define ATC_PL_W1(_v)			((_v) << 0)
@@ -205,6 +208,28 @@
 #define ATC_DIM_PERIOD_SHIFT(_v)	((_v) << 0)
 #define ATC_DIM_PERIOD_SHIFT_MASK 	(0xF << 0)
 
+#define DQE_ATC_GT_CONTROL		(0x444)
+#define ATC_GT_LAMDA_DSTEP(_v)	((_v) << 16)
+#define ATC_GT_LAMDA_DSTEP_MASK	(0x3f << 16)
+#define ATC_GT_LAMDA(_v)		((_v) << 4)
+#define ATC_GT_LAMDA_MASK		(0x1ff << 4)
+#define ATC_GT_HE_EN(_v)		((_v) << 0)
+#define ATC_GT_HE_EN_MASK		(0x1 << 0)
+
+#define DQE_ATC_CDF_DIV				(0x448)
+#define ATC_CDF_SHIFT(_v)		((_v) << 16)
+#define ATC_CDF_SHIFT_MASK		(0xf << 16)
+#define ATC_CDF_DIV(_v)			((_v) << 0)
+#define ATC_CDF_DIV_MASK		(0x3fff << 0)
+
+#define DQE_ATC_HE_CLIP_CNT			4
+#define DQE_ATC_HE_CLIP_MIN(_v)	(0x44c + (4 * (_v)))
+#define ATC_HE_CLIP_MIN(_v, _i)		((_v) << (8 *(_i)))
+#define ATC_HE_CLIP_MIN_MASK(_i)		(0xff << (8 *(_i)))
+
+#define DQE_ATC_HE_CLIP_MAX(_v)	(0x45c + (4 * (_v)))
+#define ATC_HE_CLIP_MAX(_v, _i)		((_v) << (8 *(_i)))
+#define ATC_HE_CLIP_MAX_MASK(_i)		(0xff << (8 *(_i)))
 /*----------------------[HSC]------------------------------------------------*/
 
 #define DQE_HSC_CONTROL		(0x0800)
