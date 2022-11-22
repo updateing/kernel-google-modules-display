@@ -3614,6 +3614,9 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	if (need_update_backlight && ctx->bl)
 		backlight_update_status(ctx->bl);
 
+	if (pmode->exynos_mode.is_lp_mode && funcs->set_post_lp_mode)
+		funcs->set_post_lp_mode(ctx);
+
 	DPU_ATRACE_INT("panel_fps", drm_mode_vrefresh(mode));
 	DPU_ATRACE_END(__func__);
 }
