@@ -77,6 +77,8 @@ struct exynos_hdr {
 	struct oetf_debug_override oetf;
 	struct gm_debug_override gm;
 	struct tm_debug_override tm;
+	bool fp16_en;
+	bool fp16_cvt_en;
 };
 
 struct dpp_device {

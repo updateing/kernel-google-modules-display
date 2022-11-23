@@ -942,6 +942,7 @@ static void dpp_hdr_update(struct dpp_device *dpp,
 {
 	bool enable = false;
 
+	hdr_reg_set_fp16(dpp->id, dpp->hdr.fp16_en, dpp->hdr.fp16_cvt_en);
 	exynos_eotf_update(dpp, state);
 	exynos_oetf_update(dpp, state);
 	exynos_gm_update(dpp, state);
