@@ -1209,6 +1209,11 @@ void dpp_reg_configure_params(u32 id, struct dpp_params_info *p,
 	if (test_bit(DPP_ATTR_AFBC, &attr) || test_bit(DPP_ATTR_SBWC, &attr))
 		idma_reg_set_comp(id, p->comp_type, p->rcv_num);
 
+	if (test_bit(DPP_ATTR_AFBC, &attr))
+		dma_write_mask(id, RDMA_AFBC_PARAM,
+				IDMA_AFBC_BLK_SIZE(p->blk_size - 1),
+				IDMA_AFBC_BLK_SIZE_MASK);
+
 	if (test_bit(DPP_ATTR_SBWC, &attr))
 		dma_write_mask(id, RDMA_SBWC_PARAM,
 				IDMA_CHM_BLK_BYTENUM(p->blk_size) |
