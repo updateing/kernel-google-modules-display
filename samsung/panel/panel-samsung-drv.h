@@ -524,6 +524,7 @@ struct exynos_panel_desc {
 	 *    - if `freq set` is changed when lhbm is on, lhbm may not work normally.
 	 */
 	bool no_lhbm_rr_constraints;
+	const u32 lhbm_effective_delay_frames;
 	const unsigned int delay_dsc_reg_init_us;
 	const struct brightness_capability *brt_capability;
 	const u32 *bl_range;
@@ -550,6 +551,12 @@ struct exynos_panel_desc {
 #define PANEL_EXTINFO_MAX	16
 #define LOCAL_HBM_MAX_TIMEOUT_MS 3000 /* 3000 ms */
 #define LOCAL_HBM_GAMMA_CMD_SIZE_MAX 16
+
+enum local_hbm_enable_state {
+	LOCAL_HBM_DISABLED = 0,
+	LOCAL_HBM_ENABLED,
+	LOCAL_HBM_ENABLING,
+};
 
 struct exynos_bl_notifier {
 	u32 ranges[MAX_BL_RANGES];
@@ -669,12 +676,19 @@ struct exynos_panel {
 		struct local_hbm {
 			bool gamma_para_ready;
 			u8 gamma_cmd[LOCAL_HBM_GAMMA_CMD_SIZE_MAX];
-			/* indicate if local hbm enabled or not */
-			bool enabled;
+			union {
+				enum local_hbm_enable_state state;
+				enum local_hbm_enable_state enabled;
+			};
 			/* max local hbm on period in ms */
 			u32 max_timeout_ms;
 			/* work used to turn off local hbm if reach max_timeout */
 			struct delayed_work timeout_work;
+			struct kthread_worker worker;
+			struct task_struct *thread;
+			struct kthread_work post_work;
+			ktime_t en_cmd_ts;
+			ktime_t next_vblank_ts;
 		} local_hbm;
 
 		struct workqueue_struct *wq;
@@ -786,6 +800,21 @@ static inline void backlight_state_changed(struct backlight_device *bl)
 static inline void te2_state_changed(struct backlight_device *bl)
 {
 	sysfs_notify(&bl->dev.kobj, NULL, "te2_state");
+}
+
+static inline u32 get_current_frame_duration_us(struct exynos_panel *ctx)
+{
+	return USEC_PER_SEC / drm_mode_vrefresh(&ctx->current_mode->mode);
+}
+
+static inline bool is_local_hbm_post_enabling_supported(struct exynos_panel *ctx)
+{
+	return (ctx->desc && ctx->desc->lhbm_effective_delay_frames);
+}
+
+static inline bool is_local_hbm_disabled(struct exynos_panel *ctx)
+{
+	return (ctx->hbm.local_hbm.state == LOCAL_HBM_DISABLED);
 }
 
 #define EXYNOS_DSI_CMD_REV(cmd, delay, rev) { sizeof(cmd), cmd, delay, (u32)rev }
