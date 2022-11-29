@@ -107,13 +107,16 @@ void decon_dump(const struct decon_device *decon)
 			continue;
 
 		if (d->state != DECON_STATE_ON) {
-			drm_printf(&p, "%s[%u]: DECON disabled(%d)\n",
-				decon->dev->driver->name, decon->id, decon->state);
+			drm_printf(&p, "%s[%u]: DECON state is not On(%d)\n",
+				d->dev->driver->name, d->id, d->state);
 			continue;
 		}
 
 		__decon_dump(&p, d->id, &d->regs, d->config.dsc.enabled, d->dqe != NULL);
 	}
+
+	if (decon->state != DECON_STATE_ON)
+		return;
 
 	for (i = 0; i < decon->dpp_cnt; ++i)
 		dpp_dump(&p, decon->dpp[i]);
