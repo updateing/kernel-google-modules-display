@@ -50,6 +50,23 @@ struct dpu_fmt {
 #define IS_10BPC(f)		((f)->bpc == 10)
 #define IS_OPAQUE(f)		((f)->len_alpha == 0)
 
+#ifdef CONFIG_SOC_ZUMA
+#define SBWC_PAYLOAD_32B_STRIDE_ALIGN   32
+#define SBWC_10B_STRIDE_32B(w)	(__ALIGN_UP((10 / 2) * \
+								SBWC_BLOCK_WIDTH,  \
+								SBWC_PAYLOAD_32B_STRIDE_ALIGN) *   \
+								SBWC_H_BLOCKS(w))
+
+#define SBWC_10B_Y_SIZE_32B(w, h)	((SBWC_10B_STRIDE_32B(w) *          \
+									SBWC_Y_VSTRIDE_BLOCKS(h, 16)) + 64)
+#define SBWC_10B_CBCR_SIZE_32B(w, h)	((SBWC_10B_STRIDE_32B(w) *          \
+										SBWC_CBCR_VSTRIDE_BLOCKS(h, 16)) + 64)
+#define SBWC_10B_Y_HEADER_SIZE_32B(w, h)	((SBWC_HEADER_STRIDE(w) *       \
+											SBWC_Y_VSTRIDE_BLOCKS(h, 16)) + 256)
+#define SBWC_10B_CBCR_HEADER_SIZE_32B(w, h)	((SBWC_HEADER_STRIDE(w) *       \
+											SBWC_CBCR_VSTRIDE_BLOCKS(h, 16)) + 128)
+#endif
+
 #define Y_SIZE_8P2(w, h)	(NV12N_10B_Y_8B_SIZE(w, h) +		\
 					NV12N_10B_Y_2B_SIZE(w, h))
 #define UV_SIZE_8P2(w, h)	(NV12N_10B_CBCR_8B_SIZE(w, h) +		\
@@ -58,19 +75,29 @@ struct dpu_fmt {
 					SBWC_8B_Y_HEADER_SIZE(w, h))
 #define UV_SIZE_SBWC_8B(w, h)	(SBWC_8B_CBCR_SIZE(w, h) +		\
 					SBWC_8B_CBCR_HEADER_SIZE(w, h))
+#ifdef CONFIG_SOC_ZUMA
+#define Y_SIZE_SBWC_10B(w, h)	(SBWC_10B_Y_SIZE_32B(w, h) +		\
+					SBWC_10B_Y_HEADER_SIZE_32B(w, h))
+#define UV_SIZE_SBWC_10B(w, h)	(SBWC_10B_CBCR_SIZE_32B(w, h) +		\
+					SBWC_10B_CBCR_HEADER_SIZE_32B(w, h))
+#define Y_PL_SIZE_SBWC(w, h, bpc)	((bpc) ? SBWC_10B_Y_SIZE_32B(w, h) :\
+						SBWC_8B_Y_SIZE(w, h))
+#define UV_PL_SIZE_SBWC(w, h, bpc)	((bpc) ? SBWC_10B_CBCR_SIZE_32B(w, h) :\
+						SBWC_8B_CBCR_SIZE(w, h))
+#else
 #define Y_SIZE_SBWC_10B(w, h)	(SBWC_10B_Y_SIZE(w, h) +		\
 					SBWC_10B_Y_HEADER_SIZE(w, h))
 #define UV_SIZE_SBWC_10B(w, h)	(SBWC_10B_CBCR_SIZE(w, h) +		\
 					SBWC_10B_CBCR_HEADER_SIZE(w, h))
-
-#define Y_SIZE_SBWC(w, h, bpc)	((bpc) ? Y_SIZE_SBWC_10B(w, h) :	\
-					Y_SIZE_SBWC_8B(w, h))
-#define UV_SIZE_SBWC(w, h, bpc)	((bpc) ? UV_SIZE_SBWC_10B(w, h) :	\
-					UV_SIZE_SBWC_8B(w, h))
 #define Y_PL_SIZE_SBWC(w, h, bpc)	((bpc) ? SBWC_10B_Y_SIZE(w, h) :\
 						SBWC_8B_Y_SIZE(w, h))
 #define UV_PL_SIZE_SBWC(w, h, bpc)	((bpc) ? SBWC_10B_CBCR_SIZE(w, h) :\
 						SBWC_8B_CBCR_SIZE(w, h))
+#endif
+#define Y_SIZE_SBWC(w, h, bpc)	((bpc) ? Y_SIZE_SBWC_10B(w, h) :	\
+					Y_SIZE_SBWC_8B(w, h))
+#define UV_SIZE_SBWC(w, h, bpc)	((bpc) ? UV_SIZE_SBWC_10B(w, h) :	\
+					UV_SIZE_SBWC_8B(w, h))
 
 #define HD_STRIDE_SIZE_SBWC(w)		(SBWC_HEADER_STRIDE(w))
 #define PL_STRIDE_SIZE_SBWC(w, bpc)	((bpc) ? SBWC_10B_STRIDE(w) :	\
