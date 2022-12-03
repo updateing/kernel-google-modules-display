@@ -631,11 +631,11 @@
 #define WIN_EN_F(_win)				_WIN_EN_F
 
 //-------------------------------------------------------------------
-// DECON_SUB : DSC0,1,2  +  DSIMIF0,1  +  DPIF0,1
+// DECON_SUB : DSC0,1,2  +  DSIMIF0,1  +  DPIF0
 //-------------------------------------------------------------------
 #define DSC_OFFSET(_i)				(0x0000 + 0x1000 * (_i))
 #define DSIMIF_OFFSET(_i)			(0x8000 + 0x1000 * (_i))
-#define DPIF_OFFSET(_i)				(0xA000 + 0x1000 * (_i))
+#define DPIF_OFFSET(_i)				(0xC000 + 0x1000 * (_i))
 
 #define DSC_CONTROL0(_id)			(DSC_OFFSET(_id) + 0x0000)
 #define DSC_DCG_EN_REF(_v)			((_v) << 3)
@@ -896,11 +896,12 @@
 #define DSIMIF_CRC_DATA_G(_id)			(DSIMIF_OFFSET(_id) + 0x0088)
 #define DSIMIF_CRC_DATA_B(_id)			(DSIMIF_OFFSET(_id) + 0x008C)
 
-// DPIF (_id: 0,1)
+// DPIF (_id: 0)
 #define DPIF_SEL(_id)				(DPIF_OFFSET(_id) + 0x0000)
-#define SEL_DP(_v)				((_v) << 0)
-#define SEL_DP_MASK				(0x7 << 0)
-#define SEL_DP_GET(_v)				(((_v) >> 0) & 0x7)
+// The bit_0 in SEL_DP is output path. DP should use OUT0, so bit_0 always 0.
+#define SEL_DP(_v)				((_v) << 1)
+#define SEL_DP_MASK				(0xF << 0)
+#define SEL_DP_GET(_v)				(((_v) >> 0) & 0xF)
 
 #define DPIF_CRC_CON(_id)			(DPIF_OFFSET(_id) + 0x0080)
 #define DPIF_CRC_DATA_R(_id)			(DPIF_OFFSET(_id) + 0x0084)
