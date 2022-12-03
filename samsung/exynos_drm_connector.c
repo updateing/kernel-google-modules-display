@@ -28,6 +28,24 @@ dev_get_exynos_connector_properties(struct drm_device *dev)
 	return &priv->connector_props;
 }
 
+int exynos_drm_connector_set_lhbm_hist(struct exynos_drm_connector *conn, int w, int h, int d,
+				       int r)
+{
+	/* calculate ROI rectangle side length based on b/259177174 */
+	int half_side_len = mult_frac(r, 1000, 1414);
+	int x = (w / 2) - half_side_len;
+	int y = (h / 2) + d - half_side_len;
+
+	return exynos_drm_drv_set_lhbm_hist(conn, x, y, 2 * half_side_len, 2 * half_side_len);
+}
+EXPORT_SYMBOL(exynos_drm_connector_set_lhbm_hist);
+
+int exynos_drm_connector_get_lhbm_gray_level(struct exynos_drm_connector *conn)
+{
+	return exynos_drm_drv_get_lhbm_gray_level(conn);
+}
+EXPORT_SYMBOL(exynos_drm_connector_get_lhbm_gray_level);
+
 struct exynos_drm_connector_properties *
 exynos_drm_connector_get_properties(struct exynos_drm_connector *exynos_connector)
 {

@@ -21,6 +21,10 @@ struct decon_device;
 struct exynos_dqe;
 struct exynos_dqe_state;
 
+/* internal histogram callback function */
+typedef void (*histogram_chan_callback)(u32 dqe_id, enum exynos_histogram_id hist_id,
+					struct histogram_bins *hist_bins);
+
 struct exynos_dqe_funcs {
 	void (*update)(struct exynos_dqe *dqe, struct exynos_dqe_state *state,
 			u32 width, u32 height);
@@ -46,6 +50,13 @@ struct exynos_dqe_state {
 	spinlock_t histogram_slock;
 	enum exynos_prog_pos histogram_pos;
 	enum exynos_histogram_id histogram_id;
+
+	/* track per channel h/w histogram */
+	struct {
+		enum histogram_state hist_state;
+		struct histogram_bins hist_bins;
+		histogram_chan_callback hist_cb;
+	} hist_chan[HISTOGRAM_MAX];
 };
 
 struct dither_debug_override {
@@ -117,6 +128,21 @@ struct debugfs_dump {
 	void *priv;
 };
 
+/* internal histogram channel control functions */
+enum histogram_chan_config_flags {
+	HIST_CHAN_THRESHOLD = 1U << 0,
+	HIST_CHAN_POS = 1U << 1,
+	HIST_CHAN_ROI = 1U << 2,
+	HIST_CHAN_WEIGHTS = 1U << 3,
+};
+
+struct histogram_chan_config {
+	u32 threshold;
+	enum exynos_prog_pos pos;
+	struct histogram_roi roi;
+	struct histogram_weights weights;
+};
+
 struct exynos_dqe {
 	void __iomem *regs;
 	void __iomem *cgc_regs;
@@ -144,6 +170,8 @@ struct exynos_dqe {
 	bool dstep_changed;
 	struct exynos_atc force_atc_config;
 	u32 lpd_atc_regs[LPD_ATC_REG_CNT];
+	struct histogram_chan_config lhbm_hist_config;
+	int lhbm_gray_level;
 };
 
 int histogram_request_ioctl(struct drm_device *drm_dev, void *data,
@@ -158,4 +186,9 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon);
 void exynos_dqe_save_lpd_data(struct exynos_dqe *dqe);
 void exynos_dqe_restore_lpd_data(struct exynos_dqe *dqe);
 
+int histogram_chan_configure(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
+			     struct histogram_chan_config *config, u32 flags);
+int histogram_chan_start(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
+			 const enum histogram_state hist_state, histogram_chan_callback hist_cb);
+int histogram_chan_stop(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id);
 #endif /* __EXYNOS_DRM_DQE_H__ */

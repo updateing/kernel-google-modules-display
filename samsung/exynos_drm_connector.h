@@ -263,4 +263,8 @@ crtc_get_exynos_connector_state(const struct drm_atomic_state *state,
 	return NULL;
 }
 
+int exynos_drm_connector_set_lhbm_hist(struct exynos_drm_connector *conn, int w, int h, int d,
+				       int r);
+int exynos_drm_connector_get_lhbm_gray_level(struct exynos_drm_connector *conn);
+
 #endif /* _EXYNOS_DRM_CONNECTOR_H_ */

@@ -413,6 +413,9 @@ int exynos_atomic_check(struct drm_device *dev, struct drm_atomic_state *state);
 int exynos_atomic_enter_tui(void);
 int exynos_atomic_exit_tui(void);
 
+int exynos_drm_drv_set_lhbm_hist(struct exynos_drm_connector *conn, int x, int y, int w, int h);
+int exynos_drm_drv_get_lhbm_gray_level(struct exynos_drm_connector *conn);
+
 extern struct platform_driver decon_driver;
 extern struct platform_driver dsim_driver;
 extern struct platform_driver dp_driver;
