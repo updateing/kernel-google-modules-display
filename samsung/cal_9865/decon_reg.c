@@ -159,20 +159,44 @@ static void decon_reg_set_qactive_pll_mode(u32 id, u32 en)
 }
 
 /*
- * Current API does not support to configure various cases fully!
- * Therefore, modify/add configuration cases if necessary
+ * Sharing Resources : SRAM for OUTFIFO
  *
- * [9845 : not sharing]
-
- * Primary : for Display path
- * Secondary : for Concurrent WB path (no CWB path in DECON2)
+ * DECON0_PRI / DECON0_SEC / DECON1_PRI / DECON1_SEC / DECON2_PRI / DECON2_SEC
+ * should be assigned SRAM exclusively.
+ *
+ * PRI(Primary)   : for Main Display path
+ * SEC(Secondary) : for Concurrent WB path (no CWB path in DECON2)
+ *
  * - Mapping info for RSC_STATUS_7~11(SRAM 0~32)
- * - DECON0 :  0 ~ 12  (if CWB enabled, only 0 ~ 6 are available in OF_SEC)
- * - DECON1 : 13 ~ 25  (if CWB enabled, only 0 ~ 6 are available in OF_SEC)
- * - DECON2 : 26 ~ 32
+ * - DECON0 :  0 ~ 12 (13 SRAM instances)
+ * - DECON1 : 13 ~ 25 (13 SRAM instances)
+ * - DECON2 : 26 ~ 32 ( 7 SRAM instances)
  */
-static void decon_reg_set_sram_enable(u32 id,
-		u32 pri[MAX_SRAM_EN_CNT], u32 sec[MAX_SRAM_EN_CNT])
+static u32 pri_sram[MAX_DECON_CNT][MAX_SRAM_EN_CNT] = {
+			{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+			 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 13 SRAM instances */
+			{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+			 0, 0, 0, 0, 0, 0, 0}, /* decon1 : 13 SRAM instances */
+			{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 1, 1, 1, 1, 1, 1, 1}, /* decon2 :  7 SRAM instances */
+};
+
+static u32 sec_sram[MAX_DECON_CNT][MAX_SRAM_EN_CNT] = {
+			{1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 7 SRAM instances */
+			{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0, 0}, /* decon1 : 7 SRAM instances */
+			{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			 0, 0, 0, 0, 0, 0, 0}, /* decon2 : None */
+};
+
+static void decon_reg_set_sram_enable(u32 id)
 {
 	int i, n, j;
 	u32 val1 = 0, val2 = 0;
@@ -180,27 +204,23 @@ static void decon_reg_set_sram_enable(u32 id,
 	n = 0;
 	for (j = 0; j < SRAM_EN_OF_PRI_REG_CNT; j++) {
 		for (i = 0; i < SRAM_EN_CNT; i++) {
-			n = 8*j + i;
-			if (pri[n])
+			n = 8 * j + i;
+			if (pri_sram[id][n])
 				val1 |= SRAM_EN_ID(i % 8);
-			if (sec[n])
+			if (sec_sram[id][n])
 				val2 |= SRAM_EN_ID(i % 8);
 		}
 		decon_write(id, SRAM_EN_OF_PRI(j), val1);
-		if (id != 2)
-			decon_write(id, SRAM_EN_OF_SEC(j), val2);
+		decon_write(id, SRAM_EN_OF_SEC(j), val2);
 		val1 = 0;
 		val2 = 0;
 	}
 
-	if (id != 2) {
-		/* sram32 */
-		if (pri[32])
-			decon_write(id, SRAM_EN_OF_PRI_4, SRAM32_EN_F);
-		if (sec[32])
-			decon_write(id, SRAM_EN_OF_SEC_4, SRAM32_EN_F);
-	}
-
+	/* sram32 */
+	if (pri_sram[id][32])
+		decon_write(id, SRAM_EN_OF_PRI_4, SRAM32_EN_F);
+	if (sec_sram[id][32])
+		decon_write(id, SRAM_EN_OF_SEC_4, SRAM32_EN_F);
 }
 
 static void decon_reg_set_outfifo_size_ctl0(u32 id, u32 width, u32 height)
@@ -1786,42 +1806,14 @@ void decon_reg_update_req_global(u32 id)
 	decon_write_mask(id, SHD_REG_UP_REQ, ~0, mask);
 }
 
-/* Sharing Resources
- * DECON0_SEC / DECON1_SEC / DECON2_PRI
- * -> set exclusively (if not, DECON run status fail happenns)
- */
 int decon_reg_init(u32 id, struct decon_config *config)
 {
-	/* for bring-up */
-	u32 pri_sram[3][MAX_SRAM_EN_CNT] = {
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 33 */
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 1, 1, 1, 1}, /* decon1 : 33 */
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0}, /* decon1 : 33 */
-	};
-	u32 sec_sram[3][MAX_SRAM_EN_CNT] = {
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 33 */
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 33 */
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		 0, 0, 0, 0, 0, 0, 0}, /* decon0 : 33 */
-	};
-
 	decon_reg_set_clkgate_mode(id, 0);
 
 	if (config->out_type & DECON_OUT_DP)
 		decon_reg_set_qactive_pll_mode(id, 1);
 
-	decon_reg_set_sram_enable(id, pri_sram[id], sec_sram[id]);
+	decon_reg_set_sram_enable(id);
 
 	decon_reg_set_operation_mode(id, config->mode.op_mode);
 
