@@ -153,6 +153,7 @@ struct dpu_bts {
 	u32 afbc_yuv_util_pct;
 	u32 afbc_rgb_rt_util_pct;
 	u32 afbc_yuv_rt_util_pct;
+	u32 afbc_clk_ppc_margin;
 	u32 dfs_lv_cnt;
 	u32 dfs_lv_khz[BTS_DFS_MAX];
 	u32 vbp;

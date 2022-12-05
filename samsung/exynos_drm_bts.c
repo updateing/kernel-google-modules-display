@@ -390,6 +390,8 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 	}
 	aclk_disp = mult_frac(aclk_disp, decon->config.image_height * decon->bts.fps, 1000);
 	aclk_disp_khz = (aclk_disp * margin / 1000) / 1000;
+	if (decon->bts.afbc_clk_ppc_margin && config->is_comp)
+		aclk_disp_khz = mult_frac(aclk_disp_khz, decon->bts.afbc_clk_ppc_margin, 100);
 
 	if (aclk_disp_khz < resol_clk)
 		aclk_disp_khz = resol_clk;

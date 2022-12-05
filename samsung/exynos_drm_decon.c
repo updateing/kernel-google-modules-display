@@ -1680,28 +1680,33 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 	}
 	if (of_property_read_u32(np, "afbc_rgb_util_pct", &decon->bts.afbc_rgb_util_pct)) {
 		decon->bts.afbc_rgb_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_rgb_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_rgb_util_pct is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "afbc_yuv_util_pct", &decon->bts.afbc_yuv_util_pct)) {
 		decon->bts.afbc_yuv_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_yuv_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_yuv_util_pct is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "afbc_rgb_rt_util_pct", &decon->bts.afbc_rgb_rt_util_pct)) {
 		decon->bts.afbc_rgb_rt_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_rgb_rt_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_rgb_rt_util_pct is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "afbc_yuv_rt_util_pct", &decon->bts.afbc_yuv_rt_util_pct)) {
 		decon->bts.afbc_yuv_rt_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_yuv_rt_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_yuv_rt_util_pct is not defined in DT.\n");
+	}
+	if (of_property_read_u32(np, "afbc_clk_ppc_margin", &decon->bts.afbc_clk_ppc_margin)) {
+		decon->bts.afbc_clk_ppc_margin = 0;
+		decon_debug(decon, "INFO: afbc_clk_margin is not defined in DT.\n");
 	}
 
 	decon_debug(decon, "bus_width(%u) bus_util(%u) rot_util(%u)\n",
 			decon->bts.bus_width, decon->bts.bus_util_pct,
 			decon->bts.rot_util_pct);
 
-	decon_debug(decon, "afbc: rgb_util(%u) yuv_util(%u) rgb_rt_util(%u) yuv_rt_util(%u)\n",
+	decon_debug(decon, "afbc: rgb_util(%u) yuv_util(%u) rgb_rt_util(%u) yuv_rt_util(%u) margin(%u)\n",
 			decon->bts.afbc_rgb_util_pct, decon->bts.afbc_yuv_util_pct,
-			decon->bts.afbc_rgb_rt_util_pct, decon->bts.afbc_yuv_rt_util_pct);
+			decon->bts.afbc_rgb_rt_util_pct, decon->bts.afbc_yuv_rt_util_pct,
+			decon->bts.afbc_clk_ppc_margin);
 
 	if (of_property_read_u32(np, "dfs_lv_cnt", &dfs_lv_cnt)) {
 		err_flag = true;
