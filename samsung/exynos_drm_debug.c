@@ -943,6 +943,35 @@ static const struct file_operations dpu_event_fops = {
 	.release = seq_release,
 };
 
+static int dpu_debug_reg_dump_show(struct seq_file *s, void *unused)
+{
+	struct decon_device *decon = s->private;
+	struct drm_printer p = drm_seq_file_printer(s);
+
+	if (decon->state == DECON_STATE_ON &&
+		pm_runtime_get_if_in_use(decon->dev) == 1) {
+		decon_dump(decon, &p);
+		pm_runtime_put(decon->dev);
+	} else {
+		drm_printf(&p, "%s[%u]: DECON disabled(%d)\n",
+			decon->dev->driver->name, decon->id, decon->state);
+	}
+
+	return 0;
+}
+
+static int dpu_debug_reg_dump_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dpu_debug_reg_dump_show, inode->i_private);
+}
+
+static const struct file_operations dpu_reg_dump_fops = {
+	.open = dpu_debug_reg_dump_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
 static bool is_dqe_supported(struct drm_device *drm_dev, u32 dqe_id)
 {
 	struct drm_crtc *crtc;
@@ -1602,6 +1631,7 @@ int dpu_init_debug(struct decon_device *decon)
 	struct drm_crtc *crtc;
 	struct exynos_dqe *dqe = decon->dqe;
 	struct dentry *debug_event;
+	struct dentry *debug_reg_dump;
 	struct dentry *urgent_dent;
 	int ret;
 
@@ -1637,6 +1667,13 @@ int dpu_init_debug(struct decon_device *decon)
 	if (!debug_event) {
 		DRM_ERROR("failed to create debugfs event file\n");
 		goto err_event_log;
+	}
+
+	debug_reg_dump = debugfs_create_file("reg_dump", 0444, crtc->debugfs_entry,
+			decon, &dpu_reg_dump_fops);
+	if (!debug_reg_dump) {
+		DRM_ERROR("failed to create debugfs reg dump file\n");
+		goto err_debugfs;
 	}
 
 	if (!debugfs_create_file("recovery", 0644, crtc->debugfs_entry, decon,
@@ -1987,7 +2024,7 @@ void decon_dump_all(struct decon_device *decon,
 	decon_dump_event_condition(decon, condition);
 
 	if (active) {
-		decon_dump(decon);
+		decon_dump(decon, NULL);
 		pm_runtime_put(decon->dev);
 	}
 }
