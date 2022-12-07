@@ -16,6 +16,7 @@
 #include <linux/ktime.h>
 #include <linux/moduleparam.h>
 #include <linux/pm_runtime.h>
+#include <linux/sysfs.h>
 #include <linux/time.h>
 #include <video/mipi_display.h>
 #include <drm/drm_print.h>
@@ -1416,6 +1417,34 @@ err:
 	debugfs_remove_recursive(dent_dir);
 }
 
+static ssize_t decon_counters_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	uint32_t underrun_cnt, crc_cnt, ecc_cnt, idma_err_cnt;
+	const struct decon_device *decon = to_decon_device(dev);
+
+	if (!decon)
+		return -ENODEV;
+
+	underrun_cnt = decon->d.underrun_cnt;
+	crc_cnt = decon->d.crc_cnt;
+	ecc_cnt = decon->d.ecc_cnt;
+	idma_err_cnt = decon->d.idma_err_cnt;
+
+	return snprintf(buf, PAGE_SIZE,
+			"underrun_cnt: %u\n"
+			"crc_cnt: %u\n"
+			"ecc_cnt: %u\n"
+			"idma_err_cnt: %u\n",
+			underrun_cnt, crc_cnt, ecc_cnt, idma_err_cnt);
+}
+
+static DEVICE_ATTR_RO(decon_counters);
+
+static const struct attribute *decon_debug_attrs[] = {
+	&dev_attr_decon_counters.attr,
+	NULL
+};
+
 static int hibernation_show(struct seq_file *s, void *unused)
 {
 	struct decon_device *decon = s->private;
@@ -1573,6 +1602,7 @@ int dpu_init_debug(struct decon_device *decon)
 	struct exynos_dqe *dqe = decon->dqe;
 	struct dentry *debug_event;
 	struct dentry *urgent_dent;
+	int ret;
 
 	decon->d.event_log = NULL;
 	event_cnt = dpu_event_log_max;
@@ -1617,6 +1647,11 @@ int dpu_init_debug(struct decon_device *decon)
 		DRM_ERROR("failed to create debugfs recovery file\n");
 		goto err_debugfs;
 	}
+
+	/* Create sysfs nodes */
+	ret = sysfs_create_files(&decon->dev->kobj, decon_debug_attrs);
+	if (ret)
+		pr_warn("unable to add decon_debug sysfs files (%d)\n", ret);
 
 	debugfs_create_file("force_te_on", 0664, crtc->debugfs_entry, decon, &force_te_fops);
 	debugfs_create_u32("underrun_cnt", 0664, crtc->debugfs_entry, &decon->d.underrun_cnt);

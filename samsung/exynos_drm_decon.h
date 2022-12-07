@@ -478,6 +478,15 @@ struct decon_device {
 	struct exynos_partial *partial;
 };
 
+static inline struct decon_device *to_decon_device(const struct device *dev)
+{
+	/* could skip with dev_get_drvdata directly, but using pdev because
+	that's how drvdata was set originally */
+	struct platform_device *pdev = to_platform_device(dev);
+
+	return (struct decon_device *)platform_get_drvdata(pdev);
+}
+
 extern struct dpu_bts_ops dpu_bts_control;
 extern struct decon_device *decon_drvdata[MAX_DECON_CNT];
 
