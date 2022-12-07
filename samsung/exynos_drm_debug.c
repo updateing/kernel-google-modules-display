@@ -242,6 +242,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		dpp = (struct dpp_device *)priv;
 		log->data.win.win_idx = dpp->win_id;
 		log->data.win.plane_idx = dpp->id;
+		log->data.win.secure = dpp->protection;
 		break;
 	case DPU_EVT_REQ_CRTC_INFO_OLD:
 	case DPU_EVT_REQ_CRTC_INFO_NEW:
@@ -582,6 +583,8 @@ static const char *get_event_name(enum dpu_event_type type)
 		"DIMMING_START",
 		"DIMMING_END",
 		"CGC_FRAMEDONE",
+		"ITMON_ERROR",
+		"SYSMMU_FAULT",
 	};
 
 	if (type >= DPU_EVT_MAX)
@@ -832,9 +835,10 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_PLANE_UPDATE:
 		case DPU_EVT_PLANE_DISABLE:
 			scnprintf(buf + len, sizeof(buf) - len,
-					"\tCH:%d, WIN:%d",
+					"\tCH:%d, WIN:%d, %s",
 					log->data.win.plane_idx,
-					log->data.win.win_idx);
+					log->data.win.win_idx,
+					log->data.win.secure ? "SECURE" : "");
 			break;
 		case DPU_EVT_REQ_CRTC_INFO_OLD:
 		case DPU_EVT_REQ_CRTC_INFO_NEW:
@@ -2066,6 +2070,7 @@ int dpu_itmon_notifier(struct notifier_block *nb, unsigned long act, void *data)
 	/* port is master and dest is target */
 	if (dpu_itmon_check(decon, itmon_data->port, "itmon,port") ||
 	    dpu_itmon_check(decon, itmon_data->dest, "itmon,dest")) {
+		DPU_EVENT_LOG(DPU_EVT_ITMON_ERROR, decon->id, NULL);
 		pr_info("%s: port: %s, dest: %s\n", __func__,
 				itmon_data->port, itmon_data->dest);
 

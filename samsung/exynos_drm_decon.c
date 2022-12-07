@@ -1353,6 +1353,7 @@ static int dpu_sysmmu_fault_handler(struct iommu_fault *fault, void *data)
 	if (!decon)
 		return 0;
 
+	DPU_EVENT_LOG(DPU_EVT_SYSMMU_FAULT, decon->id, NULL);
 	decon_warn(decon, "%s +\n", __func__);
 
 	decon_dump_all(decon, DPU_EVT_CONDITION_DEFAULT, false);
