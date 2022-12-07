@@ -1973,11 +1973,8 @@ bool decon_dump_ignore(enum dpu_event_condition condition)
 void decon_dump_all(struct decon_device *decon,
 		enum dpu_event_condition condition, bool async_buf_dump)
 {
-	bool active = pm_runtime_active(decon->dev);
+	bool active;
 	struct kthread_worker *worker = &decon->worker;
-
-	pr_info("%s: power %s state\n",
-		dev_name(decon->dev), active ? "on" : "off");
 
 	if (decon_dump_ignore(condition))
 		return;
@@ -1990,10 +1987,16 @@ void decon_dump_all(struct decon_device *decon,
 			buf_dump_all(decon);
 	}
 
+	active = pm_runtime_get_if_in_use(decon->dev) == 1;
+	pr_info("%s: power %s state\n",
+		dev_name(decon->dev), active ? "on" : "off");
+
 	decon_dump_event_condition(decon, condition);
 
-	if (active)
+	if (active) {
 		decon_dump(decon);
+		pm_runtime_put(decon->dev);
+	}
 }
 
 void decon_dump_event_condition(const struct decon_device *decon,
