@@ -182,20 +182,100 @@ int histogram_cancel_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
+/*
+ * configure histogram channel
+ */
+int histogram_chan_configure(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
+			     struct histogram_chan_config *config, u32 flags)
+{
+	struct decon_device *decon = dqe->decon;
+	u32 id = decon->id;
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return -EINVAL;
+
+	if (flags & HIST_CHAN_THRESHOLD)
+		dqe_reg_set_histogram_threshold(id, hist_id, config->threshold);
+
+	if (flags & HIST_CHAN_POS)
+		dqe_reg_set_histogram_pos(id, hist_id, config->pos);
+
+	if (flags & HIST_CHAN_ROI)
+		dqe_reg_set_histogram_roi(id, hist_id, &config->roi);
+
+	if (flags & HIST_CHAN_WEIGHTS)
+		dqe_reg_set_histogram_weights(id, hist_id, &config->weights);
+
+	return 0;
+}
+
+int histogram_chan_start(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
+			 const enum histogram_state hist_state, histogram_chan_callback hist_cb)
+{
+	struct decon_device *decon = dqe->decon;
+	u32 id = decon->id;
+
+	pr_debug("decon_id=%u, hist_id=%d hist_state=%d, curr_state=%d\n", id, hist_id, hist_state,
+		 dqe->state.hist_chan[hist_id].hist_state);
+
+	if (!dqe || hist_id >= HISTOGRAM_MAX)
+		return -EINVAL;
+
+	dqe->state.hist_chan[hist_id].hist_cb = hist_cb;
+	dqe->state.hist_chan[hist_id].hist_state = hist_state;
+	dqe_reg_set_histogram(id, hist_id, hist_state);
+
+	return 0;
+}
+
+int histogram_chan_stop(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id)
+{
+	struct decon_device *decon = dqe->decon;
+	u32 id = decon->id;
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return -EINVAL;
+
+	if (dqe->state.hist_chan[hist_id].hist_state == HISTOGRAM_OFF)
+		return 0;
+
+	dqe->state.hist_chan[hist_id].hist_cb = NULL;
+	dqe->state.hist_chan[hist_id].hist_state = HISTOGRAM_OFF;
+	dqe_reg_set_histogram(id, hist_id, HISTOGRAM_OFF);
+
+	return 0;
+}
+
 void handle_histogram_event(struct exynos_dqe *dqe)
 {
 	/* This function runs in interrupt context */
 	struct exynos_drm_pending_histogram_event *e;
 	struct drm_device *dev = dqe->decon->drm_dev;
-	uint32_t id, crtc_id;
+	uint32_t id, crtc_id, hist_id;
 
 	spin_lock(&dqe->state.histogram_slock);
 	crtc_id = dqe->decon->crtc->base.base.id;
 	id = dqe->decon->id;
+
+	/* collect data from all active channels */
+	for (hist_id = 0; hist_id < HISTOGRAM_MAX; hist_id++) {
+		histogram_chan_callback hist_cb = dqe->state.hist_chan[hist_id].hist_cb;
+
+		if (dqe->state.hist_chan[hist_id].hist_state == HISTOGRAM_OFF)
+			continue;
+
+		pr_debug("collect dqe%d channel%d histogram\n", id, hist_id);
+		dqe_reg_get_histogram_bins(id, hist_id, &dqe->state.hist_chan[hist_id].hist_bins);
+		if (hist_cb)
+			(hist_cb)(id, hist_id, &dqe->state.hist_chan[hist_id].hist_bins);
+	}
+
+	/* drm framework update */
 	e = dqe->state.event;
 	if (e) {
 		pr_debug("Histogram event(0x%pK) will be handled\n", dqe->state.event);
-		dqe_reg_get_histogram_bins(id, dqe->state.histogram_id, &e->event.bins);
+		memcpy(&e->event.bins, &dqe->state.hist_chan[dqe->state.histogram_id],
+		       sizeof(struct histogram_bins));
 		e->event.crtc_id = crtc_id;
 		drm_send_event(dev, &e->base);
 		pr_debug("histogram event of decon%u signalled\n", dqe->decon->id);
@@ -383,6 +463,41 @@ exynos_dither_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 		dqe_reg_print_dither(id, DISP_DITHER, &p);
 }
 
+#ifdef CONFIG_SOC_ZUMA
+static void exynos_lhbm_histogram_callback(u32 dqe_id, enum exynos_histogram_id hist_id,
+					   struct histogram_bins *hist_bins)
+{
+	u32 i = 0, sum = 0;
+	u32 weighted_sum = 0;
+	struct decon_device *decon = get_decon_drvdata(dqe_id);
+
+	if (hist_id != HISTOGRAM_CHAN_LHBM)
+		return;
+
+	/* data is u16 not u8 */
+	for (i = 0; i < HISTOGRAM_BIN_COUNT; i++) {
+		sum += hist_bins->data[i];
+		weighted_sum += hist_bins->data[i] * i;
+	}
+	if (sum == 0)
+		return;
+	decon->dqe->lhbm_gray_level = weighted_sum / sum;
+}
+
+static void exynos_lhbm_histogram_update(struct decon_device *decon)
+{
+	u32 flags = HIST_CHAN_THRESHOLD | HIST_CHAN_POS | HIST_CHAN_ROI | HIST_CHAN_WEIGHTS;
+
+	if (!decon || !decon->dqe || decon->dqe->lhbm_hist_config.roi.hsize == 0)
+		return;
+
+	histogram_chan_configure(decon->dqe, HISTOGRAM_CHAN_LHBM, &decon->dqe->lhbm_hist_config,
+				 flags);
+	histogram_chan_start(decon->dqe, HISTOGRAM_CHAN_LHBM, HISTOGRAM_ROI,
+			     exynos_lhbm_histogram_callback);
+}
+#endif
+
 static void exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 {
 	enum histogram_state hist_state;
@@ -422,7 +537,10 @@ static void exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_st
 	else
 		hist_state = HISTOGRAM_OFF;
 
-	dqe_reg_set_histogram(id, hist_id, hist_state);
+	histogram_chan_start(dqe, hist_id, hist_state, NULL);
+#ifdef CONFIG_SOC_ZUMA
+	exynos_lhbm_histogram_update(decon);
+#endif
 
 	if (dqe->verbose_hist)
 		dqe_reg_print_hist(id, &p);

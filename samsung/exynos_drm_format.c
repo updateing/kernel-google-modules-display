@@ -247,7 +247,32 @@ static const struct dpu_fmt dpu_formats_list[] = {
 		.num_planes = 1,
 		.len_alpha = 0,
 		.cs = DPU_COLORSPACE_YUV420,
-        },
+		},
+#ifdef CONFIG_SOC_ZUMA
+		{
+		.name = "ARGB16161616",
+		.fmt = DRM_FORMAT_ARGB16161616F,
+		.dma_fmt = IDMA_IMG_FORMAT_ARGB_FP16,
+		.dpp_fmt = DPP_IMG_FORMAT_ARGB8101010,
+		.bpp = 64,
+		.padding = 0,
+		.bpc = 16,
+		.num_planes = 1,
+		.len_alpha = 16,
+		.cs = DPU_COLORSPACE_RGB,
+		}, {
+		.name = "ABGR16161616",
+		.fmt = DRM_FORMAT_ABGR16161616F,
+		.dma_fmt = IDMA_IMG_FORMAT_ABGR_FP16,
+		.dpp_fmt = DPP_IMG_FORMAT_ARGB8101010,
+		.bpp = 64,
+		.padding = 0,
+		.bpc = 16,
+		.num_planes = 1,
+		.len_alpha = 16,
+		.cs = DPU_COLORSPACE_RGB,
+		},
+#endif
 };
 
 const struct dpu_fmt *dpu_find_fmt_info(u32 fmt)

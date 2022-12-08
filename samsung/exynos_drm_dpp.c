@@ -81,6 +81,11 @@ static const uint32_t dpp_gf_formats[] = {
 	DRM_FORMAT_ABGR2101010,
 	DRM_FORMAT_RGBA1010102,
 	DRM_FORMAT_BGRA1010102,
+#ifdef CONFIG_SOC_ZUMA
+	DRM_FORMAT_ARGB16161616F,
+	DRM_FORMAT_ABGR16161616F,
+#endif
+
 };
 
 /* TODO: NV12M, NV12N, NV12_P010, ... modifier? */
@@ -106,6 +111,11 @@ static const uint32_t dpp_vg_formats[] = {
 	DRM_FORMAT_P010,
 	DRM_FORMAT_YUV420_8BIT,
 	DRM_FORMAT_YUV420_10BIT,
+#ifdef CONFIG_SOC_ZUMA
+	DRM_FORMAT_ARGB16161616F,
+	DRM_FORMAT_ABGR16161616F,
+#endif
+
 };
 
 static const uint32_t rcd_alpha_formats[] = {

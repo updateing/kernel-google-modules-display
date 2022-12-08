@@ -67,6 +67,8 @@ enum exynos_histogram_id {
 	HISTOGRAM_3,
 	HISTOGRAM_MAX,
 };
+
+#define HISTOGRAM_CHAN_LHBM HISTOGRAM_1
 #else
 enum exynos_histogram_id {
 	HISTOGRAM_0,
