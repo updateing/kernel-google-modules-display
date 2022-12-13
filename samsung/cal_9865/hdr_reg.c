@@ -38,6 +38,15 @@ void hdr_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 	regs_hdr[id].start = start;
 }
 
+void hdr_reg_set_fp16(u32 id, bool fp16_en, bool fp16_cvt_en)
+{
+	cal_log_debug(id, "%s +\n", __func__);
+	hdr_write_mask(id, HDR_HDR_CON,
+			FP16_EN(fp16_en) | FP16_CVT_EN(fp16_cvt_en),
+			(FP16_EN_MASK | FP16_CVT_EN_MASK));
+	cal_log_debug(id, "%s -\n", __func__);
+}
+
 void hdr_reg_set_hdr(u32 id, bool en)
 {
 	cal_log_debug(id, "%s +\n", __func__);

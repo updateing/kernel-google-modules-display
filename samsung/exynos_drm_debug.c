@@ -1834,6 +1834,8 @@ int exynos_drm_debugfs_plane_add(struct exynos_drm_plane *exynos_plane)
 			goto err;
 
 #if defined(CONFIG_SOC_ZUMA)
+		debugfs_create_bool("fp16_en", 0664, hdr_dent, &hdr->fp16_en);
+		debugfs_create_bool("fp16_cvt_en", 0664, hdr_dent, &hdr->fp16_cvt_en);
 		ent = exynos_debugfs_add_hdr_lut_v2p2("eotf", hdr_dent,
 				&hdr->eotf.info, hdr->eotf.force_lut.ts,
 				DRM_SAMSUNG_HDR_EOTF_V2P2_LUT_LEN, ELEM_SIZE_32,
