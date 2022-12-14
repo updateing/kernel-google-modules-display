@@ -68,6 +68,12 @@
 
 struct dsim_device *dsim_drvdata[MAX_DSI_CNT];
 
+/*
+ * This global mutex lock protects to initialize or de-initialize DSIM and DPHY
+ * hardware when multi display is in operation
+ */
+DEFINE_MUTEX(g_dsim_lock);
+
 #define PANEL_DRV_LEN 64
 #define RETRY_READ_FIFO_MAX 10
 
@@ -242,8 +248,10 @@ static void _dsim_exit_ulps_locked(struct dsim_device *dsim)
 
 	dsim_phy_power_on(dsim);
 
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, false);
 	dsim_reg_exit_ulps_and_start(dsim->id, 0, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 
 	dsim->state = DSIM_STATE_HSCLKEN;
 	enable_irq(dsim->irq);
@@ -290,8 +298,10 @@ static void _dsim_enable(struct dsim_device *dsim)
 
 	dsim_phy_power_on(dsim);
 
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, true);
 	dsim_reg_start(dsim->id);
+	mutex_unlock(&g_dsim_lock);
 
 	/* TODO: dsi start: enable irq, sfr configuration */
 	dsim->state = DSIM_STATE_HSCLKEN;
@@ -374,7 +384,9 @@ static void _dsim_enter_ulps_locked(struct dsim_device *dsim)
 	mutex_unlock(&dsim->cmd_lock);
 
 	disable_irq(dsim->irq);
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_stop_and_enter_ulps(dsim->id, 0, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 
 	dsim_phy_power_off(dsim);
 
@@ -412,8 +424,10 @@ static void _dsim_disable(struct dsim_device *dsim)
 
 	/* Wait for current read & write CMDs. */
 	mutex_lock(&dsim->cmd_lock);
+	mutex_lock(&g_dsim_lock);
 	/* TODO: 0x1F will be changed */
 	dsim_reg_stop(dsim->id, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 	disable_irq(dsim->irq);
 
 	dsim->state = DSIM_STATE_SUSPEND;
@@ -802,11 +816,15 @@ getnode_fail:
 static void dsim_restart(struct dsim_device *dsim)
 {
 	mutex_lock(&dsim->cmd_lock);
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_stop(dsim->id, 0x1F);
+	mutex_unlock(&g_dsim_lock);
 	disable_irq(dsim->irq);
 
+	mutex_lock(&g_dsim_lock);
 	dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, true);
 	dsim_reg_start(dsim->id);
+	mutex_unlock(&g_dsim_lock);
 	enable_irq(dsim->irq);
 	mutex_unlock(&dsim->cmd_lock);
 }
