@@ -292,6 +292,54 @@ static int dp_sink_power_up(struct dp_device *dp, bool up)
 	return 0;
 }
 
+static unsigned long dp_max_hdcp_ver = 2;    /* HDCP2 is the default */
+module_param(dp_max_hdcp_ver, ulong, 0664);
+MODULE_PARM_DESC(dp_max_hdcp_ver,
+	"support up to specific hdcp version by setting dp_max_hdcp_ver=x");
+
+#define DPCD_HDCP_2_2_REG_RX_CAPS_SIZE 3
+
+static void dp_check_hdcp_cap(struct dp_device *dp)
+{
+	u8 hdcp13_bcap = 0;
+	u8 hdcp22_rxcap[DPCD_HDCP_2_2_REG_RX_CAPS_SIZE];
+	int ret;
+
+	dp->hdcp_config.hdcp_ver = HDCP_VERSION_NONE;
+
+	// Check HDCP 1.3 Capability
+	drm_dp_dpcd_readb(&dp->dp_aux, DP_AUX_HDCP_BCAPS, &hdcp13_bcap);
+	if (hdcp13_bcap & DP_BCAPS_HDCP_CAPABLE) {
+		dp_info(dp, "DP Sink supports HDCP 1.3\n");
+		if (dp_max_hdcp_ver >= 1)
+			dp->hdcp_config.hdcp_ver = HDCP_VERSION_1_3;
+		else
+			dp_info(dp, "Manually unsupporting HDCP 1.3\n");
+	}
+
+	if (hdcp13_bcap & DP_BCAPS_REPEATER_PRESENT) {
+		dp_info(dp, "DP Sink supports repeater\n");
+		dp->hdcp_config.hdcp13_info.is_repeater = 1;
+	} else
+		dp->hdcp_config.hdcp13_info.is_repeater = 0;
+
+	// Check HDCP 2.x Capability
+	memset(hdcp22_rxcap, 0, DPCD_HDCP_2_2_REG_RX_CAPS_SIZE);
+	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_HDCP_2_2_REG_RX_CAPS_OFFSET,
+		hdcp22_rxcap, DPCD_HDCP_2_2_REG_RX_CAPS_SIZE);
+	if ((ret == DPCD_HDCP_2_2_REG_RX_CAPS_SIZE) &&
+	    (hdcp22_rxcap[0] == 2) && (((hdcp22_rxcap[2] & 0x02) >> 1) != 0)) {
+		dp_info(dp, "DP Sink supports HDCP 2.2\n");
+		if (dp_max_hdcp_ver >= 2)
+			dp->hdcp_config.hdcp_ver = HDCP_VERSION_2_2;
+		else
+			dp_info(dp, "Manually unsupporting HDCP 2.2\n");
+	}
+
+	dp_info(dp, "HDCP version to be used: %02x\n",
+		dp->hdcp_config.hdcp_ver);
+}
+
 static u32 dp_get_training_interval_us(struct dp_device *dp, u32 interval)
 {
 	if (interval == 0)
@@ -378,6 +426,16 @@ static void dp_set_hwconfig_dplink(struct dp_device *dp)
 	dp->hw_config.num_lanes = dp->link.num_lanes;
 }
 
+static void dp_set_hwconfig_hdcp(struct dp_device *dp)
+{
+	if (dp->hdcp_config.hdcp_ver == HDCP_VERSION_1_3)
+		dp->hw_config.hdcp = HDCP_MODE_1_3;
+	else if (dp->hdcp_config.hdcp_ver == HDCP_VERSION_2_2)
+		dp->hw_config.hdcp = HDCP_MODE_2_2;
+	else
+		dp->hw_config.hdcp = HDCP_MODE_NONE;
+}
+
 static void dp_set_hwconfig_video(struct dp_device *dp)
 {
 	dp->hw_config.enhanced_mode = dp_get_enhanced_mode(dp);
@@ -412,6 +470,7 @@ static void dp_init_link_training_cr(struct dp_device *dp)
 
 	/* Reconfigure DP HW */
 	dp_set_hwconfig_dplink(dp);
+	dp_set_hwconfig_hdcp(dp);
 	dp_set_hwconfig_video(dp);
 	dp_hw_reinit(&dp->hw_config);
 	dp_info(dp, "HW configured with Rate(%d) and Lanes(%u)\n",
@@ -740,6 +799,9 @@ static int dp_link_up(struct dp_device *dp)
 	dp_info(dp, "DP Link: training start: Rate(%u Mbps) and Lanes(%u)\n",
 		dp->link.link_rate / 100, dp->link.num_lanes);
 
+	// Read DP Sink device's HDCP Capabilities
+	dp_check_hdcp_cap(dp);
+
 	// Link Training
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
 	interval_us = dp_get_training_interval_us(dp, interval);
@@ -899,6 +961,33 @@ static int dp_set_audio_infoframe(struct dp_device *dp)
 	return 0;
 }
 
+static void dp_check_hdcp_authentication(struct dp_device *dp)
+{
+	// Check Valid HDCP Key
+	if (dp->hdcp_config.hdcp_ver == HDCP_VERSION_1_3) {
+		if (dp_hw_get_hdcp13_key_valid()) {
+			dp_info(dp, "[HDCP 1.3] HDCP key is valid\n");
+
+			// Do Authentication
+			queue_delayed_work(dp->hdcp_wq, &dp->hdcp13_work, msecs_to_jiffies(5500));
+		} else {
+			dp_err(dp, "[HDCP 1.3] HDCP key is not valid, HDCP cannot support\n");
+			dp->hdcp_config.hdcp_ver = HDCP_VERSION_NONE;
+		}
+	}
+}
+
+static void dp_hdcp_start(struct dp_device *dp)
+{
+	if (dp->hdcp_config.hdcp_ver == HDCP_VERSION_2_2)
+		queue_delayed_work(dp->hdcp_wq, &dp->hdcp22_work, msecs_to_jiffies(5500));
+	else if (dp->hdcp_config.hdcp_ver == HDCP_VERSION_1_3 &&
+		 dp->hdcp_config.hdcp13_info.auth_state != HDCP13_STATE_AUTHENTICATED)
+		queue_delayed_work(dp->hdcp_wq, &dp->hdcp13_work, msecs_to_jiffies(5500));
+	else
+		dp_info(dp, "HDCP is not supported\n");
+}
+
 static void dp_enable(struct drm_encoder *encoder)
 {
 	struct dp_device *dp = encoder_to_dp(encoder);
@@ -922,6 +1011,7 @@ static void dp_enable(struct drm_encoder *encoder)
 
 	enable_irq(dp->res.irq);
 	dp_hw_start();
+	dp_hdcp_start(dp);
 	dp_info(dp, "enabled DP as cur_mode = %s@%d\n", dp->cur_mode.name,
 		drm_mode_vrefresh(&dp->cur_mode));
 
@@ -1222,6 +1312,7 @@ static void dp_work_hpd_plug(struct work_struct *work)
 		/* PHY power on */
 		usleep_range(10000, 10030);
 		dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
+		hdcp_dplink_connect_state(DP_CONNECT);
 		usleep_range(10000, 11000);
 
 		if (dp_check_dp_sink(dp) < 0) {
@@ -1234,6 +1325,8 @@ static void dp_work_hpd_plug(struct work_struct *work)
 			goto HPD_FAIL;
 		}
 
+		dp_check_hdcp_authentication(dp);
+
 		dp_on_by_hpd_plug(dp);
 
 		mutex_unlock(&dp->hpd_lock);
@@ -1245,7 +1338,7 @@ HPD_FAIL:
 	dp_err(dp, "HPD FAIL Check CCIC or USB!!\n");
 	dp_set_hpd_state(dp, EXYNOS_HPD_UNPLUG);
 	dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
-
+	hdcp_dplink_connect_state(DP_DISCONNECT);
 	dp_hw_deinit(&dp->hw_config);
 	dp_disable_dposc(dp);
 	pm_relax(dp->dev);
@@ -1267,7 +1360,7 @@ static void dp_work_hpd_unplug(struct work_struct *work)
 
 	if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
 		mutex_lock(&dp->hpd_lock);
-
+		hdcp_dplink_connect_state(DP_DISCONNECT);
 		dp_off_by_hpd_plug(dp);
 		dp_link_down(dp);
 
@@ -1286,6 +1379,453 @@ static void dp_work_hpd_unplug(struct work_struct *work)
 		mutex_unlock(&dp->hpd_lock);
 	}
 }
+
+static int dp_hdcp22_irq_handler(struct dp_device *dp)
+{
+	struct dp_hdcp22_info *info = &dp->hdcp_config.hdcp22_info;
+	uint8_t rxstatus = 0;
+	int ret = 0;
+
+	hdcp_dplink_get_rxstatus(&rxstatus);
+
+	if (HDCP_2_2_DP_RXSTATUS_REAUTH_REQ(rxstatus)) {
+		/* hdcp22 disable while re-authentication */
+		ret = hdcp_dplink_set_reauth();
+		info->reauth_trigger = 1;
+		queue_delayed_work(dp->hdcp_wq, &dp->hdcp22_work, msecs_to_jiffies(100));
+		dp_info(dp, "REAUTH_REQ HDCP2 enc off\n");
+	} else if (HDCP_2_2_DP_RXSTATUS_PAIRING(rxstatus)) {
+		/* set pairing avaible flag */
+		ret = hdcp_dplink_set_paring_available();
+	} else if (HDCP_2_2_DP_RXSTATUS_H_PRIME(rxstatus)) {
+		/* set hprime avaible flag */
+		ret = hdcp_dplink_set_hprime_available();
+	} else if (HDCP_2_2_DP_RXSTATUS_READY(rxstatus)) {
+		/* set ready avaible flag */
+		/* todo update stream Management */
+		ret = hdcp_dplink_set_rp_ready();
+		return hdcp_dplink_auth_check(HDCP_RP_READY);
+	} else {
+		dp_info(dp, "undefined RxStatus(0x%x). ignore\n", rxstatus);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static void dp_hdcp13_irq_handler(struct dp_device *dp)
+{
+	dp->hdcp_config.hdcp13_info.cp_irq_flag = 1;
+	if (dp->hdcp_config.hdcp13_info.auth_state != HDCP13_STATE_AUTH_PROCESS)
+	{
+		dp->hdcp_config.hdcp13_info.link_check = LINK_CHECK_NEED;
+		// TODO: do link integrity check
+	}
+	// TODO: handle irq during auth process
+}
+
+static void dp_work_hpd_irq(struct work_struct *work)
+{
+	struct dp_device *dp = get_dp_drvdata();
+	u8 irq = 0;
+
+	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR,
+		&irq) <= 0)
+		return;
+
+	if (irq & DP_CP_IRQ) {
+		dp_info(dp, "occurred Content Protection IRQ\n");
+		if (dp->hdcp_config.hdcp_ver == HDCP_VERSION_2_2)
+			dp_hdcp22_irq_handler(dp);
+		else if (dp->hdcp_config.hdcp_ver == HDCP_VERSION_1_3)
+			dp_hdcp13_irq_handler(dp);
+		else
+			dp_warn(dp, "no handler for this IRQ\n");
+	} else if (irq & DP_AUTOMATED_TEST_REQUEST) {
+		dp_info(dp, "occurred Automated Test Request IRQ\n");
+	} else
+		dp_info(dp, "occurred unknown IRQ (0x%X)\n", irq);
+}
+
+static int dp_compare_hdcp13_ri(struct dp_device *dp)
+{
+	struct dp_hdcp13_info *info = &dp->hdcp_config.hdcp13_info;
+	u8 cnt = 0, ri_retry_cnt = 0;
+	ktime_t start_time_ns;
+	s64 waiting_time_ms = 0;
+	u8 hdcp_bstatus, hdcp_r0[HDCP_R0_SIZE], ri_src[HDCP_R0_SIZE];
+	u32 r0_src;
+
+	// Step0-1. Wait CP_IRQ
+	while ((info->cp_irq_flag != 1) && (cnt < RI_WAIT_COUNT)) {
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)
+			return -EFAULT;
+
+		usleep_range(RI_AVAILABLE_WAITING * 1000, RI_AVAILABLE_WAITING * 1000 + 1);
+		cnt++;
+	}
+
+	if (cnt >= RI_WAIT_COUNT) {
+		dp_info(dp, "[HDCP 1.3] Don't receive CP_IRQ during 100ms\n");
+	}
+
+	info->cp_irq_flag = 0;
+
+	// Step0-2. Wait R0 Available
+	start_time_ns = ktime_get();
+	drm_dp_dpcd_readb(&dp->dp_aux, DP_AUX_HDCP_BSTATUS, &hdcp_bstatus);
+	while (!(hdcp_bstatus & DP_BSTATUS_R0_PRIME_READY) && waiting_time_ms < RI_DELAY) {
+		usleep_range(RI_AVAILABLE_WAITING * 1000, RI_AVAILABLE_WAITING * 1000 + 1);
+		waiting_time_ms = (s64)((ktime_get() - start_time_ns) / 1000000);
+
+		drm_dp_dpcd_readb(&dp->dp_aux, DP_AUX_HDCP_BSTATUS, &hdcp_bstatus);
+	}
+
+	if (waiting_time_ms >= RI_DELAY) {
+		dp_info(dp, "[HDCP 1.3] R0-Prime is not ready during %lld ms\n",
+				waiting_time_ms);
+		return -EFAULT;
+	}
+	dp_info(dp, "[HDCP 1.3] R0-Prime is ready in HDCP Receiver\n");
+
+	while (ri_retry_cnt < RI_READ_RETRY_CNT) {
+		// Step1. Read R0-Prime from HDCP Receiver
+		drm_dp_dpcd_read(&dp->dp_aux, DP_AUX_HDCP_RI_PRIME, hdcp_r0, HDCP_R0_SIZE);
+
+		// Step2. Read R0 from HDCP Transmitter
+		dp_hw_get_hdcp13_r0(&r0_src);
+		ri_src[0] = (u8)(r0_src & 0xFF);
+		ri_src[1] = (u8)((r0_src >> 8) & 0xFF);
+
+		// Step3. Compare R0 and R0-Prime
+		if ((ri_src[0] == hdcp_r0[0]) && (ri_src[1] == hdcp_r0[1])) {
+			dp_info(dp, "[HDCP 1.3] RI_Tx(0x%02x%02x) == RI_Rx(0x%02x%02x)\n",
+				ri_src[1], ri_src[0], hdcp_r0[1], hdcp_r0[0]);
+			return 0;
+		} else {
+			dp_info(dp, "[HDCP 1.3] RI_Tx(0x%02x%02x) != RI_Rx(0x%02x%02x)\n",
+				ri_src[1], ri_src[0], hdcp_r0[1], hdcp_r0[0]);
+		}
+
+		usleep_range(RI_DELAY * 1000, RI_DELAY * 1000 + 1);
+		ri_retry_cnt++;
+	}
+
+	return -EFAULT;
+}
+
+static void hdcp13_make_sha1_input_buf(u8 *sha1_input_buf, u8 *binfo)
+{
+	int i = 0;
+	u8 am0[HDCP_M0_SIZE] = {0,};
+
+	for (i = 0; i < HDCP_BINFO_SIZE; i++)
+		sha1_input_buf[HDCP_KSV_SIZE + i] = binfo[i];
+
+	dp_hw_get_hdcp13_am0(am0);
+	for (i = 0; i < HDCP_M0_SIZE; i++)
+		sha1_input_buf[HDCP_KSV_SIZE + HDCP_BINFO_SIZE + i] = am0[i];
+}
+
+static void hdcp13_v_value_order_swap(u8 *v_value)
+{
+	int i;
+	u8 temp;
+
+	for (i = 0; i < HDCP_SHA1_SIZE; i += 4) {
+		temp = v_value[i];
+		v_value[i] = v_value[i + 3];
+		v_value[i + 3] = temp;
+		temp = v_value[i + 1];
+		v_value[i + 1] = v_value[i + 2];
+		v_value[i + 2] = temp;
+	}
+}
+
+static int hdcp13_compare_v(struct dp_device *dp, u8 *tx_v_value)
+{
+	int i = 0;
+	int ret = 0;
+	u8 v_read_retry_cnt = 0;
+	u8 hdcp_vprime[HDCP_SHA1_SIZE];
+
+	while(v_read_retry_cnt < V_READ_RETRY_CNT) {
+		ret = 0;
+
+		drm_dp_dpcd_read(&dp->dp_aux, DP_AUX_HDCP_V_PRIME(0),
+				 hdcp_vprime, HDCP_SHA1_SIZE);
+
+		v_read_retry_cnt++;
+
+		for (i = 0; i < HDCP_SHA1_SIZE; i++) {
+			if (tx_v_value[i] != hdcp_vprime[i])
+				ret = -EFAULT;
+		}
+
+		if (ret == 0)
+			break;
+	}
+
+	return ret;
+}
+
+static int hdcp13_proceed_repeater(struct dp_device *dp)
+{
+	struct dp_hdcp13_info *info = &dp->hdcp_config.hdcp13_info;
+	int retry_cnt = HDCP_RETRY_AUTH_COUNT;
+	int cnt = 0;
+	ktime_t start_time_ns;
+	s64 waiting_time_ms;
+	u8 hdcp_bstatus, hdcp_binfo[HDCP_BINFO_SIZE], hdcp_ksv[HDCP_KSV_SIZE];
+	u8 sha1_input_buf[HDCP_SHA1_INPUT_SIZE] = {0,};
+	u8 v_value[HDCP_SHA1_SIZE] = {0,};
+	u32 b_info = 0;
+	u8 device_cnt = 0;
+	int i, ret;
+
+	dp_info(dp, "[HDCP 1.3] Start HDCP Repeater Authentication!!!\n");
+
+	// Step0-1. Wait CP_IRQ
+	while ((info->cp_irq_flag != 1) && (cnt < RI_WAIT_COUNT)) {
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)
+			return -EINVAL;
+
+		usleep_range(RI_AVAILABLE_WAITING * 1000, RI_AVAILABLE_WAITING * 1000 + 1);
+		cnt++;
+	}
+
+	if (cnt >= RI_WAIT_COUNT)
+		dp_info(dp, "[HDCP 1.3] Don't receive CP_IRQ\n");
+
+	info->cp_irq_flag = 0;
+
+	// Step0-2. Wait BStatus Ready
+	start_time_ns = ktime_get();
+	drm_dp_dpcd_readb(&dp->dp_aux, DP_AUX_HDCP_BSTATUS, &hdcp_bstatus);
+	while (!(hdcp_bstatus & DP_BSTATUS_READY)) {
+		usleep_range(RI_AVAILABLE_WAITING * 1000, RI_AVAILABLE_WAITING * 1000 + 1);
+		waiting_time_ms = (s64)((ktime_get() - start_time_ns) / 1000000);
+		if ((waiting_time_ms >= REPEATER_READY_MAX_WAIT_DELAY) ||
+		    (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)) {
+			dp_info(dp, "[HDCP 1.3] Not repeater ready in RX part %lld\n",
+				waiting_time_ms);
+			info->auth_state = HDCP13_STATE_FAIL;
+			return -EINVAL;
+		}
+
+		drm_dp_dpcd_readb(&dp->dp_aux, DP_AUX_HDCP_BSTATUS, &hdcp_bstatus);
+	}
+	dp_info(dp, "[HDCP 1.3] Ready HDCP RX Repeater!!!\n");
+
+	while ((info->auth_state == HDCP13_STATE_AUTH_PROCESS) && (retry_cnt != 0)) {
+		retry_cnt--;
+
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)
+			return -EINVAL;
+
+		// Step1. Read BINFO from sink
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_AUX_HDCP_BINFO,
+			hdcp_binfo, HDCP_BINFO_SIZE);
+		if (ret != HDCP_BINFO_SIZE) {
+			dp_info(dp, "[HDCP 1.3] Read BINFO failed. ReAuth!\n");
+			continue;
+		}
+
+		// Step2. Read KSV from sink
+		for (i = 0; i < HDCP_BINFO_SIZE; i++)
+			b_info |= hdcp_binfo[i] << (i * 8);
+
+		device_cnt = b_info & BINFO_DEVICE_COUNT;
+		if (device_cnt != 1) {
+			dp_err(dp, "[HDCP 1.3] Abnormal BINFO count(%u)\n", device_cnt);
+			return -EINVAL;
+		}
+
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_AUX_HDCP_KSV_FIFO,
+			hdcp_ksv, HDCP_KSV_SIZE);
+		if (ret != HDCP_KSV_SIZE) {
+			dp_info(dp, "[HDCP 1.3] Read KSV failed. ReAuth!\n");
+			continue;
+		}
+
+		for (i = 0; i < HDCP_KSV_SIZE; i++)
+			sha1_input_buf[i] = hdcp_ksv[i];
+
+		// Step3. need calculation of V = SHA-1(KSV || Binfo || M0)
+		hdcp13_make_sha1_input_buf(sha1_input_buf, hdcp_binfo);
+		hdcp13_v_value_order_swap(v_value);
+		if (hdcp13_compare_v(dp, v_value) == 0) {
+			info->auth_state = HDCP13_STATE_SECOND_AUTH_DONE;
+			dp_info(dp, "[HDCP 1.3] Done 2nd Authentication!!!\n");
+			return 0;
+		}
+
+		dp_info(dp, "[HDCP 1.3] 2nd Auth fail!!!\n");
+	}
+
+	return -EINVAL;
+}
+
+static void dp_do_hdcp13_authentication(struct dp_device *dp)
+{
+	struct dp_hdcp13_info *info = &dp->hdcp_config.hdcp13_info;
+	int retry_cnt = HDCP_RETRY_AUTH_COUNT;
+	u8 hdcp_bksv[HDCP_BKSV_SIZE], hdcp_an[HDCP_AN_SIZE], hdcp_aksv[HDCP_AKSV_SIZE];
+	int i, j, one = 0;
+	int ret;
+
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)
+		goto HDCP13_END;
+
+	dp_hw_set_hdcp13_function(1);
+	dp_hw_set_hdcp13_encryption(0);
+	dp_hw_set_hdcp13_repeater(info->is_repeater);
+
+	info->auth_state = HDCP13_STATE_AUTH_PROCESS;
+	dp_info(dp, "[HDCP 1.3] Start SW Authentication\n");
+
+	while ((info->auth_state == HDCP13_STATE_AUTH_PROCESS) && (retry_cnt != 0)) {
+		retry_cnt--;
+
+		// Step1. Read Bksv from HDCP Receiver
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_AUX_HDCP_BKSV,
+			hdcp_bksv, HDCP_BKSV_SIZE);
+		if (ret != HDCP_BKSV_SIZE) {
+			dp_info(dp, "[HDCP 1.3] Read Bksv failed. ReAuth!\n");
+			continue;
+		}
+		dp_info(dp, "[HDCP 1.3] Bksv : 0x%02X%02X%02X%02X%02X\n",
+			hdcp_bksv[0], hdcp_bksv[1], hdcp_bksv[2],
+			hdcp_bksv[3], hdcp_bksv[4]);
+
+		// Step2. Check Bksv is valid
+		// Valid BKSV must contain 20 ones and 20 zeros.
+		for (i = 0; i < HDCP_BKSV_SIZE; i++) {
+			for (j = 0; j < 8; j++) {
+				if (hdcp_bksv[i] & (0x1 << j))
+					one++;
+			}
+		}
+
+		if (one != 20) {
+			dp_info(dp, "[HDCP 1.3] Invalid Bksv, ReAuth!\n");
+			continue;
+		} else
+			dp_info(dp, "[HDCP 1.3] Valid Bksv\n");
+
+		// Step3. Set Bksv to HDCP Transmitter
+		dp_hw_set_hdcp13_bksv(hdcp_bksv);
+
+		// Step4. Generate An
+		dp_hw_get_hdcp13_an(hdcp_an);
+		dp_info(dp, "[HDCP 1.3] An : 0x%02X%02X%02X%02X%02X%02X%02X%02X\n",
+			hdcp_an[0], hdcp_an[1], hdcp_an[2], hdcp_an[3],
+			hdcp_an[4], hdcp_an[5], hdcp_an[6], hdcp_an[7]);
+
+		// Step5. Write An to HDCP Receiver
+		drm_dp_dpcd_write(&dp->dp_aux, DP_AUX_HDCP_AN, hdcp_an, HDCP_AN_SIZE);
+
+		// Step6. Get Aksv from HDCP Transmitter
+		if (!dp_hw_get_hdcp13_aksv(hdcp_aksv)) {
+			dp_info(dp, "[HDCP 1.3] Invalid Aksv, ReAuth!\n");
+			continue;
+		} else {
+			dp_info(dp, "[HDCP 1.3] Aksv : 0x%02X%02X%02X%02X%02X\n",
+				hdcp_aksv[0], hdcp_aksv[1], hdcp_aksv[2],
+				hdcp_aksv[3], hdcp_aksv[4]);
+			dp_info(dp, "[HDCP 1.3] Valid Aksv\n");
+		}
+
+		// Step7. Write Aksv to HDCP Receiver
+		dp->hdcp_config.hdcp13_info.cp_irq_flag = 0;
+		drm_dp_dpcd_write(&dp->dp_aux, DP_AUX_HDCP_AKSV, hdcp_aksv,
+			HDCP_AKSV_SIZE);
+
+		// Step8. Reset Bksv to HDCP Transmitter
+		dp_hw_set_hdcp13_bksv(hdcp_bksv);
+
+		// Step9. Compare R0 and R0-Prime
+		if (dp_compare_hdcp13_ri(dp) != 0) {
+			dp_info(dp, "[HDCP 1.3] R0 is not same, ReAuth!\n");
+			continue;
+		}
+
+		dp_info(dp, "[HDCP 1.3] Done 1st Authentication\n");
+
+		if (info->is_repeater) {
+			if (hdcp13_proceed_repeater(dp))
+				goto HDCP13_END;
+		} else
+			dp_info(dp, "[HDCP 1.3] No 2nd Authentication\n");
+
+		dp_hw_set_hdcp13_encryption(1);
+
+		info->auth_state = HDCP13_STATE_AUTHENTICATED;
+		dp_info(dp, "[HDCP 1.3] Done SW Authentication\n");
+	}
+
+HDCP13_END:
+	if (info->auth_state != HDCP13_STATE_AUTHENTICATED) {
+		info->auth_state = HDCP13_STATE_FAIL;
+		dp_info(dp, "[HDCP 1.3] HDCP Authentication fail!!!\n");
+
+		dp_hw_set_hdcp13_function(0);
+	}
+}
+
+static void dp_work_hdcp13(struct work_struct *work)
+{
+	struct dp_device *dp = get_dp_drvdata();
+
+	dp_info(dp, "[HDCP 1.3] Work Start\n");
+
+	if (dp->hdcp_config.hdcp_ver != HDCP_VERSION_1_3 ||
+	    dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG)
+	    return ;
+
+	dp_do_hdcp13_authentication(dp);
+}
+
+static int dp_do_hdcp22_authentication(struct dp_device *dp)
+{
+	struct dp_hdcp22_info *info = &dp->hdcp_config.hdcp22_info;
+
+	dp_hw_set_hdcp22_function(0);
+	dp_hw_set_hdcp22_encryption(0);
+
+	if (info->reauth_trigger)
+		hdcp_dplink_auth_check(HDCP_DRM_ON);
+
+	info->reauth_trigger = 0;
+
+	return 0;
+}
+
+static void dp_work_hdcp22(struct work_struct *work)
+{
+	struct dp_device *dp = get_dp_drvdata();
+	struct dp_hdcp22_info *info = &dp->hdcp_config.hdcp22_info;
+	u8 hdcp22_rxinfo[2] = {0, };
+	int ret;
+
+	dp_info(dp, "[HDCP 2.2] Work Start\n");
+
+	mutex_lock(&dp->hdcp_lock);
+
+	hdcp_dplink_connect_state(DP_HDCP_READY);
+	info->reauth_trigger = 1;
+	ret = dp_do_hdcp22_authentication(dp);
+	if (ret) {
+		goto exit_hdcp;
+	}
+
+	drm_dp_dpcd_read(&dp->dp_aux, DP_HDCP_2_2_REG_RXINFO_OFFSET, hdcp22_rxinfo, 2);
+	dp_info(dp, "[HDCP 2.2] RX_INFO: 0x%02X 0x%02X", hdcp22_rxinfo[0], hdcp22_rxinfo[1]);
+
+exit_hdcp:
+	mutex_unlock(&dp->hdcp_lock);
+}
+
 
 /* ExtCon Handshaking Functions */
 static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
@@ -1314,82 +1854,64 @@ static int usb_typec_dp_notification(struct notifier_block *nb,
 	union extcon_property_value property = { 0 };
 	int ret;
 
-	if (action == 1) {
-		ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
-					  EXTCON_PROP_DISP_HPD, &property);
-		if (!ret) {
-			if (property.intval == 1) {
-				dp_info(dp,
-					"%s: USB Type-C is HPD PLUG status\n",
-					__func__);
-
-				if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
-					memset(&dp->hw_config, 0,
-					       sizeof(struct dp_hw_config));
-
-					ret = extcon_get_property(
-						dp->edev, EXTCON_DISP_DP,
-						EXTCON_PROP_DISP_ORIENTATION,
-						&property);
-					if (!ret) {
-						dp_info(dp,
-							"%s: disp_orientation = %d\n",
-							__func__,
-							property.intval);
-						dp->hw_config.orient_type =
-							(enum plug_orientation)(
-								property.intval);
-					}
-
-					ret = extcon_get_property(
-						dp->edev, EXTCON_DISP_DP,
-						EXTCON_PROP_DISP_PIN_CONFIG,
-						&property);
-					if (!ret) {
-						dp_info(dp,
-							"%s: disp_pin_config = %d\n",
-							__func__,
-							property.intval);
-						dp->hw_config.pin_type =
-							(enum pin_assignment)(
-								property.intval);
-
-						if (dp->hw_config.pin_type ==
-							    PIN_TYPE_A ||
-						    dp->hw_config.pin_type ==
-							    PIN_TYPE_C ||
-						    dp->hw_config.pin_type ==
-							    PIN_TYPE_E)
-							dp->hw_config.num_lanes =
-								4;
-						else
-							dp->hw_config.num_lanes =
-								2;
-					}
-
-					dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
-				} else
-					dp_warn(dp, "%s: HPD is already set\n",
-						__func__);
-			} else {
-				dp_info(dp,
-					"%s: USB Type-C is HPD UNPLUG status\n",
-					__func__);
-
-				if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
-					dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
-			}
-		} else
-			dp_err(dp, "%s: extcon_get_property() is failed\n",
-			       __func__);
-	} else {
+	if (action != 1) {
 		dp_info(dp, "%s: USB Type-C is not in display ALT mode\n",
 			__func__);
 
 		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
 			dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
+
+		return NOTIFY_OK;
 	}
 
+	ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
+				  EXTCON_PROP_DISP_HPD, &property);
+	if (ret) {
+		dp_err(dp, "%s: extcon_get_property() is failed\n", __func__);
+		return NOTIFY_OK;
+	}
+
+	if (property.intval != 1) {
+		dp_info(dp, "%s: usb type-c is hpd unplug status\n", __func__);
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
+			dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
+		return NOTIFY_OK;
+	}
+
+	dp_info(dp, "%s: USB Type-C is HPD PLUG status\n", __func__);
+
+	if (dp_get_hpd_state(dp) != EXYNOS_HPD_UNPLUG) {
+		dp_warn(dp, "%s: IRQ from sink\n", __func__);
+		queue_delayed_work(dp->dp_wq, &dp->hpd_irq_work, 0);
+		return NOTIFY_OK;
+	}
+
+	memset(&dp->hw_config, 0, sizeof(struct dp_hw_config));
+
+	ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
+		EXTCON_PROP_DISP_ORIENTATION, &property);
+	if (!ret) {
+		dp_info(dp, "%s: disp_orientation = %d\n", __func__,
+			property.intval);
+		dp->hw_config.orient_type = (enum plug_orientation)(
+			property.intval);
+	}
+
+	ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
+			EXTCON_PROP_DISP_PIN_CONFIG, &property);
+	if (!ret) {
+		dp_info(dp, "%s: disp_pin_config = %d\n", __func__,
+			property.intval);
+		dp->hw_config.pin_type = (enum pin_assignment)(
+			property.intval);
+
+		dp->hw_config.num_lanes =
+			(dp->hw_config.pin_type == PIN_TYPE_A ||
+			 dp->hw_config.pin_type == PIN_TYPE_C ||
+			 dp->hw_config.pin_type == PIN_TYPE_E) ? 4 : 2;
+	}
+
+	dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
 	return NOTIFY_OK;
 }
 
@@ -1466,6 +1988,42 @@ int dp_audio_config(struct dp_audio_config *audio_config)
 	return 0;
 }
 EXPORT_SYMBOL(dp_audio_config);
+
+/* HDCP Driver Handshaking Functions */
+void dp_hdcp22_enable(u32 en)
+{
+	dp_hw_set_hdcp22_function(en);
+	dp_hw_set_hdcp22_encryption(en);
+}
+EXPORT_SYMBOL(dp_hdcp22_enable);
+
+int dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data)
+{
+	struct dp_device *dp = get_dp_drvdata();
+	int ret;
+
+	ret = drm_dp_dpcd_read(&dp->dp_aux, address, data, length);
+	if (ret == length)
+		return 0;
+
+	dp_err(dp, "dpcd_read_for_hdcp22 fail(%d): 0x%X\n", ret, address);
+	return (ret < 0) ? ret : -EIO;
+}
+EXPORT_SYMBOL(dp_dpcd_read_for_hdcp22);
+
+int dp_dpcd_write_for_hdcp22(u32 address, u32 length, u8 *data)
+{
+	struct dp_device *dp = get_dp_drvdata();
+	int ret;
+
+	ret = drm_dp_dpcd_write(&dp->dp_aux, address, data, length);
+	if (ret == length)
+		return 0;
+
+	dp_err(dp, "dpcd_write_for_hdcp22 fail(%d): 0x%X\n", ret, address);
+	return (ret < 0) ? ret : -EIO;
+}
+EXPORT_SYMBOL(dp_dpcd_write_for_hdcp22);
 
 /* DP DRM Connector Helper Functions */
 static enum drm_mode_status dp_mode_valid(struct drm_encoder *encoder,
@@ -1827,6 +2385,7 @@ static int dp_probe(struct platform_device *pdev)
 	mutex_init(&dp->hpd_state_lock);
 	mutex_init(&dp->audio_lock);
 	mutex_init(&dp->training_lock);
+	mutex_init(&dp->hdcp_lock);
 
 	/* Create WorkQueue & Delayed Works*/
 	dp->dp_wq = create_singlethread_workqueue(dev_name(&pdev->dev));
@@ -1838,6 +2397,17 @@ static int dp_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&dp->hpd_plug_work, dp_work_hpd_plug);
 	INIT_DELAYED_WORK(&dp->hpd_unplug_work, dp_work_hpd_unplug);
+	INIT_DELAYED_WORK(&dp->hpd_irq_work, dp_work_hpd_irq);
+
+	dp->hdcp_wq = create_singlethread_workqueue(dev_name(&pdev->dev));
+	if (!dp->hdcp_wq) {
+		dp_err(dp, "create HDCP wq failed.\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	INIT_DELAYED_WORK(&dp->hdcp13_work, dp_work_hdcp13);
+	INIT_DELAYED_WORK(&dp->hdcp22_work, dp_work_hdcp22);
 
 	/* Register callback to ExtCon */
 	dp->edev = extcon_get_edev_by_phandle(dev, 0);
@@ -1848,6 +2418,10 @@ static int dp_probe(struct platform_device *pdev)
 	}
 
 	pm_runtime_enable(dev);
+
+	/* Register callback to HDCP */
+	dp_register_func_for_hdcp22(dp_hdcp22_enable, dp_dpcd_read_for_hdcp22,
+		dp_dpcd_write_for_hdcp22);
 
 	dp_info(dp, "DP Driver has been probed.\n");
 	return component_add(dp->dev, &dp_component_ops);
@@ -1866,8 +2440,10 @@ static int dp_remove(struct platform_device *pdev)
 	mutex_destroy(&dp->hpd_lock);
 	mutex_destroy(&dp->hpd_state_lock);
 	mutex_destroy(&dp->training_lock);
+	mutex_destroy(&dp->hdcp_lock);
 
 	destroy_workqueue(dp->dp_wq);
+	destroy_workqueue(dp->hdcp_wq);
 
 	dp_info(dp, "DP Driver has been removed\n");
 	return 0;

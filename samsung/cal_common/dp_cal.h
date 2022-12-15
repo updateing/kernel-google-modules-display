@@ -118,6 +118,13 @@ enum dp_interrupt_mask {
 	ALL_INT_MASK
 };
 
+// HDCP Config
+enum hdcp_mode {
+	HDCP_MODE_NONE = 0,
+	HDCP_MODE_1_3,
+	HDCP_MODE_2_2,
+};
+
 // Video Config
 enum video_mode {
 	VIDEO_MODE_MASTER = 0,
@@ -251,6 +258,9 @@ struct dp_hw_config {
 	enum dp_link_rate_type link_rate;
 	u32 num_lanes;
 
+	/* HDCP */
+	enum hdcp_mode hdcp;
+
 	/* Video */
 	enum dp_dynamic_range_type range;
 	enum bit_depth bpc;
@@ -312,6 +322,18 @@ void dp_hw_stop_audio(void);
 void dp_hw_set_audio_config(struct dp_hw_config *hw_config);
 int  dp_hw_set_bist_audio_config(struct dp_hw_config *hw_config);
 void dp_hw_set_audio_dma(u32 en);
+
+bool dp_hw_get_hdcp13_key_valid(void);
+void dp_hw_set_hdcp13_repeater(u8 is_repeater);
+void dp_hw_set_hdcp13_bksv(u8 *bksv);
+void dp_hw_get_hdcp13_an(u8 *an);
+bool dp_hw_get_hdcp13_aksv(u8 *aksv);
+void dp_hw_get_hdcp13_r0(u32 *r0);
+void dp_hw_get_hdcp13_am0(u8 *am);
+void dp_hw_set_hdcp13_function(u32 en);
+void dp_hw_set_hdcp13_encryption(u32 en);
+void dp_hw_set_hdcp22_function(u32 en);
+void dp_hw_set_hdcp22_encryption(u32 en);
 
 /* USB Interface Prototypes for Combo-PHY Handshaking */
 extern int dwc3_exynos_phy_enable(int owner, bool on);

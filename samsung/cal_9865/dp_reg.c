@@ -1124,6 +1124,13 @@ static void dp_reg_set_sst1_video_func_en(u32 en)
 // System Miscellaneous Control Configuration
 
 // System HPD Control Configuration
+static void dp_reg_set_hpd_force(void)
+{
+	u32 val = HPD_FORCE_EN_SET(1) | HPD_FORCE_SET(1) | HPD_EVENT_CTRL_EN_BY_HOST;
+	u32 mask = HPD_FORCE_EN_MASK | HPD_FORCE_MASK | HPD_EVENT_CTRL_EN_MASK;
+
+	dp_write_mask(SST1, SYSTEM_HPD_CONTROL, val, mask);
+}
 
 // System PLL Lock Control Configuration
 static int dp_reg_wait_phy_pll_lock(void)
@@ -1454,6 +1461,77 @@ static void dp_hw_set_data_path(struct dp_hw_config *hw_config)
 }
 
 /* HDCP Control Registers */
+// HDCP 1.3
+static bool dp_reg_get_hdcp13_aksv_valid(void)
+{
+	return AKSV_VALID_GET(dp_read(SST1, HDCP13_STATUS)) ? true : false;
+}
+
+static void dp_reg_set_hdcp13_store_an(void)
+{
+	dp_write_mask(SST1, HDCP13_CONTROL_0, SW_STORE_AN_STOP_PRNG, SW_STORE_AN_MASK);
+
+	/* Save the 64 bit random number to AN during PRNG Stop */
+
+	dp_write_mask(SST1, HDCP13_CONTROL_0, SW_STORE_AN_START_PRNG, SW_STORE_AN_MASK);
+}
+
+static void dp_reg_set_hdcp13_repeater(u32 en)
+{
+	dp_write_mask(SST1, HDCP13_CONTROL_0, SW_RX_REPEATER_SET(en), SW_RX_REPEATER_MASK);
+}
+
+static void dp_reg_set_hdcp13_encryption_enable(u32 en)
+{
+	dp_write_mask(SST1, HDCP13_CONTROL_0,
+		      SW_AUTH_OK_SET(en) | HDCP13_ENC_EN_SET(en),
+		      SW_AUTH_OK_MASK | HDCP13_ENC_EN_MASK);
+}
+
+static void dp_reg_get_hdcp13_aksv(u32 *aksv0, u32 *aksv1)
+{
+	*aksv0 = dp_read(SST1, HDCP13_AKSV_0);
+	*aksv1 = dp_read(SST1, HDCP13_AKSV_1);
+}
+
+static void dp_reg_get_hdcp13_an(u32 *an0, u32 *an1)
+{
+	*an0 = dp_read(SST1, HDCP13_AN_0);
+	*an1 = dp_read(SST1, HDCP13_AN_1);
+}
+
+static void dp_reg_set_hdcp13_bksv(u32 bksv0, u32 bksv1)
+{
+	dp_write(SST1, HDCP13_BKSV_0, bksv0);
+	dp_write(SST1, HDCP13_BKSV_1, bksv1);
+}
+
+static void dp_reg_get_hdcp13_r0(u32 *r0)
+{
+	*r0 = dp_read(SST1, HDCP13_R0);
+}
+
+static void dp_reg_get_hdcp13_am0(u32 *am0, u32 *am1)
+{
+	*am0 = dp_read(SST1, HDCP13_AM0_0);
+	*am1 = dp_read(SST1, HDCP13_AM0_1);
+}
+
+static u32 dp_reg_get_hdcp13_key_valid(void)
+{
+	return KEY_VALID_SYNC_IN_I2C_CLK_GET(dp_read(SST1, HDCP13_KEY_VALID_STATUS));
+}
+
+// HDCP 2.2
+static void dp_reg_set_hdcp22_system_enable(u32 en)
+{
+	dp_write_mask(SST1, HDCP22_SYS_EN, SYSTEM_ENABLE_SET(en), SYSTEM_ENABLE_MASK);
+}
+
+static void dp_reg_set_hdcp22_encryption_enable(u32 en)
+{
+	dp_write_mask(SST1, HDCP22_CONTROL, HDCP22_ENC_EN_SET(en), HDCP22_ENC_EN_MASK);
+}
 
 /* SST1 Control Registers */
 // SST1 Main
@@ -2619,4 +2697,98 @@ int dp_hw_set_bist_audio_config(struct dp_hw_config *hw_config)
 void dp_hw_set_audio_dma(u32 en)
 {
 	dp_reg_set_audio_dma_req_gen(en);
+}
+
+// DP HDCP Configuration Interfaces
+bool dp_hw_get_hdcp13_key_valid(void)
+{
+	return dp_reg_get_hdcp13_key_valid() ? true : false;
+}
+
+void dp_hw_set_hdcp13_repeater(u8 is_repeater)
+{
+	dp_reg_set_hdcp13_repeater(is_repeater);
+}
+
+void dp_hw_set_hdcp13_bksv(u8 *bksv)
+{
+	u32 bksv0 = 0, bksv1 = 0;
+	int i;
+
+	for (i = 0; i < 4; i++)
+		bksv0 |= (bksv[i] << (i * 8));
+	bksv1 |= bksv[4];
+
+	dp_reg_set_hdcp13_bksv(bksv0, bksv1);
+}
+
+void dp_hw_get_hdcp13_an(u8 *an)
+{
+	u32 an0 = 0, an1 = 0;
+	int i;
+
+	dp_reg_set_hdcp13_store_an();
+	dp_reg_get_hdcp13_an(&an0, &an1);
+
+	for (i = 0; i < 4; i++)	// Byte 0, 1, 2, 3
+		an[i] = (u8)((an0 >> (i * 8)) & 0xFF);
+	for (; i < 8; i++)	// Byte 4, 5, 6, 7
+		an[i] = (u8)((an1 >> ((i - 4) * 8)) & 0xFF);
+}
+
+bool dp_hw_get_hdcp13_aksv(u8 *aksv)
+{
+	u32 aksv0 = 0, aksv1 = 0;
+	int i;
+
+	if (!dp_reg_get_hdcp13_aksv_valid())
+		return false;
+
+	dp_reg_get_hdcp13_aksv(&aksv0, &aksv1);
+
+	for (i = 0; i < 4; i++)
+		aksv[i] = (u8)((aksv0 >> (i * 8)) & 0xFF);
+	aksv[i] = (u8)(aksv1 & 0xFF);
+
+	return true;
+}
+
+void dp_hw_get_hdcp13_r0(u32 *r0)
+{
+	dp_reg_get_hdcp13_r0(r0);
+}
+
+void dp_hw_get_hdcp13_am0(u8 *am)
+{
+	u32 am0 = 0, am1 = 0;
+	int i;
+
+	dp_reg_get_hdcp13_am0(&am0, &am1);
+
+	for (i = 0; i < 4; i++)	// Byte 0, 1, 2, 3
+		am[i] = (u8)((am0 >> (i * 8)) & 0xFF);
+	for (; i < 8; i++)	// Byte 4, 5, 6, 7
+		am[i] = (u8)((am1 >> ((i - 4) * 8)) & 0xFF);
+}
+
+void dp_hw_set_hdcp13_function(u32 en)
+{
+	dp_reg_set_hpd_force();
+	dp_reg_set_hdcp13_func_en(en);
+}
+
+void dp_hw_set_hdcp13_encryption(u32 en)
+{
+	dp_reg_set_hdcp13_encryption_enable(en);
+}
+
+void dp_hw_set_hdcp22_function(u32 en)
+{
+	dp_reg_set_hdcp22_system_enable(en);
+	dp_reg_set_hdcp22_func_en(en);
+}
+
+void dp_hw_set_hdcp22_encryption(u32 en)
+{
+	dp_reg_set_hdcp22_encryption_enable(en);
 }

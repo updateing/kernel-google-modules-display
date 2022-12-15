@@ -128,6 +128,81 @@ struct dp_audio_config {
 	enum audio_dma_word_length audio_word_length;
 };
 
+/* HDCP */
+#define HDCP_BKSV_SIZE 5
+#define HDCP_AN_SIZE 8
+#define HDCP_AKSV_SIZE 5
+#define HDCP_BINFO_SIZE 2
+#define HDCP_KSV_SIZE 5
+#define HDCP_R0_SIZE 2
+#define HDCP_M0_SIZE 8
+#define HDCP_SHA1_SIZE 20
+#define HDCP_SHA1_INPUT_SIZE (HDCP_BINFO_SIZE + HDCP_KSV_SIZE + HDCP_M0_SIZE)
+
+#define HDCP_RETRY_AUTH_COUNT 1
+#define V_READ_RETRY_CNT 3
+#define RI_READ_RETRY_CNT 3
+#define RI_AVAILABLE_WAITING 2
+#define RI_DELAY 100
+#define RI_WAIT_COUNT (RI_DELAY / RI_AVAILABLE_WAITING)
+#define REPEATER_READY_MAX_WAIT_DELAY 4000
+
+#define BINFO_DEVICE_COUNT (0x7F << 0)
+
+enum dp_hdcp_version {
+	HDCP_VERSION_NONE = 0,
+	HDCP_VERSION_1_3 = 0x13,
+	HDCP_VERSION_2_2 = 0x22,
+	HDCP_VERSION_2_3 = 0x23,
+};
+
+enum dp_hdcp13_link_check {
+	LINK_CHECK_PASS = 0,
+	LINK_CHECK_NEED,
+	LINK_CHECK_FAIL,
+};
+
+enum dp_hdcp13_state {
+	HDCP13_STATE_NOT_AUTHENTICATED = 0,
+	HDCP13_STATE_AUTH_PROCESS,
+	HDCP13_STATE_SECOND_AUTH_DONE,
+	HDCP13_STATE_AUTHENTICATED,
+	HDCP13_STATE_FAIL,
+};
+
+struct dp_hdcp13_info {
+	u8 cp_irq_flag;
+	u8 is_repeater;
+	u8 device_cnt;
+	u8 revocation_check;
+	u8 r0_read_flag;
+	enum dp_hdcp13_link_check link_check;
+	enum dp_hdcp13_state auth_state;
+};
+
+enum dp_state_for_hdcp22 {
+	DP_DISCONNECT,
+	DP_CONNECT,
+	DP_HDCP_READY,
+};
+
+enum auth_signal {
+	HDCP_DRM_OFF	= 0x100,
+	HDCP_DRM_ON	= 0x200,
+	HDCP_RP_READY	= 0x300,
+};
+
+struct dp_hdcp22_info {
+	bool reauth_trigger;
+};
+
+struct dp_hdcp_config {
+	enum dp_hdcp_version hdcp_ver;
+	struct dp_hdcp13_info hdcp13_info;
+	struct dp_hdcp22_info hdcp22_info;
+};
+
+/* DisplayPort Device */
 struct dp_device {
 	struct drm_encoder encoder;
 	struct drm_connector connector;
@@ -141,6 +216,7 @@ struct dp_device {
 	struct workqueue_struct *dp_wq;
 	struct delayed_work hpd_plug_work;
 	struct delayed_work hpd_unplug_work;
+	struct delayed_work hpd_irq_work;
 
 	struct mutex cmd_lock;
 	struct mutex hpd_lock;
@@ -176,6 +252,13 @@ struct dp_device {
 	enum dp_audio_state audio_state;
 	struct mutex audio_lock;
 
+	/* HDCP */
+	struct dp_hdcp_config hdcp_config;
+	struct mutex hdcp_lock;
+	struct workqueue_struct *hdcp_wq;
+	struct delayed_work hdcp13_work;
+	struct delayed_work hdcp22_work;
+
 	/* DP HW Configurations */
 	struct dp_hw_config hw_config;
 };
@@ -186,7 +269,29 @@ static inline struct dp_device *get_dp_drvdata(void)
 }
 
 /* Prototypes of export symbol to handshake other modules */
+/* DP Audio Prototype */
 int dp_audio_config(struct dp_audio_config *audio_config);
+
+/* HDCP 2.2 Prototype */
+void dp_hdcp22_enable(u32 en);
+int  dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data);
+int  dp_dpcd_write_for_hdcp22(u32 address, u32 length, u8 *data);
+
+// From Exynos-HDCP2-DPLink-Inter.c
+extern int  hdcp_dplink_auth_check(enum auth_signal);
+extern int  hdcp_dplink_get_rxstatus(uint8_t *status);
+extern int  hdcp_dplink_set_paring_available(void);
+extern int  hdcp_dplink_set_hprime_available(void);
+extern int  hdcp_dplink_set_rp_ready(void);
+extern int  hdcp_dplink_set_reauth(void);
+extern int  hdcp_dplink_set_integrity_fail(void);
+extern int  hdcp_dplink_cancel_auth(void);
+extern void hdcp_dplink_clear_all(void);
+extern void hdcp_dplink_connect_state(enum dp_state_for_hdcp22 state);
+
+extern void dp_register_func_for_hdcp22(void (*func0)(u32 en),
+	int (*func1)(u32 address, u32 length, u8 *data),
+	int (*func2)(u32 address, u32 length, u8 *data));
 
 // External functions
 void dp_enable_dposc(struct dp_device *dp);

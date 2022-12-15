@@ -482,15 +482,21 @@ enum dp_logical_lane {
 #define BKSV_VALID				       (0x1 << 3)
 #define ENCRYPT					       (0x1 << 2)
 #define HW_AUTHEN_PASS				       (0x1 << 1)
-#define AKSV_VALID				       (0x1 << 0)
+#define AKSV_VALID_GET(_v)			       (((_v) >> 0) & 0x1)
+#define AKSV_VALID_MASK				       (0x1 << 0)
 
 #define HDCP13_CONTROL_0			       (0x4004)
-#define SW_STORE_AN				       (0x1 << 7)
-#define SW_RX_REPEATER				       (0x1 << 6)
+#define SW_STORE_AN_START_PRNG			       (0 << 7)
+#define SW_STORE_AN_STOP_PRNG			       (1 << 7)
+#define SW_STORE_AN_MASK			       (0x1 << 7)
+#define SW_RX_REPEATER_SET(_v)			       (((_v)&0x1) << 6)
+#define SW_RX_REPEATER_MASK			       (0x1 << 6)
 #define HW_RE_AUTHEN				       (0x1 << 5)
-#define SW_AUTH_OK				       (0x1 << 4)
+#define SW_AUTH_OK_SET(_v)			       (((_v)&0x1) << 4)
+#define SW_AUTH_OK_MASK				       (0x1 << 4)
 #define HW_AUTH_EN				       (0x1 << 3)
-#define HDCP13_ENC_EN				       (0x1 << 2)
+#define HDCP13_ENC_EN_SET(_v)			       (((_v)&0x1) << 2)
+#define HDCP13_ENC_EN_MASK			       (0x1 << 2)
 #define HW_1ST_PART_ATHENTICATION_EN		       (0x1 << 1)
 #define HW_2ND_PART_ATHENTICATION_EN		       (0x1 << 0)
 
@@ -549,7 +555,8 @@ enum dp_logical_lane {
 #define AM0_1					       (0xFFFFFFFF << 0)
 
 #define HDCP13_KEY_VALID_STATUS			       (0x4050)
-#define KEY_VALID_SYNC_IN_I2C_CLK		       (0x1 << 0)
+#define KEY_VALID_SYNC_IN_I2C_CLK_GET(_v)	       (((_v) >> 0) & 0x1)
+#define KEY_VALID_SYNC_IN_I2C_CLK_MASK		       (0x1 << 0)
 
 #define HDCP13_WAIT_R0_TIME			       (0x4054)
 #define HW_WRITE_AKSV_WAIT			       (0xFF << 0)
@@ -574,11 +581,13 @@ enum dp_logical_lane {
 
 // HDCP 2.2
 #define HDCP22_SYS_EN				       (0x4400)
-#define SYSTEM_ENABLE				       (0x1 << 0)
+#define SYSTEM_ENABLE_SET(_v)			       (((_v)&0x1) << 0)
+#define SYSTEM_ENABLE_MASK			       (0x1 << 0)
 
 #define HDCP22_CONTROL				       (0x4404)
 #define HDCP22_BYPASS_MODE			       (0x1 << 1)
-#define HDCP22_ENC_EN				       (0x1 << 0)
+#define HDCP22_ENC_EN_SET(_v)			       (((_v)&0x1) << 0)
+#define HDCP22_ENC_EN_MASK			       (0x1 << 0)
 
 #define HDCP22_STREAM_TYPE			       (0x4454)
 #define STREAM_TYPE				       (0x1 << 0)
