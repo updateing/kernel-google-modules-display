@@ -28,6 +28,7 @@
 #include <drm/drm_mipi_dsi.h>
 
 #include "../exynos_drm_connector.h"
+#include "panel-common.h"
 
 #define MAX_REGULATORS		3
 #define MAX_HDR_FORMATS		4

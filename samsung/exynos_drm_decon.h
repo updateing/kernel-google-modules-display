@@ -153,6 +153,7 @@ struct dpu_bts {
 	u32 afbc_yuv_util_pct;
 	u32 afbc_rgb_rt_util_pct;
 	u32 afbc_yuv_rt_util_pct;
+	u32 afbc_clk_ppc_margin;
 	u32 dfs_lv_cnt;
 	u32 dfs_lv_khz[BTS_DFS_MAX];
 	u32 vbp;
@@ -476,6 +477,15 @@ struct decon_device {
 	bool keep_unmask;
 	struct exynos_partial *partial;
 };
+
+static inline struct decon_device *to_decon_device(const struct device *dev)
+{
+	/* could skip with dev_get_drvdata directly, but using pdev because
+	that's how drvdata was set originally */
+	struct platform_device *pdev = to_platform_device(dev);
+
+	return (struct decon_device *)platform_get_drvdata(pdev);
+}
 
 extern struct dpu_bts_ops dpu_bts_control;
 extern struct decon_device *decon_drvdata[MAX_DECON_CNT];

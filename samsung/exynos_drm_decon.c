@@ -1397,6 +1397,8 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 	struct exynos_drm_private *priv = drm_to_exynos_dev(drm_dev);
 	struct drm_plane *default_plane;
 	int i;
+	int ret;
+	char symlink_name_buffer[7];
 
 	decon->drm_dev = drm_dev;
 
@@ -1441,6 +1443,15 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 		decon->bts.ops->init(decon);
 	}
 
+	/* Create symlink to decon device */
+	snprintf(symlink_name_buffer, 7, "decon%d", decon->id);
+	ret = sysfs_create_link(&decon->drm_dev->dev->kobj, &decon->dev->kobj,
+			(const char *) symlink_name_buffer);
+	if (ret) {
+		pr_err("Error creating symlink to decon%d: %d\n",
+				decon->id, ret);
+	}
+
 	device_create_file(dev, &dev_attr_early_wakeup);
 	decon_debug(decon, "%s -\n", __func__);
 	return 0;
@@ -1449,9 +1460,15 @@ static int decon_bind(struct device *dev, struct device *master, void *data)
 static void decon_unbind(struct device *dev, struct device *master,
 			void *data)
 {
+	char symlink_name_buffer[7];
 	struct decon_device *decon = dev_get_drvdata(dev);
-
 	decon_debug(decon, "%s +\n", __func__);
+
+	/* Remove symlink to decon device */
+	snprintf(symlink_name_buffer, 7, "decon%d", decon->id);
+	sysfs_remove_link(&decon->drm_dev->dev->kobj,
+			  (const char *) symlink_name_buffer);
+
 	device_remove_file(dev, &dev_attr_early_wakeup);
 	if (IS_ENABLED(CONFIG_EXYNOS_BTS))
 		decon->bts.ops->deinit(decon);
@@ -1680,28 +1697,33 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 	}
 	if (of_property_read_u32(np, "afbc_rgb_util_pct", &decon->bts.afbc_rgb_util_pct)) {
 		decon->bts.afbc_rgb_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_rgb_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_rgb_util_pct is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "afbc_yuv_util_pct", &decon->bts.afbc_yuv_util_pct)) {
 		decon->bts.afbc_yuv_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_yuv_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_yuv_util_pct is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "afbc_rgb_rt_util_pct", &decon->bts.afbc_rgb_rt_util_pct)) {
 		decon->bts.afbc_rgb_rt_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_rgb_rt_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_rgb_rt_util_pct is not defined in DT.\n");
 	}
 	if (of_property_read_u32(np, "afbc_yuv_rt_util_pct", &decon->bts.afbc_yuv_rt_util_pct)) {
 		decon->bts.afbc_yuv_rt_util_pct = 100;
-		decon_debug(decon, "WARN: afbc_yuv_rt_util_pct is not defined in DT.\n");
+		decon_debug(decon, "INFO: afbc_yuv_rt_util_pct is not defined in DT.\n");
+	}
+	if (of_property_read_u32(np, "afbc_clk_ppc_margin", &decon->bts.afbc_clk_ppc_margin)) {
+		decon->bts.afbc_clk_ppc_margin = 0;
+		decon_debug(decon, "INFO: afbc_clk_margin is not defined in DT.\n");
 	}
 
 	decon_debug(decon, "bus_width(%u) bus_util(%u) rot_util(%u)\n",
 			decon->bts.bus_width, decon->bts.bus_util_pct,
 			decon->bts.rot_util_pct);
 
-	decon_debug(decon, "afbc: rgb_util(%u) yuv_util(%u) rgb_rt_util(%u) yuv_rt_util(%u)\n",
+	decon_debug(decon, "afbc: rgb_util(%u) yuv_util(%u) rgb_rt_util(%u) yuv_rt_util(%u) margin(%u)\n",
 			decon->bts.afbc_rgb_util_pct, decon->bts.afbc_yuv_util_pct,
-			decon->bts.afbc_rgb_rt_util_pct, decon->bts.afbc_yuv_rt_util_pct);
+			decon->bts.afbc_rgb_rt_util_pct, decon->bts.afbc_yuv_rt_util_pct,
+			decon->bts.afbc_clk_ppc_margin);
 
 	if (of_property_read_u32(np, "dfs_lv_cnt", &dfs_lv_cnt)) {
 		err_flag = true;
