@@ -365,15 +365,11 @@ struct decon_dsc {
 	unsigned char *dec_pps_t;
 };
 
-#if defined(CONFIG_SOC_GS201) || defined(CONFIG_SOC_ZUMA)
+#ifdef CONFIG_SOC_GS201
 void decon_reg_set_rcd_enable_internal(u32 id, bool en);
-#else
-static inline void decon_reg_set_rcd_enable_internal(u32 id, bool en) {}
-#endif
-
-#if defined(CONFIG_SOC_GS201)
 void decon_reg_update_req_cgc_internal(u32 id);
 #else
+static inline void decon_reg_set_rcd_enable_internal(u32 id, bool en) {}
 static inline void decon_reg_update_req_cgc_internal(u32 id) {}
 #endif
 
@@ -461,7 +457,6 @@ static inline void decon_reg_set_rcd_enable(u32 dqe_id, bool en)
 {
 	decon_reg_set_rcd_enable_internal(dqe_id, en);
 }
-
 void decon_reg_set_drm_write_protected(u32 id, bool protected);
 /*********************************************************************/
 

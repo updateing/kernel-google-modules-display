@@ -287,7 +287,6 @@
 #define DATA_PATH_CON_0				(0x0200)
 #define SPR_PATH_EN				(1 << 16)
 #define ENHANCE_PATH_F(_v)			((_v) << 12)
-#define ENHANCE_RCD_ON				ENHANCE_PATH_F(4)
 #define ENHANCE_DITHER_ON			ENHANCE_PATH_F(1)
 #define ENHANCE_DQE_ON				ENHANCE_PATH_F(2)
 #define ENHANCE_PATH_MASK			(0xf << 12)

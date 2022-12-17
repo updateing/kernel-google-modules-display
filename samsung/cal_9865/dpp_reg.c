@@ -910,154 +910,6 @@ static int dma_dpp_reg_set_format(u32 id, struct dpp_params_info *p,
 	return 0;
 }
 
-/****************** RCD CAL functions ******************/
-static void rcd_reg_set_sw_reset(u32 id)
-{
-	dma_write_mask(id, RCD_ENABLE, ~0, RCD_SRESET);
-}
-
-static int rcd_reg_wait_sw_reset_status(u32 id)
-{
-	u32 val;
-	int ret;
-
-	ret = readl_poll_timeout_atomic(dma_regs_desc(id)->regs + RCD_ENABLE,
-			val, !(val & RCD_SRESET), 10, 2000); /* timeout 2ms */
-	if (ret) {
-		cal_log_err(id, "[idma] timeout sw-reset\n");
-		return ret;
-	}
-
-	return 0;
-}
-
-static void rcd_reg_set_irq_mask_all(u32 id, bool en)
-{
-	u32 val = en ? ~0 : 0;
-
-	dma_write_mask(id, RCD_IRQ, val, RCD_ALL_IRQ_MASK);
-}
-
-static void rcd_reg_set_irq_enable(u32 id)
-{
-	dma_write_mask(id, RCD_IRQ, ~0, RCD_IRQ_ENABLE);
-}
-
-static void rcd_reg_set_in_qos_lut(u32 id, u32 lut_id, u32 qos_lut)
-{
-	u32 reg_id;
-
-	if (lut_id == 0)
-		reg_id = RCD_QOS_LUT_LOW;
-	else
-		reg_id = RCD_QOS_LUT_HIGH;
-	dma_write(id, reg_id, qos_lut);
-}
-
-static void rcd_reg_set_sram_clk_gate_en(u32 id, bool en)
-{
-	u32 val = en ? ~0 : 0;
-
-	dma_write_mask(id, RCD_DYNAMIC_GATING_EN, val, RCD_SRAM_CG_EN);
-}
-
-static void rcd_reg_set_dynamic_gating_en_all(u32 id, bool en)
-{
-	u32 val = en ? ~0 : 0;
-
-	dma_write_mask(id, RCD_DYNAMIC_GATING_EN, val, RCD_DG_EN_ALL);
-}
-
-static void rcd_reg_set_ic_max(u32 id, u32 ic_max)
-{
-	dma_write_mask(id, RCD_IN_CTRL_0, RCD_IC_MAX(ic_max),
-			RCD_IC_MAX_MASK);
-}
-
-static void rcd_reg_clear_irq(u32 id, u32 irq)
-{
-	dma_write_mask(id, RCD_IRQ, ~0, irq);
-}
-
-static void rcd_reg_set_base_addr(u32 id, struct dpp_params_info *p,
-		const unsigned long attr)
-{
-	dma_write(id, RCD_BASEADDR_P0, p->addr[0]);
-}
-
-static void rcd_reg_set_coordinates(u32 id, struct decon_frame *src)
-{
-	dma_write(id, RCD_SRC_OFFSET,
-		  RCD_SRC_OFFSET_Y(src->y) | RCD_SRC_OFFSET_X(src->x));
-	dma_write(id, RCD_SRC_WIDTH, src->f_w);
-	dma_write(id, RCD_SRC_HEIGHT, src->f_h);
-	dma_write(id, RCD_IMG_SIZE,
-		  RCD_IMG_HEIGHT(src->h) | RCD_IMG_WIDTH(src->w));
-}
-
-static void rcd_reg_set_block_mode(u32 id, bool en, int x, int y, u32 w, u32 h)
-{
-	if (!en) {
-		dma_write_mask(id, RCD_IN_CTRL_0, 0, RCD_BLOCK_EN);
-		return;
-	}
-
-	dma_write(id, RCD_BLOCK_OFFSET,
-			RCD_BLK_OFFSET_Y(y) | RCD_BLK_OFFSET_X(x));
-	dma_write(id, RCD_BLOCK_SIZE, RCD_BLK_HEIGHT(h) | RCD_BLK_WIDTH(w));
-	dma_write_mask(id, RCD_IN_CTRL_0, ~0, RCD_BLOCK_EN);
-
-	cal_log_debug(id, "block x(%d) y(%d) w(%d) h(%d)\n", x, y, w, h);
-}
-
-static void rcd_reg_set_deadlock(u32 id, bool en, u32 dl_num)
-{
-	u32 val = en ? ~0 : 0;
-
-	dma_write_mask(id, RCD_DEADLOCK_CTRL, val, RCD_DEADLOCK_NUM_EN);
-	dma_write_mask(id, RCD_DEADLOCK_CTRL, RCD_DEADLOCK_NUM(dl_num),
-				RCD_DEADLOCK_NUM_MASK);
-}
-void rcd_reg_configure_params(u32 id, struct dpp_params_info *p,
-		const unsigned long attr)
-{
-	rcd_reg_set_coordinates(id, &p->src);
-	rcd_reg_set_base_addr(id, p, attr);
-	rcd_reg_set_block_mode(id, p->is_block, p->block.x, p->block.y,
-			p->block.w, p->block.h);
-	rcd_reg_set_deadlock(id, 1, p->rcv_num * 51);
-
-	dma_write_mask(id, RCD_ENABLE, 1, RCD_SFR_UPDATE_FORCE);
-}
-
-void rcd_reg_init(u32 id)
-{
-	if (dma_read(id, RCD_IRQ) & RCD_DEADLOCK_IRQ) {
-		rcd_reg_set_sw_reset(id);
-		rcd_reg_wait_sw_reset_status(id);
-	}
-	rcd_reg_set_irq_mask_all(id, 0);
-	rcd_reg_set_irq_enable(id);
-	rcd_reg_set_in_qos_lut(id, 0, 0x44444444);
-	rcd_reg_set_in_qos_lut(id, 1, 0x44444444);
-	rcd_reg_set_sram_clk_gate_en(id, 0);
-	rcd_reg_set_dynamic_gating_en_all(id, 0);
-	rcd_reg_set_ic_max(id, 0x40);
-}
-
-int rcd_reg_deinit(u32 id, bool reset, const unsigned long attr)
-{
-	rcd_reg_clear_irq(id, RCD_ALL_IRQ_CLEAR);
-	rcd_reg_set_irq_mask_all(id, 1);
-	if (reset) {
-		rcd_reg_set_sw_reset(id);
-		if (rcd_reg_wait_sw_reset_status(id))
-			return -1;
-	}
-
-	return 0;
-}
-
 /******************** EXPORTED DPP CAL APIs ********************/
 /*
  * When LCD is turned on in the bootloader, sometimes the hardware state of
@@ -1068,9 +920,6 @@ int rcd_reg_deinit(u32 id, bool reset, const unsigned long attr)
  */
 void dpp_reg_init(u32 id, const unsigned long attr)
 {
-	if (test_bit(DPP_ATTR_RCD, &attr))
-		rcd_reg_init(id);
-
 	if (test_bit(DPP_ATTR_IDMA, &attr)) {
 		if (dma_read(id, RDMA_IRQ) & IDMA_DEADLOCK_IRQ) {
 			idma_reg_set_sw_reset(id);
@@ -1110,11 +959,6 @@ void dpp_reg_init(u32 id, const unsigned long attr)
 
 int dpp_reg_deinit(u32 id, bool reset, const unsigned long attr)
 {
-	if (test_bit(DPP_ATTR_RCD, &attr)) {
-		if (rcd_reg_deinit(id, reset, attr))
-			return -1;
-	}
-
 	if (test_bit(DPP_ATTR_IDMA, &attr)) {
 		idma_reg_clear_irq(id, IDMA_ALL_IRQ_CLEAR);
 		idma_reg_set_irq_mask_all(id, 1);
@@ -1174,11 +1018,6 @@ void dpp_reg_configure_params(u32 id, struct dpp_params_info *p,
 		const unsigned long attr)
 {
 	const struct dpu_fmt *fmt = dpu_find_fmt_info(p->format);
-
-	if (test_bit(DPP_ATTR_RCD, &attr)) {
-		rcd_reg_configure_params(id, p, attr);
-		return;
-	}
 
 	if (test_bit(DPP_ATTR_SRAMC, &attr))
 		sramc_reg_set_rsc_config(id, p);
@@ -1352,16 +1191,7 @@ static void dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
 
 void rcd_dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
 {
-	cal_drm_printf(p, id, "\n=== RCD%d SFR DUMP ===\n", id);
-	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0000, 0x144);
-	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0200, 0x8);
-	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0300, 0x24);
-	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0740, 0x4);
-
-	cal_drm_printf(p, id, "=== DPU_DMA%d SHADOW SFR DUMP ===\n", id);
-	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0000 + DMA_SHD_OFFSET, 0x144);
-	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0200 + DMA_SHD_OFFSET, 0x8);
-	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0300 + DMA_SHD_OFFSET, 0x24);
+	/* TODO: This will be implemented in the future */
 }
 
 void cgc_dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)

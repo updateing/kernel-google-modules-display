@@ -248,9 +248,11 @@ struct exynos_atc {
 };
 
 #if defined(CONFIG_SOC_GS201)
+void dqe_reg_set_rcd_en_internal(u32 id, bool en);
 void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
 					enum exynos_prog_pos pos);
 #elif defined(CONFIG_SOC_ZUMA)
+static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
 void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
 					enum exynos_prog_pos pos);
 void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p);
@@ -264,13 +266,13 @@ static inline void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histog
 }
 #endif
 
+
 #if defined(CONFIG_SOC_GS201) || defined(CONFIG_SOC_ZUMA)
 void dqe_reg_set_cgc_en_internal(u32 dqe_id, bool en);
 void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id);
 int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us);
 void dqe_cgc_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 			    enum dqe_version ver, unsigned int dqe_id);
-void dqe_reg_set_rcd_en_internal(u32 id, bool en);
 #else
 static inline void dqe_reg_set_cgc_en_internal(dqe_id, en) {return; }
 static inline void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id) {return; }
@@ -323,7 +325,6 @@ static inline void dqe_reg_set_rcd_en(u32 dqe_id, bool en)
 {
 	dqe_reg_set_rcd_en_internal(dqe_id, en);
 }
-
 void dqe_reg_set_drm_write_protected(u32 dqe_id, bool protected);
 static inline void dqe_reg_set_cgc_en(u32 dqe_id, bool en)
 {
