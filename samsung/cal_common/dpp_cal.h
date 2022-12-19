@@ -259,7 +259,7 @@ struct dpp_params_info {
 	bool is_lossy;
 };
 
-#ifdef CONFIG_SOC_GS201
+#if defined(CONFIG_SOC_GS201) || defined(CONFIG_SOC_ZUMA)
 void rcd_reg_init(u32 id);
 int rcd_reg_deinit(u32 id, bool reset, const unsigned long attr);
 void rcd_reg_configure_params(u32 id, struct dpp_params_info *p,

@@ -2449,3 +2449,11 @@ void decon_reg_update_req_cgc(u32 id)
 {
 	decon_write_mask(id, SHD_REG_UP_REQ, ~0, SHD_REG_UP_REQ_DQE_CGC);
 }
+
+void decon_reg_set_rcd_enable_internal(u32 dqe_id, bool en)
+{
+	u32 val;
+
+	val = en ? ENHANCE_RCD_ON : 0;
+	decon_write_mask(dqe_id, DATA_PATH_CON_0, val, ENHANCE_RCD_ON);
+}

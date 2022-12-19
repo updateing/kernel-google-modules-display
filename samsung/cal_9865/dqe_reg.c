@@ -802,3 +802,8 @@ void dqe_reg_set_histogram_pos_internal(u32 dqe_id, enum exynos_histogram_id his
 	pr_debug("%s: pos(%d)\n", __func__, pos);
 	hist_write_mask(dqe_id, DQE_HIST(hist_id), HIST_POS_SEL(pos), HIST_POS_SEL_MASK);
 }
+
+void dqe_reg_set_rcd_en_internal(u32 dqe_id, bool en)
+{
+	dqe_write(dqe_id, DQE_RCD, DQE_RCD_EN(en ? 1 : 0));
+}
