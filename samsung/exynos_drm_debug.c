@@ -1417,7 +1417,7 @@ err:
 	debugfs_remove_recursive(dent_dir);
 }
 
-static ssize_t decon_counters_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t counters_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	uint32_t underrun_cnt, crc_cnt, ecc_cnt, idma_err_cnt;
 	const struct decon_device *decon = to_decon_device(dev);
@@ -1431,17 +1431,17 @@ static ssize_t decon_counters_show(struct device *dev, struct device_attribute *
 	idma_err_cnt = decon->d.idma_err_cnt;
 
 	return snprintf(buf, PAGE_SIZE,
-			"underrun_cnt: %u\n"
-			"crc_cnt: %u\n"
-			"ecc_cnt: %u\n"
-			"idma_err_cnt: %u\n",
+			"underrun: %u\n"
+			"crc: %u\n"
+			"ecc: %u\n"
+			"idma_error: %u\n",
 			underrun_cnt, crc_cnt, ecc_cnt, idma_err_cnt);
 }
 
-static DEVICE_ATTR_RO(decon_counters);
+static DEVICE_ATTR_RO(counters);
 
 static const struct attribute *decon_debug_attrs[] = {
-	&dev_attr_decon_counters.attr,
+	&dev_attr_counters.attr,
 	NULL
 };
 
