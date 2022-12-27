@@ -726,16 +726,24 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->current_binned_lp = NULL;
 	ctx->cabc_mode = CABC_OFF;
 
+	mutex_lock(&ctx->mode_lock);
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func) {
 		if (exynos_panel_func->set_local_hbm_mode) {
-			cancel_delayed_work_sync(&ctx->hbm.local_hbm.timeout_work);
-			ctx->hbm.local_hbm.effective_state = LOCAL_HBM_DISABLED;
-			sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
+			bool is_forced_off = false;
+
+			ctx->hbm.local_hbm.requested_state = LOCAL_HBM_DISABLED;
+			if (!is_local_hbm_disabled(ctx)) {
+				is_forced_off = true;
+				dev_dbg(ctx->dev, "%s: force disabling lhbm\n", __func__);
+			}
+			panel_update_local_hbm_locked(ctx);
+
+			/* restore the state while enabling panel if needed */
+			if (is_forced_off)
+				ctx->hbm.local_hbm.requested_state = LOCAL_HBM_ENABLED;
 		}
 	}
-
-	mutex_lock(&ctx->mode_lock);
 	exynos_panel_send_cmd_set(ctx, ctx->desc->off_cmd_set);
 	mutex_unlock(&ctx->mode_lock);
 	dev_dbg(ctx->dev, "%s\n", __func__);
@@ -1921,6 +1929,17 @@ static void exynos_panel_connector_atomic_commit(
 	mutex_unlock(&ctx->mode_lock);
 
 	ctx->last_commit_ts = ktime_get();
+
+	if (exynos_old_state->is_recovering &&
+	    ctx->hbm.local_hbm.requested_state == LOCAL_HBM_ENABLED) {
+		dev_info(ctx->dev, "%s: doing lhbm recovery\n", __func__);
+
+		mutex_lock(&ctx->mode_lock);
+		panel_update_local_hbm_locked(ctx);
+		mutex_unlock(&ctx->mode_lock);
+
+		exynos_old_state->is_recovering = false;
+	}
 }
 
 static const struct exynos_drm_connector_helper_funcs exynos_panel_connector_helper_funcs = {

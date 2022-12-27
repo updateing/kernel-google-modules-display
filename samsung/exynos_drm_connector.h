@@ -189,6 +189,9 @@ struct exynos_drm_connector_state {
 	 *                nothing is being displayed on screen.
 	 */
 	bool blanked_mode;
+
+	/* @is_recovering: whether we're doing decon recovery */
+	bool is_recovering;
 };
 
 #define to_exynos_connector_state(connector_state) \
