@@ -688,8 +688,9 @@ struct exynos_panel {
 		struct local_hbm {
 			bool gamma_para_ready;
 			u8 gamma_cmd[LOCAL_HBM_GAMMA_CMD_SIZE_MAX];
+			enum local_hbm_enable_state requested_state;
 			union {
-				enum local_hbm_enable_state state;
+				enum local_hbm_enable_state effective_state;
 				enum local_hbm_enable_state enabled;
 			};
 			/* max local hbm on period in ms */
@@ -832,7 +833,7 @@ static inline bool is_local_hbm_post_enabling_supported(struct exynos_panel *ctx
 
 static inline bool is_local_hbm_disabled(struct exynos_panel *ctx)
 {
-	return (ctx->hbm.local_hbm.state == LOCAL_HBM_DISABLED);
+	return (ctx->hbm.local_hbm.effective_state == LOCAL_HBM_DISABLED);
 }
 
 #define EXYNOS_DSI_CMD_REV(cmd, delay, rev) { sizeof(cmd), cmd, delay, (u32)rev }
