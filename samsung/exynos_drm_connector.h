@@ -26,10 +26,11 @@ enum exynos_hbm_mode {
 };
 
 enum exynos_mipi_sync_mode {
-	MIPI_CMD_SYNC_REFRESH_RATE = BIT(0),
-	MIPI_CMD_SYNC_LHBM = BIT(1),
-	MIPI_CMD_SYNC_GHBM = BIT(2),
-	MIPI_CMD_SYNC_BL = BIT(3),
+	MIPI_CMD_SYNC_NONE = BIT(0),
+	MIPI_CMD_SYNC_REFRESH_RATE = BIT(1),
+	MIPI_CMD_SYNC_LHBM = BIT(2),
+	MIPI_CMD_SYNC_GHBM = BIT(3),
+	MIPI_CMD_SYNC_BL = BIT(4),
 };
 
 struct exynos_drm_connector;
