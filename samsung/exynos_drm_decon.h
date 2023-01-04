@@ -270,6 +270,8 @@ enum dpu_event_type {
 	DPU_EVT_DIMMING_END,
 
 	DPU_EVT_CGC_FRAMEDONE,
+	DPU_EVT_ITMON_ERROR,
+	DPU_EVT_SYSMMU_FAULT,
 
 	DPU_EVT_MAX, /* End of EVENT */
 };
@@ -301,6 +303,7 @@ struct dpu_log_dpp {
 struct dpu_log_win {
 	u32 win_idx;
 	u32 plane_idx;
+	bool secure;
 };
 
 struct dpu_log_rsc_occupancy {
