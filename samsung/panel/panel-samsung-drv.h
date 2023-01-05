@@ -703,6 +703,7 @@ struct exynos_panel {
 			ktime_t next_vblank_ts;
 			u32 frame_index;
 			ktime_t last_vblank_ts;
+			bool post_work_disabled;
 		} local_hbm;
 
 		struct workqueue_struct *wq;
@@ -823,9 +824,10 @@ static inline u32 get_current_frame_duration_us(struct exynos_panel *ctx)
 
 static inline bool is_local_hbm_post_enabling_supported(struct exynos_panel *ctx)
 {
-	return (ctx->desc && (ctx->desc->lhbm_effective_delay_frames ||
-			      (ctx->desc->lhbm_post_cmd_delay_frames &&
-			       ctx->desc->exynos_panel_func->set_local_hbm_mode_post)));
+	return (!ctx->hbm.local_hbm.post_work_disabled && ctx->desc &&
+		(ctx->desc->lhbm_effective_delay_frames ||
+		 (ctx->desc->lhbm_post_cmd_delay_frames &&
+		  ctx->desc->exynos_panel_func->set_local_hbm_mode_post)));
 }
 
 static inline bool is_local_hbm_disabled(struct exynos_panel *ctx)

@@ -2158,6 +2158,8 @@ static int panel_debugfs_add(struct exynos_panel *ctx, struct dentry *parent)
 	struct dentry *root;
 
 	debugfs_create_u32("rev", 0600, parent, &ctx->panel_rev);
+	debugfs_create_bool("lhbm_postwork_disabled", 0600, parent,
+			    &ctx->hbm.local_hbm.post_work_disabled);
 
 	if (!funcs)
 		return -EINVAL;
