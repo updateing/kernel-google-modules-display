@@ -3383,16 +3383,25 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 						struct exynos_panel *ctx)
 {
 	u32 te_period_us;
+	unsigned int te_usec;
 	int retry;
 	u64 left, right;
 	bool vblank_taken = false;
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 
 	if (WARN_ON(!current_mode))
 		return;
 
 	DPU_ATRACE_BEGIN("mipi_time_window");
 	te_period_us = USEC_PER_SEC / drm_mode_vrefresh(&current_mode->mode);
-	pr_debug("%s: check mode_set timing enter. te %d\n", __func__, te_period_us);
+
+	if (funcs && funcs->get_te_usec)
+		te_usec = funcs->get_te_usec(ctx, current_mode);
+	else
+		te_usec = current_mode->exynos_mode.te_usec;
+
+	pr_debug("%s: check mode_set timing enter. te_period_us %d, te_usec %u\n", __func__,
+		 te_period_us, te_usec);
 
 	/*
 	 * Safe time window to send RR (refresh rate) command illustrated below. RR switch
@@ -3414,7 +3423,7 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 	 * VSYNC------+----------+-------+----
 	 *            RR1        RR2
 	 */
-	left = exynos_panel_vsync_start_time_us(current_mode->exynos_mode.te_usec, te_period_us);
+	left = exynos_panel_vsync_start_time_us(te_usec, te_period_us);
 	right = te_period_us - USEC_PER_MSEC;
 	/* check for next TE every 1ms */
 	retry = te_period_us / USEC_PER_MSEC + 1;
