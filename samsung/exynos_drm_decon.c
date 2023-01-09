@@ -169,6 +169,11 @@ static void decon_set_color_map(struct decon_device *decon, u32 win_id,
 	decon_debug(decon, "%s -\n", __func__);
 }
 
+static inline bool decon_is_effectively_active(const struct decon_device *decon)
+{
+	return decon->state == DECON_STATE_ON || decon->state == DECON_STATE_HIBERNATION;
+}
+
 static inline bool decon_is_te_enabled(const struct decon_device *decon)
 {
 	return (decon->config.mode.op_mode == DECON_COMMAND_MODE) &&
@@ -2296,7 +2301,10 @@ static int decon_runtime_resume(struct device *dev)
 static int decon_suspend(struct device *dev)
 {
 	struct decon_device *decon = dev_get_drvdata(dev);
-	int ret = 0;
+	int ret;
+
+	if (!decon_is_effectively_active(decon))
+		return 0;
 
 	decon_debug(decon, "%s\n", __func__);
 
@@ -2310,6 +2318,9 @@ static int decon_suspend(struct device *dev)
 static int decon_resume(struct device *dev)
 {
 	struct decon_device *decon = dev_get_drvdata(dev);
+
+	if (!decon_is_effectively_active(decon))
+		return 0;
 
 	decon_debug(decon, "%s\n", __func__);
 
