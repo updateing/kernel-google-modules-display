@@ -2052,7 +2052,7 @@ static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 		exynos_panel_get_mode(ctx, &crtc_state->mode);
 
 	if (!pmode) {
-		dev_warn(ctx->dev, "invalid mode %s\n", pmode->mode.name);
+		dev_warn(ctx->dev, "invalid mode %s\n", crtc_state->mode.name);
 		return -EINVAL;
 	}
 
