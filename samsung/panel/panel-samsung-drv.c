@@ -3971,6 +3971,25 @@ static int exynos_panel_of_backlight(struct exynos_panel *ctx)
 }
 #endif
 
+static void exynos_panel_check_mode_clock(struct exynos_panel *ctx,
+					  const struct drm_display_mode *mode)
+{
+	int clk_hz = mode->htotal * mode->vtotal * drm_mode_vrefresh(mode);
+	int clk_khz = DIV_ROUND_CLOSEST(clk_hz, 1000);
+
+	if (clk_khz == mode->clock) {
+		/* clock should be divisible by 1000 to get an accurate value */
+		if (!(clk_hz % 1000))
+			dev_info(ctx->dev, "mode %s, clock %dkhz\n", mode->name, clk_khz);
+		else
+			dev_warn(ctx->dev, "mode %s, clock %dkhz is invalid!\n",
+				 mode->name, clk_khz);
+	} else {
+		dev_warn(ctx->dev, "mode %s, clock %dkhz is different from calculation %dkhz!\n",
+			 mode->name, mode->clock, clk_khz);
+	}
+}
+
 int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 				struct exynos_panel *ctx)
 {
@@ -4032,6 +4051,14 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 
 		if (ctx->peak_vrefresh < vrefresh)
 			ctx->peak_vrefresh = vrefresh;
+
+		exynos_panel_check_mode_clock(ctx, &pmode->mode);
+	}
+
+	for (i = 0; i < ctx->desc->lp_mode_count; i++) {
+		const struct exynos_panel_mode *lp_mode = &ctx->desc->lp_mode[i];
+
+		exynos_panel_check_mode_clock(ctx, &lp_mode->mode);
 	}
 
 	ctx->panel_idle_enabled = exynos_panel_func && exynos_panel_func->set_self_refresh != NULL;
