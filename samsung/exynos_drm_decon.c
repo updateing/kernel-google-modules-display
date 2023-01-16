@@ -370,6 +370,7 @@ static void decon_update_config(struct decon_config *config,
 				const struct exynos_drm_connector_state *exynos_conn_state)
 {
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
+	struct decon_device *decon = crtc_to_decon(crtc_state->crtc);
 
 	config->image_width = mode->hdisplay;
 	config->image_height = mode->vdisplay;
@@ -402,6 +403,8 @@ static void decon_update_config(struct decon_config *config,
 		decon_update_dsi_config(config, crtc_state, exynos_conn_state);
 
 	config->out_bpc = exynos_conn_state->exynos_mode.bpc;
+
+	DPU_EVENT_LOG(DPU_EVT_DECON_UPDATE_CONFIG, decon->id, NULL);
 }
 
 static bool decon_is_seamless_possible(const struct decon_device *decon,

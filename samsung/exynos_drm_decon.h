@@ -197,6 +197,7 @@ enum dpu_event_type {
 	DPU_EVT_DECON_FRAMESTART,
 	DPU_EVT_DECON_RSC_OCCUPANCY,
 	DPU_EVT_DECON_TRIG_MASK,
+	DPU_EVT_DECON_UPDATE_CONFIG,
 
 	DPU_EVT_DSIM_ENABLED,
 	DPU_EVT_DSIM_DISABLED,
@@ -385,6 +386,14 @@ struct dpu_log_plane_info {
 	u32 format;
 };
 
+struct dpu_log_decon_cfg {
+	u32 fps;
+	u32 image_width;
+	u32 image_height;
+	enum decon_out_type out_type;
+	struct decon_mode mode;
+};
+
 struct dpu_log {
 	u64 ts_nsec;
 	enum dpu_event_type type;
@@ -403,6 +412,7 @@ struct dpu_log {
 		struct dpu_log_bts_event bts_event;
 		struct dpu_log_partial partial;
 		struct dpu_log_plane_info plane_info;
+		struct dpu_log_decon_cfg decon_cfg;
 		unsigned int value;
 	} data;
 };

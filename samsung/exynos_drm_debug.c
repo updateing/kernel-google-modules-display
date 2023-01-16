@@ -235,6 +235,15 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		log->data.pd.decon_state = decon->state;
 		log->data.pd.rpm_active = pm_runtime_active(decon->dev);
 		break;
+	case DPU_EVT_DECON_UPDATE_CONFIG:
+		log->data.decon_cfg.fps = decon->bts.fps;
+		log->data.decon_cfg.image_height = decon->config.image_height;
+		log->data.decon_cfg.image_width = decon->config.image_width;
+		log->data.decon_cfg.out_type = decon->config.out_type;
+		log->data.decon_cfg.mode.op_mode = decon->config.mode.op_mode;
+		log->data.decon_cfg.mode.dsi_mode = decon->config.mode.dsi_mode;
+		log->data.decon_cfg.mode.trig_mode = decon->config.mode.trig_mode;
+		break;
 	case DPU_EVT_DSIM_RUNTIME_SUSPEND:
 	case DPU_EVT_DSIM_RUNTIME_RESUME:
 	case DPU_EVT_DSIM_SUSPEND:
@@ -511,6 +520,7 @@ static const char *get_event_name(enum dpu_event_type type)
 		"DECON_FRAMESTART",
 		"DECON_RSC_OCCUPANCY",
 		"DECON_TRIG_MASK",
+		"DECON_UPDATE_CONFIG",
 		"DSIM_ENABLED",
 		"DSIM_DISABLED",
 		"DSIM_COMMAND",
@@ -800,6 +810,15 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 					"\tDPU POWER:%s DECON STATE:%u",
 					log->data.pd.rpm_active ? "ON" : "OFF",
 					log->data.pd.decon_state);
+			break;
+		case DPU_EVT_DECON_UPDATE_CONFIG:
+			scnprintf(buf + len, sizeof(buf) - len,
+				  "\t%s mode, %s_trigger, out type:0x%x, dsi_mode:%d.(%dx%d@%dhz)",
+				  log->data.decon_cfg.mode.op_mode ? "command" : "video",
+				  log->data.decon_cfg.mode.trig_mode ? "sw" : "hw",
+				  log->data.decon_cfg.out_type, log->data.decon_cfg.mode.dsi_mode,
+				  log->data.decon_cfg.image_width, log->data.decon_cfg.image_height,
+				  log->data.decon_cfg.fps);
 			break;
 		case DPU_EVT_DSIM_RUNTIME_SUSPEND:
 		case DPU_EVT_DSIM_RUNTIME_RESUME:
