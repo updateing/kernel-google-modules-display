@@ -470,6 +470,7 @@ static int _decon_handover_check(struct exynos_drm_crtc *exynos_crtc,
 			dpp->state = DPP_STATE_HANDOVER;
 			dpp->win_id = i;
 			dpp->decon_id = decon->id;
+			dpp->is_win_connected = true;
 			found_handover_dpp = true;
 		}
 	}
@@ -596,12 +597,9 @@ static void decon_disable_win(struct decon_device *decon, int win_id)
 
 static void _dpp_disable(struct dpp_device *dpp)
 {
-	if (dpp->is_win_connected) {
+	if (dpp->disable)
 		dpp->disable(dpp);
-		dpp->is_win_connected = false;
-	} else if (test_bit(DPP_ATTR_RCD, &dpp->attr)) {
-		dpp->disable(dpp);
-	}
+	dpp->is_win_connected = false;
 }
 
 static void decon_update_plane(struct exynos_drm_crtc *exynos_crtc,
