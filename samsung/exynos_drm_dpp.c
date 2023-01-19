@@ -394,6 +394,7 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 
 	if (has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), fb->modifier)) {
 		config->comp_type = COMP_TYPE_AFBC;
+		config->blk_size = AFBC_BLOCK_SIZE_GET(fb->modifier);
 	} else if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), fb->modifier)) {
 		config->comp_type = COMP_TYPE_SBWC;
 		config->blk_size = SBWC_BLOCK_SIZE_GET(fb->modifier);

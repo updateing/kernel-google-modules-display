@@ -98,6 +98,7 @@ extern "C" {
 #define AFBC_FORMAT_MOD_SOURCE_MASK	(0xfULL << 52)
 #define AFBC_FORMAT_MOD_SOURCE_GPU	(1ULL << 52)
 #define AFBC_FORMAT_MOD_SOURCE_G2D	(2ULL << 52)
+#define AFBC_BLOCK_SIZE_GET(modifier)		(modifier & 0xf)
 
 #if defined(__cplusplus)
 }

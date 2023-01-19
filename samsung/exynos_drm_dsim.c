@@ -334,8 +334,25 @@ static void dsim_encoder_enable(struct drm_encoder *encoder, struct drm_atomic_s
 	struct drm_crtc_state *old_crtc_state = drm_atomic_get_old_crtc_state(state, crtc);
 	const struct decon_device *decon = to_exynos_crtc(crtc)->ctx;
 	struct device *supplier = decon->dev;
+	struct drm_connector *connector =
+			drm_atomic_get_new_connector_for_encoder(state, encoder);
 
 	dsim_debug(dsim, "current state: %d\n", dsim->state);
+
+	if (connector) {
+		struct drm_connector_state *conn_state =
+				drm_atomic_get_old_connector_state(state, connector);
+
+		if (conn_state) {
+			struct exynos_drm_connector_state *exynos_conn_state =
+					to_exynos_connector_state(conn_state);
+
+			if (atomic_read(&decon->recovery.recovering)) {
+				exynos_conn_state->is_recovering = true;
+				dsim_debug(dsim, "%s: doing recovery\n", __func__);
+			}
+		}
+	}
 
 	if (dsim->dev_link && (dsim->dev_link->supplier != supplier)) {
 		device_link_del(dsim->dev_link);

@@ -441,6 +441,14 @@ struct exynos_panel_funcs {
 	 * List supported OSC2 clock for panel.
 	 */
 	ssize_t (*list_osc2_clk_khz)(struct exynos_panel *exynos_panel, char *buf);
+
+	/**
+	 * @get_te_usec
+	 *
+	 * This callback is used to get current TE pulse time.
+	 */
+	unsigned int (*get_te_usec)(struct exynos_panel *exynos_panel,
+				    const struct exynos_panel_mode *pmode);
 };
 
 /**
@@ -688,8 +696,9 @@ struct exynos_panel {
 		struct local_hbm {
 			bool gamma_para_ready;
 			u8 gamma_cmd[LOCAL_HBM_GAMMA_CMD_SIZE_MAX];
+			enum local_hbm_enable_state requested_state;
 			union {
-				enum local_hbm_enable_state state;
+				enum local_hbm_enable_state effective_state;
 				enum local_hbm_enable_state enabled;
 			};
 			/* max local hbm on period in ms */
@@ -703,6 +712,7 @@ struct exynos_panel {
 			ktime_t next_vblank_ts;
 			u32 frame_index;
 			ktime_t last_vblank_ts;
+			bool post_work_disabled;
 		} local_hbm;
 
 		struct workqueue_struct *wq;
@@ -823,14 +833,15 @@ static inline u32 get_current_frame_duration_us(struct exynos_panel *ctx)
 
 static inline bool is_local_hbm_post_enabling_supported(struct exynos_panel *ctx)
 {
-	return (ctx->desc && (ctx->desc->lhbm_effective_delay_frames ||
-			      (ctx->desc->lhbm_post_cmd_delay_frames &&
-			       ctx->desc->exynos_panel_func->set_local_hbm_mode_post)));
+	return (!ctx->hbm.local_hbm.post_work_disabled && ctx->desc &&
+		(ctx->desc->lhbm_effective_delay_frames ||
+		 (ctx->desc->lhbm_post_cmd_delay_frames &&
+		  ctx->desc->exynos_panel_func->set_local_hbm_mode_post)));
 }
 
 static inline bool is_local_hbm_disabled(struct exynos_panel *ctx)
 {
-	return (ctx->hbm.local_hbm.state == LOCAL_HBM_DISABLED);
+	return (ctx->hbm.local_hbm.effective_state == LOCAL_HBM_DISABLED);
 }
 
 #define EXYNOS_DSI_CMD_REV(cmd, delay, rev) { sizeof(cmd), cmd, delay, (u32)rev }
