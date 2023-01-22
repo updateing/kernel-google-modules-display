@@ -1550,6 +1550,23 @@ static ssize_t op_hz_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->op_hz);
 }
 
+static ssize_t refresh_rate_show(struct device *dev, struct device_attribute *attr,
+				 char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	const struct exynos_panel_mode *current_mode;
+	int rr = -1;
+
+	mutex_lock(&ctx->mode_lock);
+	current_mode = ctx->current_mode;
+	if (current_mode != NULL)
+		rr = drm_mode_vrefresh(&current_mode->mode);
+	mutex_unlock(&ctx->mode_lock);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", rr);
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
@@ -1564,6 +1581,7 @@ static DEVICE_ATTR_RW(force_power_on);
 static DEVICE_ATTR_RW(osc2_clk_khz);
 static DEVICE_ATTR_RO(available_osc2_clk_khz);
 static DEVICE_ATTR_RW(op_hz);
+static DEVICE_ATTR_RO(refresh_rate);
 
 static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
@@ -1580,6 +1598,7 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_osc2_clk_khz.attr,
 	&dev_attr_available_osc2_clk_khz.attr,
 	&dev_attr_op_hz.attr,
+	&dev_attr_refresh_rate.attr,
 	NULL
 };
 
@@ -3671,6 +3690,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	if (old_mode && drm_mode_vrefresh(&pmode->mode) != drm_mode_vrefresh(&old_mode->mode)) {
 		ctx->last_rr_switch_ts = ktime_get();
 		ctx->last_rr = drm_mode_vrefresh(&old_mode->mode);
+		sysfs_notify(&ctx->dev->kobj, NULL, "refresh_rate");
 	}
 
 	mutex_unlock(&ctx->mode_lock);
