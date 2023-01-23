@@ -3402,7 +3402,7 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 						struct exynos_panel *ctx)
 {
 	u32 te_period_us;
-	unsigned int te_usec;
+	u32 te_usec;
 	int retry;
 	u64 left, right;
 	bool vblank_taken = false;
@@ -3418,8 +3418,7 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 		te_usec = funcs->get_te_usec(ctx, current_mode);
 	else
 		te_usec = current_mode->exynos_mode.te_usec;
-
-	pr_debug("%s: check mode_set timing enter. te_period_us %d, te_usec %u\n", __func__,
+	pr_debug("%s: check mode_set timing enter. te_period_us %u, te_usec %u\n", __func__,
 		 te_period_us, te_usec);
 
 	/*
@@ -3442,21 +3441,35 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 	 * VSYNC------+----------+-------+----
 	 *            RR1        RR2
 	 */
-	left = exynos_panel_vsync_start_time_us(te_usec, te_period_us);
-	right = te_period_us - USEC_PER_MSEC;
-	/* check for next TE every 1ms */
 	retry = te_period_us / USEC_PER_MSEC + 1;
 
 	do {
 		ktime_t last_te = 0, now;
 		s64 since_last_te_us;
-		s64 rr_switch_delta_us;
-		s64 te_period_before_rr_switch_us;
+		u64 vblank_counter;
 
-		drm_crtc_vblank_count_and_time(crtc, &last_te);
+		vblank_counter = drm_crtc_vblank_count_and_time(crtc, &last_te);
 		now = ktime_get();
 		since_last_te_us = ktime_us_delta(now, last_te);
-		/* Need a vblank as a reference point */
+		/**
+		 * If a refresh rate switch happens right before last_te. last TE width could be for
+		 * new rr or for old rr depending on if last rr is sent at TE high or low.
+		 * If the refresh rate switch happens after last_te, last TE width won't change.
+		 */
+		if (ctx->last_rr != 0 && ((vblank_counter - ctx->last_rr_te_counter <= 1 &&
+					   ctx->last_rr_te_gpio_value == 0) ||
+					  ktime_after(ctx->last_rr_switch_ts, last_te))) {
+			te_period_us = USEC_PER_SEC / ctx->last_rr;
+			te_usec = ctx->last_rr_te_usec;
+		}
+		left = exynos_panel_vsync_start_time_us(te_usec, te_period_us);
+		right = te_period_us - USEC_PER_MSEC;
+		pr_debug(
+			"%s: rr-te: %lld, te-now: %lld, time window [%llu, %llu] te/pulse: %u/%u\n",
+			__func__, ktime_us_delta(last_te, ctx->last_rr_switch_ts),
+			ktime_us_delta(now, last_te), left, right, te_period_us, te_usec);
+
+		/* Only use the most recent TE as a reference point if it's not obsolete */
 		if (since_last_te_us > te_period_us) {
 			DPU_ATRACE_BEGIN("time_window_wait_crtc");
 			if (vblank_taken || !drm_crtc_vblank_get(crtc)) {
@@ -3469,32 +3482,13 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 			continue;
 		}
 
-		/**
-		 * If a refresh rate switch happens right before last_te. last_te is not reliable
-		 * because it could be for the new refresh rate or the old refresh rate.
-		 * Wait another vblank in this case.
-		 */
-		rr_switch_delta_us = ktime_us_delta(last_te, ctx->last_rr_switch_ts);
-		te_period_before_rr_switch_us = ctx->last_rr != 0 ? USEC_PER_SEC / ctx->last_rr : 0;
-		if (rr_switch_delta_us > 0 && rr_switch_delta_us < te_period_before_rr_switch_us) {
-			DPU_ATRACE_BEGIN("time_window_wait_crtc2");
-			if (vblank_taken || !drm_crtc_vblank_get(crtc)) {
-				drm_crtc_wait_one_vblank(crtc);
-				vblank_taken = true;
-			} else {
-				pr_warn("%s failed to get vblank for rr wait\n", __func__);
-			}
-			DPU_ATRACE_END("time_window_wait_crtc2");
-			continue;
-		}
-
 		if (since_last_te_us <= right) {
 			if (since_last_te_us < left) {
 				u32 delay_us = left - since_last_te_us;
 
-				DPU_ATRACE_BEGIN("time_window_wait");
+				DPU_ATRACE_BEGIN("time_window_wait_te_low");
 				usleep_range(delay_us, delay_us + 100);
-				DPU_ATRACE_END("time_window_wait");
+				DPU_ATRACE_END("time_window_wait_te_low");
 				/*
 				 * if a mode switch happens, a TE signal might
 				 * happen during the sleep. need to re-sync
@@ -3688,8 +3682,18 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	}
 
 	if (old_mode && drm_mode_vrefresh(&pmode->mode) != drm_mode_vrefresh(&old_mode->mode)) {
+		/* save the context in order to predict TE width in
+		 * exynos_panel_check_mipi_sync_timing
+		 */
 		ctx->last_rr_switch_ts = ktime_get();
 		ctx->last_rr = drm_mode_vrefresh(&old_mode->mode);
+		ctx->last_rr_te_gpio_value = gpio_get_value(exynos_connector_state->te_gpio);
+		ctx->last_rr_te_counter = drm_crtc_vblank_count(crtc);
+		if (ctx->desc->exynos_panel_func)
+			ctx->last_rr_te_usec =
+				ctx->desc->exynos_panel_func->get_te_usec(ctx, old_mode);
+		else
+			ctx->last_rr_te_usec = old_mode->exynos_mode.te_usec;
 		sysfs_notify(&ctx->dev->kobj, NULL, "refresh_rate");
 	}
 
