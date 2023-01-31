@@ -3689,7 +3689,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 		ctx->last_rr = drm_mode_vrefresh(&old_mode->mode);
 		ctx->last_rr_te_gpio_value = gpio_get_value(exynos_connector_state->te_gpio);
 		ctx->last_rr_te_counter = drm_crtc_vblank_count(crtc);
-		if (ctx->desc->exynos_panel_func)
+		if (ctx->desc->exynos_panel_func && ctx->desc->exynos_panel_func->get_te_usec)
 			ctx->last_rr_te_usec =
 				ctx->desc->exynos_panel_func->get_te_usec(ctx, old_mode);
 		else
