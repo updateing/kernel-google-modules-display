@@ -1444,43 +1444,38 @@ static ssize_t counters_show(struct device *dev, struct device_attribute *attr, 
 
 static DEVICE_ATTR_RO(counters);
 
-static const struct attribute *decon_debug_attrs[] = {
-	&dev_attr_counters.attr,
-	NULL
-};
-
-static int hibernation_show(struct seq_file *s, void *unused)
+static ssize_t hibernation_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
 {
-	struct decon_device *decon = s->private;
+	struct decon_device *decon = dev_get_drvdata(dev);
 	struct exynos_hibernation *hiber = decon->hibernation;
 
-	seq_printf(s, "%s, block_cnt(%d)\n",
-			hiber->enabled ? "enabled" : "disabled",
-			atomic_read(&hiber->block_cnt));
-
-	return 0;
+	return scnprintf(buf, PAGE_SIZE,
+				"state: %s\n"
+				"block_count: %d\n",
+				hiber->enabled ? "enabled" : "disabled",
+				atomic_read(&hiber->block_cnt));
 }
 
-static int hibernation_open(struct inode *inode, struct file *file)
+static ssize_t hibernation_store(struct device *dev,
+			struct device_attribute *attr, const char *buf, size_t len)
 {
-	return single_open(file, hibernation_show, inode->i_private);
-}
+	struct decon_device *decon;
+	struct exynos_hibernation *hiber;
+	bool enable;
 
-static ssize_t hibernation_write(struct file *file, const char __user *buffer,
-			   size_t len, loff_t *ppos)
-{
+	if (!dev || !buf || !len) {
+		pr_err("%s: invalid input param\n", __func__);
+		return -EINVAL;
+	}
 
-	struct seq_file *s = file->private_data;
-	struct decon_device *decon = s->private;
-	struct exynos_hibernation *hiber = decon->hibernation;
-	int ret;
-	bool en;
+	if (kstrtobool(buf, &enable) < 0)
+		return -EINVAL;
 
-	ret = kstrtobool_from_user(buffer, len, &en);
-	if (ret)
-		return ret;
+	decon = dev_get_drvdata(dev);
+	hiber = decon->hibernation;
 
-	if (!en) {
+	if (!enable) {
 		/* if disabling, make sure it gets out of hibernation before disabling */
 		hibernation_block_exit(hiber);
 		hiber->enabled = false;
@@ -1493,13 +1488,12 @@ static ssize_t hibernation_write(struct file *file, const char __user *buffer,
 
 	return len;
 }
+static DEVICE_ATTR_RW(hibernation);
 
-static const struct file_operations hibernation_fops = {
-	.open = hibernation_open,
-	.read = seq_read,
-	.write = hibernation_write,
-	.llseek = seq_lseek,
-	.release = seq_release,
+static const struct attribute *decon_debug_attrs[] = {
+	&dev_attr_counters.attr,
+	&dev_attr_hibernation.attr,
+	NULL
 };
 
 static int recovery_show(struct seq_file *s, void *unused)
@@ -1641,10 +1635,6 @@ int dpu_init_debug(struct decon_device *decon)
 		DRM_ERROR("failed to create debugfs event file\n");
 		goto err_event_log;
 	}
-
-	if (decon->hibernation)
-		debugfs_create_file("hibernation", 0664, crtc->debugfs_entry, decon,
-				&hibernation_fops);
 
 	if (!debugfs_create_file("recovery", 0644, crtc->debugfs_entry, decon,
 				&recovery_fops)) {
