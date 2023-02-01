@@ -76,6 +76,7 @@ DEFINE_MUTEX(g_dsim_lock);
 
 #define PANEL_DRV_LEN 64
 #define RETRY_READ_FIFO_MAX 10
+#define PANEL_ID_LENGTH 3
 
 static char panel_name[PANEL_DRV_LEN];
 module_param_string(panel_name, panel_name, sizeof(panel_name), 0644);
@@ -102,8 +103,6 @@ pr_err("%s[%d]: "fmt, dsim->dev->driver->name, dsim->id, ##__VA_ARGS__)
 
 #define dsim_debug(dsim, fmt, ...)	\
 pr_debug("%s[%d]: "fmt, dsim->dev->driver->name, dsim->id, ##__VA_ARGS__)
-
-#define host_to_dsi(host) container_of(host, struct dsim_device, dsi_host)
 
 #define DSIM_ESCAPE_CLK_20MHZ	20
 
@@ -1262,8 +1261,13 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 	struct device_node *node;
 	const char *name;
 	const char *dual_dsi;
+	const char *p;
+	u32 cmp_len;
 
-	dsim_debug(dsim, "preferred panel is %s\n", pname);
+	p = strchr(pname, '.');
+	cmp_len = p ? min((ptrdiff_t)PANEL_DRV_LEN, p - pname) : strnlen(pname, PANEL_DRV_LEN);
+
+	dsim_debug(dsim, "preferred panel is %.*s\n", cmp_len, pname);
 
 	for_each_available_child_of_node(dsim->dsi_host.dev->of_node, node) {
 		bool found;
@@ -1294,7 +1298,7 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 			continue;
 
 		/* if panel name is not specified pick the first device found */
-		found = !strncmp(name, pname, PANEL_DRV_LEN);
+		found = !strncmp(name, pname, cmp_len);
 		if (pname[0] == '\0' || found) {
 			/*
 			 * The default is primary panel. If not, add priority
@@ -1355,6 +1359,24 @@ static const char *dsim_get_panel_name(const struct dsim_device *dsim, const cha
 	return p;
 }
 
+static u32 dsim_get_panel_id(const char *name)
+{
+	char *p = strchr(name, '.');
+	u8 panel_id[PANEL_ID_LENGTH];
+
+	/* if period is found, expect 6 hex characters (ex. panel_name.000000),
+	 * otherwise return an invalid panel ID */
+	if (!p)
+		return INVALID_PANEL_ID;
+
+	p++;
+
+	if (strlen(p) != (PANEL_ID_LENGTH * 2) || hex2bin(panel_id, p, PANEL_ID_LENGTH))
+		return INVALID_PANEL_ID;
+
+	return (panel_id[0] << 16) | (panel_id[1] << 8) | panel_id[2];
+}
+
 static int dsim_parse_panel_name(struct dsim_device *dsim)
 {
 	const char *name;
@@ -1362,13 +1384,17 @@ static int dsim_parse_panel_name(struct dsim_device *dsim)
 
 	name = dsim_get_panel_name(dsim, panel_name, PANEL_DRV_LEN);
 	idx = PANEL_PRIORITY_PRI_IDX;
-	if (name && !(panel_usage & BIT(idx)))
+	if (name && !(panel_usage & BIT(idx))) {
+		dsim->panel_id = dsim_get_panel_id(panel_name);
 		return dsim_add_mipi_dsi_device(dsim, name, idx);
+	}
 
 	name = dsim_get_panel_name(dsim, sec_panel_name, PANEL_DRV_LEN);
 	idx = PANEL_PRIORITY_SEC_IDX;
-	if (name && name[0] && !(panel_usage & BIT(idx)))
+	if (name && name[0] && !(panel_usage & BIT(idx))) {
+		dsim->panel_id = dsim_get_panel_id(sec_panel_name);
 		return dsim_add_mipi_dsi_device(dsim, name, idx);
+	}
 
 	return -ENODEV;
 }

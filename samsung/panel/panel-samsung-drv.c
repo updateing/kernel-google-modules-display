@@ -30,6 +30,7 @@
 
 #include <trace/dpu_trace.h>
 #include "../exynos_drm_connector.h"
+#include "../exynos_drm_dsim.h"
 #include "panel-samsung-drv.h"
 
 #define PANEL_ID_REG		0xA1
@@ -315,6 +316,10 @@ static int exynos_panel_read_extinfo(struct exynos_panel *ctx)
 	char buf[EXT_INFO_SIZE];
 	int i, ret;
 
+	/* extinfo already set, skip reading */
+	if (ctx->panel_extinfo[0] != '\0')
+		return 0;
+
 	for (i = 0; i < EXT_INFO_SIZE; i++) {
 		ret = mipi_dsi_dcs_read(dsi, ext_info_regs[i], buf + i, 1);
 		if (ret != 1) {
@@ -384,7 +389,7 @@ int exynos_panel_init(struct exynos_panel *ctx)
 	if (!ret)
 		ctx->initialized = true;
 
-	if (funcs && funcs->get_panel_rev) {
+	if (!ctx->panel_rev && funcs && funcs->get_panel_rev) {
 		u32 id;
 
 		if (kstrtou32(ctx->panel_extinfo, 16, &id)) {
@@ -394,7 +399,7 @@ int exynos_panel_init(struct exynos_panel *ctx)
 		} else {
 			funcs->get_panel_rev(ctx, id);
 		}
-	} else {
+	} else if (!ctx->panel_rev) {
 		dev_warn(ctx->dev,
 			 "unable to get panel rev, default to latest\n");
 		ctx->panel_rev = PANEL_REV_LATEST;
@@ -4031,6 +4036,7 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	char name[32];
 	const struct exynos_panel_funcs *exynos_panel_func;
 	int i;
+	u32 id = host_to_dsi(dsi->host)->panel_id;
 
 	dev_dbg(dev, "%s +\n", __func__);
 
@@ -4047,6 +4053,17 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 
 	scnprintf(name, sizeof(name), "panel%d-backlight", atomic_inc_return(&panel_index));
 
+	exynos_panel_func = ctx->desc->exynos_panel_func;
+
+	if (id != INVALID_PANEL_ID) {
+		exynos_bin2hex(&id, EXT_INFO_SIZE, ctx->panel_extinfo, sizeof(ctx->panel_extinfo));
+
+		if (exynos_panel_func && exynos_panel_func->get_panel_rev)
+			exynos_panel_func->get_panel_rev(ctx, id);
+	}
+	else
+		dev_dbg(ctx->dev, "Invalid panel id passed from bootloader");
+
 	ctx->bl = devm_backlight_device_register(ctx->dev, name, dev,
 			ctx, &exynos_backlight_ops, NULL);
 	if (IS_ERR(ctx->bl)) {
@@ -4056,7 +4073,6 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	ctx->bl->props.max_brightness = ctx->desc->max_brightness;
 	ctx->bl->props.brightness = ctx->desc->dft_brightness;
 
-	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func && (exynos_panel_func->set_hbm_mode
 				  || exynos_panel_func->set_local_hbm_mode))
 		hbm_data_init(ctx);
