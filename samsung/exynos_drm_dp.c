@@ -129,10 +129,45 @@ static bool dp_get_fast_training(struct dp_device *dp)
 #define MAX_VOLTAGE_LEVEL 3
 #define MAX_PREEMPH_LEVEL 3
 
+static unsigned long dp_rate = 2;    /* HBR2 is the default */
+module_param(dp_rate, ulong, 0664);
+MODULE_PARM_DESC(dp_rate, "use specific DP link rate by setting dp_rate=x");
+
+static unsigned long dp_lanes = 4;    /* 4 lanes is the default */
+module_param(dp_lanes, ulong, 0664);
+MODULE_PARM_DESC(dp_lanes, "use specific number of DP lanes by setting dp_lanes=x");
+
 static void dp_fill_host_caps(struct dp_device *dp)
 {
-	dp->host.num_lanes = MAX_LANE_CNT;
-	dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1);
+	switch (dp_rate) {
+	case 0:
+		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_1_62);
+		break;
+	case 1:
+		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_2_7);
+		break;
+	case 3:
+		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1);
+		break;
+	case 2:
+	default:
+		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_5_4);
+		break;
+	}
+
+	switch (dp_lanes) {
+	case 1:
+		dp->host.num_lanes = 1;
+		break;
+	case 2:
+		dp->host.num_lanes = 2;
+		break;
+	case 4:
+	default:
+		dp->host.num_lanes = 4;
+		break;
+	}
+
 	dp->host.volt_swing_max = MAX_VOLTAGE_LEVEL;
 	dp->host.pre_emphasis_max = MAX_PREEMPH_LEVEL;
 	dp->host.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2) |
