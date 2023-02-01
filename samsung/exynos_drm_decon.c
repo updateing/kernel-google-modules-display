@@ -1179,6 +1179,8 @@ static void _decon_stop_locked(struct decon_device *decon, bool reset, u32 vrefr
 
 static void decon_exit_hibernation(struct decon_device *decon)
 {
+	unsigned long flags;
+
 	if (decon->state != DECON_STATE_HIBERNATION)
 		return;
 
@@ -1189,13 +1191,13 @@ static void decon_exit_hibernation(struct decon_device *decon)
 	if (pm_runtime_get_sync(decon->dev) < 0)
 		decon_err(decon, "%s: failed to pm_runtime_get_sync\n", __func__);
 
-	spin_lock(&decon->slock);
+	spin_lock_irqsave(&decon->slock, flags);
 	_decon_enable_locked(decon);
 	exynos_dqe_restore_lpd_data(decon->dqe);
 	if (decon->partial)
 		exynos_partial_restore(decon->partial);
 	decon->state = DECON_STATE_ON;
-	spin_unlock(&decon->slock);
+	spin_unlock_irqrestore(&decon->slock, flags);
 
 	decon_debug(decon, "%s -\n", __func__);
 	DPU_ATRACE_END(__func__);
@@ -1312,15 +1314,15 @@ ret:
 
 static void decon_disable_irqs(struct decon_device *decon)
 {
-	disable_irq(decon->irq_fd);
-	disable_irq(decon->irq_ext);
+	disable_irq_nosync(decon->irq_fd);
+	disable_irq_nosync(decon->irq_ext);
 	if (decon->irq_ds >= 0)
-		disable_irq(decon->irq_ds);
+		disable_irq_nosync(decon->irq_ds);
 	if (decon->irq_de >= 0)
-		disable_irq(decon->irq_de);
+		disable_irq_nosync(decon->irq_de);
 	decon_reg_set_interrupts(decon->id, 0);
 	if (decon_is_te_enabled(decon))
-		disable_irq(decon->irq_fs);
+		disable_irq_nosync(decon->irq_fs);
 }
 
 static u32 _decon_get_current_fps(struct decon_device *decon)
