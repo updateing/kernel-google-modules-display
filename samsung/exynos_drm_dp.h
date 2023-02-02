@@ -202,6 +202,8 @@ struct dp_hdcp_config {
 	struct dp_hdcp22_info hdcp22_info;
 };
 
+enum link_training_status { LINK_TRAINING_UNKNOWN, LINK_TRAINING_SUCCESS, LINK_TRAINING_FAILURE };
+
 /* DisplayPort Device */
 struct dp_device {
 	struct drm_encoder encoder;
@@ -240,11 +242,6 @@ struct dp_device {
 	struct dp_host host;
 	struct dp_sink sink;
 
-	/* PDIC / ExtCon */
-	struct extcon_dev *edev;
-	struct notifier_block dp_typec_nb;
-	int notifier_registered;
-
 	/* BIST */
 	bool bist_used;
 
@@ -261,6 +258,12 @@ struct dp_device {
 
 	/* DP HW Configurations */
 	struct dp_hw_config hw_config;
+
+	/* Type-C Userspace Cached Values */
+	struct mutex typec_notification_lock;
+	enum plug_orientation typec_orientation;
+	enum pin_assignment typec_pin_assignment;
+	enum link_training_status typec_link_training_status;
 };
 
 static inline struct dp_device *get_dp_drvdata(void)

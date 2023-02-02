@@ -1345,6 +1345,9 @@ static void dp_work_hpd_plug(struct work_struct *work)
 	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
 		mutex_lock(&dp->hpd_lock);
 
+		/* Reset before performing link training */
+		dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
+
 		pm_runtime_get_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_get_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
@@ -1366,6 +1369,7 @@ static void dp_work_hpd_plug(struct work_struct *work)
 			dp_err(dp, "failed to DP Link Up\n");
 			goto HPD_FAIL;
 		}
+		dp->typec_link_training_status = LINK_TRAINING_SUCCESS;
 
 		dp_check_hdcp_authentication(dp);
 
@@ -1393,6 +1397,8 @@ HPD_FAIL:
 	/* in error case, add delay to avoid very short interval reconnection */
 	msleep(300);
 
+	dp->typec_link_training_status = LINK_TRAINING_FAILURE;
+
 	mutex_unlock(&dp->hpd_lock);
 }
 
@@ -1417,6 +1423,9 @@ static void dp_work_hpd_unplug(struct work_struct *work)
 
 		dp->state = DP_STATE_INIT;
 		dp_info(dp, "%s: DP State changed to INIT\n", __func__);
+
+		/* Mark unknown on cable disconnect as well */
+		dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
 
 		mutex_unlock(&dp->hpd_lock);
 	}
@@ -1868,8 +1877,7 @@ exit_hdcp:
 	mutex_unlock(&dp->hdcp_lock);
 }
 
-
-/* ExtCon Handshaking Functions */
+/* Type-C Handshaking Functions */
 static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 {
 	if (dp_get_hpd_state(dp) == state) {
@@ -1889,89 +1897,36 @@ static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 		dp_err(dp, "DP HPD changed to abnormal state(%d)\n", state);
 }
 
-static int usb_typec_dp_notification(struct notifier_block *nb,
-				     unsigned long action, void *data)
+/*
+ * Function should be called with typec_notification_lock held.
+ */
+static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_state hpd)
 {
-	struct dp_device *dp = container_of(nb, struct dp_device, dp_typec_nb);
-	union extcon_property_value property = { 0 };
-	int ret;
+	if (hpd == EXYNOS_HPD_PLUG) {
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+			dp_info(dp, "%s: USB Type-C is HPD PLUG status\n", __func__);
 
-	if (action != 1) {
-		dp_info(dp, "%s: USB Type-C is not in display ALT mode\n",
+			memset(&dp->hw_config, 0, sizeof(struct dp_hw_config));
+			dp_info(dp, "%s: disp_orientation = %d\n", __func__, dp->typec_orientation);
+			dp->hw_config.orient_type = dp->typec_orientation;
+
+			dp_info(dp, "%s: disp_pin_config = %d\n", __func__,
+				dp->typec_pin_assignment);
+			dp->hw_config.pin_type = dp->typec_pin_assignment;
+
+			dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
+		} else {
+			dp_warn(dp, "%s: IRQ from sink\n", __func__);
+		}
+	} else {
+		dp_info(dp, "%s: USB Type-C is HPD UNPLUG status, or not in display ALT mode\n",
 			__func__);
 
 		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
 			dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
-
-		return NOTIFY_OK;
 	}
 
-	ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
-				  EXTCON_PROP_DISP_HPD, &property);
-	if (ret) {
-		dp_err(dp, "%s: extcon_get_property() is failed\n", __func__);
-		return NOTIFY_OK;
-	}
-
-	if (property.intval != 1) {
-		dp_info(dp, "%s: usb type-c is hpd unplug status\n", __func__);
-		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
-			dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
-		return NOTIFY_OK;
-	}
-
-	dp_info(dp, "%s: USB Type-C is HPD PLUG status\n", __func__);
-
-	if (dp_get_hpd_state(dp) != EXYNOS_HPD_UNPLUG) {
-		dp_warn(dp, "%s: IRQ from sink\n", __func__);
-		queue_delayed_work(dp->dp_wq, &dp->hpd_irq_work, 0);
-		return NOTIFY_OK;
-	}
-
-	memset(&dp->hw_config, 0, sizeof(struct dp_hw_config));
-
-	ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
-		EXTCON_PROP_DISP_ORIENTATION, &property);
-	if (!ret) {
-		dp_info(dp, "%s: disp_orientation = %d\n", __func__,
-			property.intval);
-		dp->hw_config.orient_type = (enum plug_orientation)(
-			property.intval);
-	}
-
-	ret = extcon_get_property(dp->edev, EXTCON_DISP_DP,
-			EXTCON_PROP_DISP_PIN_CONFIG, &property);
-	if (!ret) {
-		dp_info(dp, "%s: disp_pin_config = %d\n", __func__,
-			property.intval);
-		dp->hw_config.pin_type = (enum pin_assignment)(
-			property.intval);
-
-		dp->hw_config.num_lanes =
-			(dp->hw_config.pin_type == PIN_TYPE_A ||
-			 dp->hw_config.pin_type == PIN_TYPE_C ||
-			 dp->hw_config.pin_type == PIN_TYPE_E) ? 4 : 2;
-	}
-
-	dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
 	return NOTIFY_OK;
-}
-
-static void dp_register_extcon_notifier(void)
-{
-	struct dp_device *dp = get_dp_drvdata();
-	int ret;
-
-	if (!dp->notifier_registered) {
-		dp->dp_typec_nb.notifier_call = usb_typec_dp_notification;
-		ret = extcon_register_notifier(dp->edev, EXTCON_DISP_DP,
-					       &dp->dp_typec_nb);
-		if (ret < 0)
-			dp_err(dp, "failed to register PDIC Notifier\n");
-
-		dp->notifier_registered = 1;
-		dp_debug(dp, "PDIC Notifier has been registered\n");
-	}
 }
 
 /* Audio(ALSA) Handshaking Functions */
@@ -2255,8 +2210,6 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 	dp_fill_host_caps(dp);
 	dp_info(dp, "DP Driver has been binded\n");
 
-	dp_register_extcon_notifier();
-
 	return ret;
 }
 
@@ -2279,11 +2232,6 @@ static int dp_parse_dt(struct dp_device *dp, struct device *dev)
 {
 	if (IS_ERR_OR_NULL(dev->of_node)) {
 		dp_err(dp, "no device tree information\n");
-		return -EINVAL;
-	}
-
-	if (!of_property_read_bool(dev->of_node, "extcon")) {
-		dp_err(dp, "no extcon in device tree\n");
 		return -EINVAL;
 	}
 
@@ -2389,11 +2337,119 @@ static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
 	return 0;
 }
 
+static const char *const orientations[] = {
+	[PLUG_NONE] = "unknown",
+	[PLUG_NORMAL] = "normal",
+	[PLUG_FLIPPED] = "reverse",
+};
+
+static ssize_t orientation_store(struct device *dev, struct device_attribute *attr, const char *buf,
+				 size_t size)
+{
+	int orientation;
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	orientation = sysfs_match_string(orientations, buf);
+	if (orientation < 0)
+		return orientation;
+
+	dp->typec_orientation = (enum plug_orientation)orientation;
+	return size;
+}
+
+static ssize_t orientation_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->hw_config.orient_type);
+}
+static DEVICE_ATTR_RW(orientation);
+
+static const char *const pin_assignments[] = {
+	// Two blanks required because PIN_TYPE_A starts at 2, and
+	// sysfs_match_string requires all indices to be filled.
+	[0] = "NA",	    [1] = "NA",		[PIN_TYPE_A] = "A", [PIN_TYPE_B] = "B",
+	[PIN_TYPE_C] = "C", [PIN_TYPE_D] = "D", [PIN_TYPE_E] = "E", [PIN_TYPE_F] = "F",
+};
+
+static ssize_t pin_assignment_store(struct device *dev, struct device_attribute *attr,
+				    const char *buf, size_t size)
+{
+	int pin_assign;
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	pin_assign = sysfs_match_string(pin_assignments, buf);
+	if (pin_assign < (int)PIN_TYPE_A)
+		return -EINVAL;
+
+	dp->typec_pin_assignment = (enum pin_assignment)pin_assign;
+	return size;
+}
+
+static ssize_t pin_assignment_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->hw_config.pin_type);
+}
+static DEVICE_ATTR_RW(pin_assignment);
+
+static const char *const hpds[] = {
+	[EXYNOS_HPD_UNPLUG] = "0",
+	[EXYNOS_HPD_PLUG] = "1",
+};
+
+static ssize_t hpd_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			 size_t size)
+{
+	int hpd;
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	hpd = sysfs_match_string(hpds, buf);
+	if (hpd < 0)
+		return hpd;
+
+	mutex_lock(&dp->typec_notification_lock);
+	usb_typec_dp_notification_locked(dp, (enum hotplug_state)hpd);
+	mutex_unlock(&dp->typec_notification_lock);
+	return size;
+}
+
+static ssize_t hpd_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp_get_hpd_state(dp));
+}
+static DEVICE_ATTR_RW(hpd);
+
+static ssize_t link_status_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->typec_link_training_status);
+}
+static DEVICE_ATTR_RO(link_status);
+
+static struct attribute *dp_attrs[] = { &dev_attr_orientation.attr, &dev_attr_pin_assignment.attr,
+					&dev_attr_hpd.attr, &dev_attr_link_status.attr, NULL };
+
+static const struct attribute_group dp_group = {
+	.name = "drm-displayport",
+	.attrs = dp_attrs,
+};
+
 static int dp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct dp_device *dp = NULL;
 	int ret = 0;
+
+	ret = sysfs_create_group(&dev->kobj, &dp_group);
+	if (ret) {
+		dev_err(dev, "failed to allocate dp attributes\n");
+		return ret;
+	}
 
 	dp = devm_kzalloc(dev, sizeof(struct dp_device), GFP_KERNEL);
 	if (!dp) {
@@ -2428,6 +2484,7 @@ static int dp_probe(struct platform_device *pdev)
 	mutex_init(&dp->audio_lock);
 	mutex_init(&dp->training_lock);
 	mutex_init(&dp->hdcp_lock);
+	mutex_init(&dp->typec_notification_lock);
 
 	/* Create WorkQueue & Delayed Works*/
 	dp->dp_wq = create_singlethread_workqueue(dev_name(&pdev->dev));
@@ -2451,14 +2508,6 @@ static int dp_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&dp->hdcp13_work, dp_work_hdcp13);
 	INIT_DELAYED_WORK(&dp->hdcp22_work, dp_work_hdcp22);
 
-	/* Register callback to ExtCon */
-	dp->edev = extcon_get_edev_by_phandle(dev, 0);
-	if (IS_ERR_OR_NULL(dp->edev)) {
-		dp_err(dp, "error while retrieving extcon dev\n");
-		ret = -ENOMEM;
-		goto err;
-	}
-
 	pm_runtime_enable(dev);
 
 	/* Register callback to HDCP */
@@ -2469,11 +2518,13 @@ static int dp_probe(struct platform_device *pdev)
 	return component_add(dp->dev, &dp_component_ops);
 
 err:
+	sysfs_remove_group(&dev->kobj, &dp_group);
 	return ret;
 }
 
 static int dp_remove(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	struct dp_device *dp = platform_get_drvdata(pdev);
 
 	pm_runtime_disable(&pdev->dev);
@@ -2483,6 +2534,9 @@ static int dp_remove(struct platform_device *pdev)
 	mutex_destroy(&dp->hpd_state_lock);
 	mutex_destroy(&dp->training_lock);
 	mutex_destroy(&dp->hdcp_lock);
+	mutex_destroy(&dp->typec_notification_lock);
+
+	sysfs_remove_group(&dev->kobj, &dp_group);
 
 	destroy_workqueue(dp->dp_wq);
 	destroy_workqueue(dp->hdcp_wq);
