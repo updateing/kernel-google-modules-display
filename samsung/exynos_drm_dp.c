@@ -121,6 +121,11 @@ static bool dp_get_ssc(struct dp_device *dp)
 	return (dp->host.ssc && dp->sink.ssc);
 }
 
+static bool dp_get_fast_training(struct dp_device *dp)
+{
+	return (dp->host.fast_training && dp->sink.fast_training);
+}
+
 #define MAX_VOLTAGE_LEVEL 3
 #define MAX_PREEMPH_LEVEL 3
 
@@ -141,9 +146,10 @@ static void dp_fill_host_caps(struct dp_device *dp)
 static void dp_fill_sink_caps(struct dp_device *dp,
 			      u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
-	dp->sink.link_rate = dp->link.link_rate;
-	dp->sink.num_lanes = dp->link.num_lanes;
-	dp->sink.enhanced_frame = dp->link.enhanced_frame;
+	dp->sink.revision = dpcd[0];
+	dp->sink.link_rate = drm_dp_max_link_rate(dpcd);
+	dp->sink.num_lanes = drm_dp_max_lane_count(dpcd);
+	dp->sink.enhanced_frame = drm_dp_enhanced_frame_cap(dpcd);
 
 	/* Set SSC support */
 	dp->sink.ssc = !!(dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
@@ -223,7 +229,7 @@ static int dp_sink_power_up(struct dp_device *dp, bool up)
 	u8 val = 0;
 	int ret;
 
-	if (dp->link.revision >= DP_DPCD_REV_11) {
+	if (dp->sink.revision >= DP_DPCD_REV_11) {
 		ret = drm_dp_dpcd_readb(&dp->dp_aux, DP_SET_POWER, &val);
 		if (ret < 0) {
 			dp_err(dp,
@@ -638,8 +644,8 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 		training_done = true;
 	} while (!training_done);
 
-	dp_info(dp, "Link training is done with BW(%u) and Lanes(%u)\n",
-		dp->link.link_rate, dp->link.num_lanes);
+	dp_info(dp, "DP Link: training done: Rate(%u Mbps) and Lanes(%u)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes);
 
 	dp_hw_set_training_pattern(NORAMAL_DATA);
 	drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
@@ -647,7 +653,7 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 
 	return 0;
 err:
-	dp_info(dp, "Link training is failed\n");
+	dp_info(dp, "DP Link: training failed\n");
 
 	dp_hw_set_training_pattern(NORAMAL_DATA);
 	drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
@@ -680,21 +686,24 @@ static int dp_link_up(struct dp_device *dp)
 		return ret;
 	}
 
-	dp->link.revision = dpcd[0];
-	dp->link.link_rate = drm_dp_max_link_rate(dpcd);
-	dp->link.num_lanes = drm_dp_max_lane_count(dpcd);
-	dp->link.enhanced_frame = drm_dp_enhanced_frame_cap(dpcd);
-	dp_info(dp, "DP Sink: DPCD_Rev_%X, Rate(%u Mbps), Num_lanes(%u)\n",
-		dp->link.revision, dp->link.link_rate / 100,
-		dp->link.num_lanes);
+	// Fill Sink Capabilities
+	dp_fill_sink_caps(dp, dpcd);
+	dp_info(dp, "DP Sink: DPCD_Rev_%X, Rate(%u Mbps), Lanes(%u)\n",
+		dp->sink.revision, dp->sink.link_rate / 100,
+		dp->sink.num_lanes);
 
 	// Power DP Sink device Up
 	dp_sink_power_up(dp, true);
 
-	// Set & Adjust Sink Capabilities
-	dp_fill_sink_caps(dp, dpcd);
-	dp->sink.link_rate = min(dp->host.link_rate, dp->sink.link_rate);
-	dp->sink.num_lanes = min(dp->host.num_lanes, dp->sink.num_lanes);
+	// Pick link parameters
+	dp->link.link_rate = dp_get_max_link_rate(dp);
+	dp->link.num_lanes = dp_get_max_num_lanes(dp);
+	dp->link.enhanced_frame = dp_get_enhanced_mode(dp);
+	dp->link.ssc = dp_get_ssc(dp);
+	dp->link.support_tps = dp_get_supported_pattern(dp);
+	dp->link.fast_training = dp_get_fast_training(dp);
+	dp_info(dp, "DP Link: training start: Rate(%u Mbps) and Lanes(%u)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes);
 
 	// Link Training
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
