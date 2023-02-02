@@ -47,11 +47,11 @@ static void exynos_drm_crtc_atomic_enable(struct drm_crtc *crtc,
 	if (active_state == exynos_crtc->active_state)
 		return;
 
-	if (exynos_crtc->active_state == CRTC_STATE_INACTIVE)
-		drm_crtc_vblank_on(crtc);
-
 	if (exynos_crtc->ops->enable)
 		exynos_crtc->ops->enable(exynos_crtc, old_state);
+
+	if (exynos_crtc->active_state == CRTC_STATE_INACTIVE)
+		drm_crtc_vblank_on(crtc);
 
 	exynos_crtc->active_state = active_state;
 }

@@ -198,6 +198,11 @@ static int decon_enable_vblank(struct exynos_drm_crtc *crtc)
 {
 	struct decon_device *decon = crtc->ctx;
 
+	if (!decon_is_effectively_active(decon)) {
+		WARN(1, "decon is not ready");
+		return -EINVAL;
+	}
+
 	decon_debug(decon, "%s +\n", __func__);
 
 	hibernation_block(decon->hibernation);
