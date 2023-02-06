@@ -691,6 +691,11 @@ struct exynos_panel {
 	 */
 	ktime_t last_rr_switch_ts;
 	u32 last_rr;
+	/* TE low or high when last rr was sent */
+	int last_rr_te_gpio_value;
+	u64 last_rr_te_counter;
+	/* TE width before last rr command was sent */
+	u32 last_rr_te_usec;
 
 	struct {
 		struct local_hbm {
