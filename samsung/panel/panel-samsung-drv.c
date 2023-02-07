@@ -919,6 +919,36 @@ void exynos_panel_set_binned_lp(struct exynos_panel *ctx, const u16 brightness)
 }
 EXPORT_SYMBOL(exynos_panel_set_binned_lp);
 
+int exynos_panel_init_brightness(struct exynos_panel_desc *desc,
+				const struct exynos_brightness_configuration *configs,
+				u32 num_configs, u32 panel_rev)
+{
+	const struct exynos_brightness_configuration *matched_config;
+	int i;
+
+	if (!desc || !configs)
+		return -EINVAL;
+
+	matched_config = configs;
+
+	if (panel_rev) {
+		for (i = 0; i < num_configs; i++, configs++) {
+			if (configs->panel_rev & panel_rev) {
+				matched_config = configs;
+				break;
+			}
+		}
+	}
+
+	desc->max_brightness = matched_config->brt_capability.hbm.level.max;
+	desc->min_brightness = matched_config->brt_capability.normal.level.min;
+	desc->dft_brightness = matched_config->dft_brightness,
+	desc->brt_capability = &(matched_config->brt_capability);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(exynos_panel_init_brightness);
+
 int exynos_panel_set_brightness(struct exynos_panel *exynos_panel, u16 br)
 {
 	u16 brightness;
@@ -4089,8 +4119,6 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	if (ret)
 		return ret;
 
-	scnprintf(name, sizeof(name), "panel%d-backlight", atomic_inc_return(&panel_index));
-
 	exynos_panel_func = ctx->desc->exynos_panel_func;
 
 	if (id != INVALID_PANEL_ID) {
@@ -4102,18 +4130,25 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	else
 		dev_dbg(ctx->dev, "Invalid panel id passed from bootloader");
 
-	if (exynos_panel_func && exynos_panel_func->panel_config)
-		exynos_panel_func ->panel_config(ctx);
+	if (exynos_panel_func && exynos_panel_func->panel_config) {
+		ret = exynos_panel_func ->panel_config(ctx);
+		if (ret) {
+			dev_err(ctx->dev, "failed to configure panel settings\n");
+			return ret;
+		}
+	}
 
 	if (ctx->panel_model[0] == '\0')
 		scnprintf(ctx->panel_model, PANEL_MODEL_MAX, "Common Panel");
 
+	scnprintf(name, sizeof(name), "panel%d-backlight", atomic_inc_return(&panel_index));
 	ctx->bl = devm_backlight_device_register(ctx->dev, name, dev,
 			ctx, &exynos_backlight_ops, NULL);
 	if (IS_ERR(ctx->bl)) {
 		dev_err(ctx->dev, "failed to register backlight device\n");
 		return PTR_ERR(ctx->bl);
 	}
+
 	ctx->bl->props.max_brightness = ctx->desc->max_brightness;
 	ctx->bl->props.brightness = ctx->desc->dft_brightness;
 

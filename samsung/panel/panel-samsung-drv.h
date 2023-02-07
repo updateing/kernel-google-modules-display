@@ -176,6 +176,16 @@ struct exynos_panel_mode {
 	enum exynos_panel_idle_mode idle_mode;
 };
 
+/**
+ * struct exynos_brightness_configuration - brightness settings for a panel
+ * revision.
+ */
+struct exynos_brightness_configuration {
+	const u32 panel_rev;
+	const u32 dft_brightness;
+	const struct brightness_capability brt_capability;
+};
+
 struct exynos_panel_funcs {
 	/**
 	 * @set_brightness:
@@ -297,7 +307,7 @@ struct exynos_panel_funcs {
 	 * This callback is used to do one time panel configuration before the
 	 * common driver initialization.
 	 */
-	void (*panel_config)(struct exynos_panel *exynos_panel);
+	int (*panel_config)(struct exynos_panel *exynos_panel);
 
 	/**
 	 * @panel_init:
@@ -1006,6 +1016,9 @@ void exynos_panel_model_init(struct exynos_panel *ctx, const char* project, u8 e
 int exynos_panel_init(struct exynos_panel *ctx);
 void exynos_panel_reset(struct exynos_panel *ctx);
 int exynos_panel_set_power(struct exynos_panel *ctx, bool on);
+int exynos_panel_init_brightness(struct exynos_panel_desc *desc,
+				const struct exynos_brightness_configuration *configs,
+				u32 num_configs, u32 panel_rev);
 int exynos_panel_set_brightness(struct exynos_panel *exynos_panel, u16 br);
 u16 exynos_panel_get_brightness(struct exynos_panel *exynos_panel);
 void exynos_panel_debugfs_create_cmdset(struct exynos_panel *ctx,
