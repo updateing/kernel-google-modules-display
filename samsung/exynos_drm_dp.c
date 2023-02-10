@@ -1532,6 +1532,7 @@ static int dp_create_connector(struct drm_encoder *encoder)
 		return ret;
 	}
 
+	connector->status = connector_status_disconnected;
 	drm_connector_helper_add(connector, &dp_connector_helper_funcs);
 	drm_connector_register(connector);
 	drm_connector_attach_encoder(connector, encoder);
