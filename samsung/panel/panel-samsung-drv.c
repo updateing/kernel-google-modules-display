@@ -39,6 +39,7 @@
 #define PANEL_ID_READ_SIZE	(PANEL_ID_LEN + PANEL_ID_OFFSET)
 #define PANEL_SLSI_DDIC_ID_REG	0xD6
 #define PANEL_SLSI_DDIC_ID_LEN	5
+#define PROJECT_CODE_MAX	5
 
 static const char ext_info_regs[] = { 0xDA, 0xDB, 0xDC };
 #define EXT_INFO_SIZE ARRAY_SIZE(ext_info_regs)
@@ -376,6 +377,33 @@ void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev)
 	dev_info(ctx->dev, "panel_rev: 0x%x\n", ctx->panel_rev);
 }
 EXPORT_SYMBOL(exynos_panel_get_panel_rev);
+
+void exynos_panel_model_init(struct exynos_panel *ctx, const char* project, u8 extra_info)
+{
+
+	u8 vendor_info;
+	u8 panel_rev;
+
+	if (ctx->panel_extinfo[0] == '\0' || ctx->panel_rev == 0 || !project)
+		return;
+
+	if (strlen(project) > PROJECT_CODE_MAX) {
+		dev_err(ctx->dev, "Project Code '%s' is longer than maximum %d charactrers\n",
+			project, PROJECT_CODE_MAX);
+		return;
+	}
+
+	vendor_info  = hex_to_bin(ctx->panel_extinfo[1]) & 0x0f;
+	panel_rev = __builtin_ctz(ctx->panel_rev);
+
+	/*
+	 * Panel Model Format:
+	 * [Project Code]-[Vendor Info][Panel Revision]-[Extra Info]
+	 */
+	scnprintf(ctx->panel_model, PANEL_MODEL_MAX, "%s-%01X%02X-%02X",
+			project, vendor_info, panel_rev, extra_info);
+}
+EXPORT_SYMBOL_GPL(exynos_panel_model_init);
 
 int exynos_panel_init(struct exynos_panel *ctx)
 {
@@ -1074,6 +1102,14 @@ static ssize_t panel_name_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%s\n", p);
 }
 
+static ssize_t panel_model_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	const struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", ctx->panel_model);
+}
+
 static ssize_t gamma_store(struct device *dev, struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
@@ -1606,6 +1642,7 @@ static ssize_t refresh_rate_show(struct device *dev, struct device_attribute *at
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
+static DEVICE_ATTR_RO(panel_model);
 static DEVICE_ATTR_WO(gamma);
 static DEVICE_ATTR_RW(te2_timing);
 static DEVICE_ATTR_RW(te2_lp_timing);
@@ -1623,6 +1660,7 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
 	&dev_attr_panel_extinfo.attr,
 	&dev_attr_panel_name.attr,
+	&dev_attr_panel_model.attr,
 	&dev_attr_gamma.attr,
 	&dev_attr_te2_timing.attr,
 	&dev_attr_te2_lp_timing.attr,
@@ -4063,6 +4101,12 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	}
 	else
 		dev_dbg(ctx->dev, "Invalid panel id passed from bootloader");
+
+	if (exynos_panel_func && exynos_panel_func->panel_config)
+		exynos_panel_func ->panel_config(ctx);
+
+	if (ctx->panel_model[0] == '\0')
+		scnprintf(ctx->panel_model, PANEL_MODEL_MAX, "Common Panel");
 
 	ctx->bl = devm_backlight_device_register(ctx->dev, name, dev,
 			ctx, &exynos_backlight_ops, NULL);
