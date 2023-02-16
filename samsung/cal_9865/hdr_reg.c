@@ -59,7 +59,7 @@ void hdr_reg_set_eotf_lut(u32 id, struct hdr_eotf_lut_v2p2 *lut)
 	int i;
 	u32 val;
 
-	cal_log_info(id, "%s +\n", __func__);
+	cal_log_debug(id, "%s +\n", __func__);
 
 	if (!lut) {
 		hdr_write_mask(id, HDR_HDR_CON, EOTF_EN(0), EOTF_EN_MASK);
@@ -83,7 +83,7 @@ void hdr_reg_set_eotf_lut(u32 id, struct hdr_eotf_lut_v2p2 *lut)
 
 	hdr_write_mask(id, HDR_HDR_CON, EOTF_EN(1), EOTF_EN_MASK);
 
-	cal_log_info(id, "%s -\n", __func__);
+	cal_log_debug(id, "%s -\n", __func__);
 }
 
 void hdr_reg_set_oetf_lut(u32 id, struct hdr_oetf_lut_v2p2 *lut)
