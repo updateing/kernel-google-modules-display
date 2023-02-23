@@ -243,6 +243,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		log->data.win.win_idx = dpp->win_id;
 		log->data.win.plane_idx = dpp->id;
 		log->data.win.secure = dpp->protection;
+		log->data.win.hdr_en = dpp_need_enable_hdr(dpp);
 		break;
 	case DPU_EVT_REQ_CRTC_INFO_OLD:
 	case DPU_EVT_REQ_CRTC_INFO_NEW:
@@ -428,13 +429,14 @@ static void dpu_print_log_win_config(const struct decon_win_config *const win_co
 
 	char buf[128];
 	int len = scnprintf(buf, sizeof(buf),
-			"\t\t\t\t\t%s: %s[0x%llx] CH%d SRC[%d %d %d %d] %s%s%s",
+			"\t\t\t\t\t%s: %s[0x%llx] CH%d SRC[%d %d %d %d] %s%s%s%s",
 			is_rcd ? "RCD" : "WIN", str_state[win->state],
 			(win->state == DPU_WIN_STATE_BUFFER) ? win_config->dma_addr : 0,
 			(win->state == DPU_WIN_STATE_COLOR) ? -1 : win->dpp_id,
 			win->src_x, win->src_y, win->src_w, win->src_h,
 			(win->is_comp) ? "AFBC " : "", (win->is_rot) ? "ROT " : "",
-			(win->is_secure) ? "SECURE " : "");
+			(win->is_secure) ? "SECURE " : "",
+			(win->hdr_en) ? "HDR " : "");
 	len += scnprintf(buf + len, sizeof(buf) - len, "DST[%d %d %d %d] ", win->dst_x, win->dst_y,
 			 win->dst_w, win->dst_h);
 	len += scnprintf(buf + len, sizeof(buf) - len, "ZPOS%d", win->zpos);
@@ -835,10 +837,11 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_PLANE_UPDATE:
 		case DPU_EVT_PLANE_DISABLE:
 			scnprintf(buf + len, sizeof(buf) - len,
-					"\tCH:%d, WIN:%d, %s",
+					"\tCH:%d, WIN:%d, %s%s",
 					log->data.win.plane_idx,
 					log->data.win.win_idx,
-					log->data.win.secure ? "SECURE" : "");
+					log->data.win.secure ? "SECURE " : "",
+					log->data.win.hdr_en ? "HDR" : "");
 			break;
 		case DPU_EVT_REQ_CRTC_INFO_OLD:
 		case DPU_EVT_REQ_CRTC_INFO_NEW:
