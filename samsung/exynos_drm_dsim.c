@@ -279,6 +279,7 @@ static void _dsim_enable(struct dsim_device *dsim)
 {
 	const struct decon_device *decon = dsim_get_decon(dsim);
 	struct dsim_device *sec_dsi;
+	bool skip_init = false;
 
 	pm_runtime_get_sync(dsim->dev);
 
@@ -297,9 +298,16 @@ static void _dsim_enable(struct dsim_device *dsim)
 #endif
 
 	dsim_phy_power_on(dsim);
+	if (dsim->state == DSIM_STATE_HANDOVER) {
+		skip_init = dsim_reg_is_pll_stable(dsim->id);
+		dsim_info(dsim, "dsim handover. skip_init=%d\n", skip_init);
+	}
 
 	mutex_lock(&g_dsim_lock);
-	dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, true);
+
+	if (!skip_init)
+		dsim_reg_init(dsim->id, &dsim->config, &dsim->clk_param, true);
+
 	dsim_reg_start(dsim->id);
 	mutex_unlock(&g_dsim_lock);
 
@@ -368,7 +376,7 @@ static void dsim_encoder_enable(struct drm_encoder *encoder, struct drm_atomic_s
 	}
 
 
-	if (dsim->state == DSIM_STATE_SUSPEND) {
+	if (dsim->state == DSIM_STATE_SUSPEND || dsim->state == DSIM_STATE_HANDOVER) {
 		_dsim_enable(dsim);
 		dsim_set_te_pinctrl(dsim, 1);
 	} else if (dsim->state == DSIM_STATE_BYPASS) {
@@ -1373,9 +1381,6 @@ static int dsim_bind(struct device *dev, struct device *master, void *data)
 	int ret = 0;
 
 	dsim_debug(dsim, "%s +\n", __func__);
-
-	/* parse the panel name to select the dsi device for the detected panel */
-	dsim_parse_panel_name(dsim);
 
 	if (dsim->dual_dsi == DSIM_DUAL_DSI_SEC)
 		return 0;
@@ -2581,8 +2586,12 @@ static int dsim_probe(struct platform_device *pdev)
 		dsim_warn(dsim, "idle ip index is not provided\n");
 	exynos_update_ip_idle_status(dsim->idle_ip_index, 1);
 #endif
+	dsim->state = DSIM_STATE_HANDOVER;
 
-	dsim->state = DSIM_STATE_SUSPEND;
+	/* parse the panel name to select the dsi device for the detected panel */
+	dsim_parse_panel_name(dsim);
+
+	// TODO: get which panel is active from bootloader?
 
 	pm_runtime_use_autosuspend(dsim->dev);
 	pm_runtime_set_autosuspend_delay(dsim->dev, 20);

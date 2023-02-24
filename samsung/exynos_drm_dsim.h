@@ -31,6 +31,7 @@ enum dsim_state {
 	DSIM_STATE_ULPS,	/* low power state */
 	DSIM_STATE_SUSPEND,	/* inactive */
 	DSIM_STATE_BYPASS,	/* bypass mode, dsim shouldn't be used */
+	DSIM_STATE_HANDOVER,
 };
 
 enum dsim_dual_dsi {

@@ -441,6 +441,7 @@ void exynos_panel_reset(struct exynos_panel *ctx)
 
 	dev_dbg(ctx->dev, "%s -\n", __func__);
 
+	ctx->is_brightness_initialized = false;
 	exynos_panel_init(ctx);
 
 	exynos_panel_post_power_on(ctx);
@@ -602,6 +603,7 @@ static void exynos_panel_handoff(struct exynos_panel *ctx)
 	if (ctx->enabled) {
 		dev_info(ctx->dev, "panel enabled at boot\n");
 		ctx->panel_state = PANEL_STATE_HANDOFF;
+		ctx->is_brightness_initialized = true;
 		exynos_panel_set_power(ctx, true);
 		/* We don't do panel reset while booting, so call post power here */
 		exynos_panel_post_power_on(ctx);
@@ -940,6 +942,30 @@ static int exynos_bl_find_range(struct exynos_panel *ctx,
 	return -EINVAL;
 }
 
+/**
+ * exynos_panel_get_state_str - get readable string for panel state
+ * @state: panel state enum
+ *
+ * convert enum exynos_panel_state into readable panel state string.
+ */
+static const char *exynos_panel_get_state_str(enum exynos_panel_state state)
+{
+	static const char *state_str[PANEL_STATE_COUNT] = {
+		[PANEL_STATE_UNINITIALIZED] = "UN-INIT",
+		[PANEL_STATE_HANDOFF] = "HANDOFF",
+		[PANEL_STATE_HANDOFF_MODESET] = "HANDOFF-MODESET",
+		[PANEL_STATE_OFF] = "OFF",
+		[PANEL_STATE_NORMAL] = "ON",
+		[PANEL_STATE_LP] = "LP",
+		[PANEL_STATE_MODESET] = "MODESET",
+		[PANEL_STATE_BLANK] = "BLANK",
+	};
+
+	if (state >= PANEL_STATE_COUNT)
+		return "UNKNOWN";
+	return state_str[state];
+}
+
 static int exynos_update_status(struct backlight_device *bl)
 {
 	struct exynos_panel *ctx = bl_get_data(bl);
@@ -952,6 +978,11 @@ static int exynos_update_status(struct backlight_device *bl)
 		return -EPERM;
 	}
 
+	if (!ctx->is_brightness_initialized) {
+		if (brightness == 0)
+			return 0;
+		ctx->is_brightness_initialized = true;
+	}
 	/* check if backlight is forced off */
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
@@ -1615,7 +1646,7 @@ static void exynos_panel_connector_print_state(struct drm_printer *p,
 	if (ret)
 		return;
 
-	drm_printf(p, "\tpanel_state: %d\n", ctx->panel_state);
+	drm_printf(p, "\tpanel_state: %s\n", exynos_panel_get_state_str(ctx->panel_state));
 	drm_printf(p, "\tidle: %s (%s)\n",
 		   ctx->panel_idle_vrefresh ? "active" : "inactive",
 		   ctx->panel_idle_enabled ? "enabled" : "disabled");
@@ -1834,21 +1865,21 @@ static void exynos_panel_pre_commit_properties(
 	if (!conn_state->pending_update_flags)
 		return;
 
-	dev_info(ctx->dev, "%s: mipi_sync(0x%lx) pending_update_flags(0x%x)\n", __func__,
-		conn_state->mipi_sync, conn_state->pending_update_flags);
 	DPU_ATRACE_BEGIN(__func__);
 	mipi_sync = conn_state->mipi_sync &
 		(MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM | MIPI_CMD_SYNC_BL);
 
 	if ((conn_state->mipi_sync & (MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM)) &&
 		ctx->current_mode->exynos_mode.is_lp_mode) {
-		conn_state->pending_update_flags &=
-			~(HBM_FLAG_LHBM_UPDATE | HBM_FLAG_GHBM_UPDATE | HBM_FLAG_BL_UPDATE);
-		dev_warn(ctx->dev, "%s: avoid LHBM/GHBM/BL updates during lp mode\n",
-			__func__);
+		dev_warn(ctx->dev,
+			 "%s: skip LHBM/GHBM updates during lp mode, pending_update_flags(0x%x)\n",
+			 __func__, conn_state->pending_update_flags);
+		conn_state->pending_update_flags &= ~(HBM_FLAG_LHBM_UPDATE | HBM_FLAG_GHBM_UPDATE);
 	}
 
 	if (mipi_sync) {
+		dev_info(ctx->dev, "%s: mipi_sync(0x%lx) pending_update_flags(0x%x)\n", __func__,
+			 conn_state->mipi_sync, conn_state->pending_update_flags);
 		exynos_panel_check_mipi_sync_timing(conn_state->base.crtc,
 						    ctx->current_mode, ctx);
 		exynos_dsi_dcs_write_buffer_force_batch_begin(dsi);
@@ -3103,8 +3134,9 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 
 	if (state_changed) {
 		backlight_state_changed(bl);
-		dev_info(ctx->dev, "%s: panel:%d, bl:0x%x\n", __func__,
-			 panel_state, bl->props.state);
+		dev_info(ctx->dev, "panel: %s | bl: brightness@%u, state@0x%x\n",
+			 exynos_panel_get_state_str(panel_state), bl->props.brightness,
+			 bl->props.state);
 	}
 }
 
@@ -3127,7 +3159,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->global_hbm_mode, 0);
 	drm_object_attach_property(obj, p->local_hbm_on, 0);
 	drm_object_attach_property(obj, p->dimming_on, 0);
-	drm_object_attach_property(obj, p->mipi_sync, 0);
+	drm_object_attach_property(obj, p->mipi_sync, MIPI_CMD_SYNC_NONE);
 	drm_object_attach_property(obj, p->is_partial, desc->is_partial);
 	drm_object_attach_property(obj, p->panel_idle_support, desc->is_panel_idle_supported);
 	drm_object_attach_property(obj, p->panel_orientation, ctx->orientation);
