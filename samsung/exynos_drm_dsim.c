@@ -390,6 +390,40 @@ static void dsim_encoder_enable(struct drm_encoder *encoder, struct drm_atomic_s
 	}
 }
 
+static inline bool dsim_cmd_packetgo_is_enabled(const struct dsim_device *dsim)
+{
+	return dsim->total_pend_ph > 0;
+}
+
+static void __dsim_cmd_packetgo_enable_locked(struct dsim_device *dsim, bool en)
+{
+	if (en) {
+		pm_runtime_get_sync(dsim->dev);
+		dsim_debug(dsim, "enabling packetgo\n");
+	}
+
+	dsim_reg_enable_packetgo(dsim->id, en);
+	if (!en) {
+		pm_runtime_put(dsim->dev);
+
+		dsim->total_pend_ph = 0;
+		dsim->total_pend_pl = 0;
+		dsim_debug(dsim, "packetgo disabled\n");
+	}
+}
+
+static void __dsim_check_pend_cmd_locked(struct dsim_device *dsim)
+{
+	WARN_ON(!mutex_is_locked(&dsim->cmd_lock));
+
+	if (WARN_ON(dsim_reg_has_pend_cmd(dsim->id)))
+		dsim_dump(dsim);
+
+	if (WARN(dsim_cmd_packetgo_is_enabled(dsim), "pending packets remaining ph(%u) pl(%u)\n",
+		 dsim->total_pend_ph, dsim->total_pend_pl))
+		__dsim_cmd_packetgo_enable_locked(dsim, false);
+}
+
 static void _dsim_enter_ulps_locked(struct dsim_device *dsim)
 {
 	const struct decon_device *decon = dsim_get_decon(dsim);
@@ -402,8 +436,7 @@ static void _dsim_enter_ulps_locked(struct dsim_device *dsim)
 
 	/* Wait for current read & write CMDs. */
 	mutex_lock(&dsim->cmd_lock);
-	if (WARN_ON(dsim_reg_has_pend_cmd(dsim->id)))
-		dsim_dump(dsim);
+	__dsim_check_pend_cmd_locked(dsim);
 	dsim->state = DSIM_STATE_ULPS;
 	mutex_unlock(&dsim->cmd_lock);
 
@@ -455,14 +488,13 @@ static void _dsim_disable(struct dsim_device *dsim)
 	disable_irq(dsim->irq);
 
 	dsim->state = DSIM_STATE_SUSPEND;
-	WARN_ON(dsim_reg_has_pend_cmd(dsim->id));
+	__dsim_check_pend_cmd_locked(dsim);
+
+	dsim->force_batching = false;
 	mutex_unlock(&dsim->cmd_lock);
 	mutex_unlock(&dsim->state_lock);
 
 	dsim_phy_power_off(dsim);
-	dsim->total_pend_ph = 0;
-	dsim->total_pend_pl = 0;
-	dsim->force_batching = false;
 
 #if defined(CONFIG_CPU_IDLE)
 	exynos_update_ip_idle_status(dsim->idle_ip_index, 1);
@@ -1876,10 +1908,12 @@ dsim_write_payload(struct dsim_device *dsim, const u8* buf, size_t len)
 	}
 }
 
-static void __dsim_write_data(struct dsim_device *dsim,
-				const struct mipi_dsi_msg *msg, bool is_long)
+static void __dsim_cmd_write_locked(struct dsim_device *dsim, const struct mipi_dsi_msg *msg,
+				    bool is_long)
 {
 	struct mipi_dsi_packet packet;
+
+	WARN_ON(!mutex_is_locked(&dsim->cmd_lock));
 
 	mipi_dsi_create_packet(&packet, msg);
 
@@ -1893,12 +1927,50 @@ static void __dsim_write_data(struct dsim_device *dsim,
 			packet.size, dsim_reg_get_ph_cnt(dsim->id));
 }
 
+static void dsim_cmd_packetgo_queue_locked(struct dsim_device *dsim, const struct mipi_dsi_msg *msg,
+					   bool is_long)
+{
+	/* if this is the first packet being queued, enable packet go feature */
+	if (!dsim->total_pend_ph)
+		__dsim_cmd_packetgo_enable_locked(dsim, true);
+
+	dsim->total_pend_ph++;
+	dsim->total_pend_pl += ALIGN(msg->tx_len, 4);
+
+	__dsim_cmd_write_locked(dsim, msg, is_long);
+
+	dsim_debug(dsim, "total pending packet header(%u) payload(%u)\n", dsim->total_pend_ph,
+		   dsim->total_pend_pl);
+}
+
+static int dsim_cmd_packetgo_flush_locked(struct dsim_device *dsim, bool is_long)
+{
+	int ret;
+
+	/* this should only be called with pending packets */
+	WARN_ON(!dsim->total_pend_ph);
+
+	dsim_reg_ready_packetgo(dsim->id, true);
+	dsim_debug(dsim, "packet go ready (ph: %d, pl: %d)\n", dsim->total_pend_ph,
+		   dsim->total_pend_pl);
+
+	ret = dsim_wait_for_cmd_fifo_empty(dsim, is_long);
+	if (ret)
+		dsim_warn(dsim, "packetgo failed on wait for cmd fifo empty (%d)\n", ret);
+
+	/* clear packetgo pending (even if it timed out) */
+	__dsim_cmd_packetgo_enable_locked(dsim, false);
+
+	return ret;
+}
+
 static int dsim_write_single_cmd_locked(struct dsim_device *dsim,
 				const struct mipi_dsi_msg *msg, bool is_long)
 {
 	const u8 *tx_buf = msg->tx_buf;
 
 	WARN_ON(!mutex_is_locked(&dsim->cmd_lock));
+	WARN_ON(dsim_cmd_packetgo_is_enabled(dsim));
 
 	DPU_EVENT_LOG_CMD(dsim, msg->type, tx_buf[0], msg->tx_len);
 
@@ -1906,7 +1978,7 @@ static int dsim_write_single_cmd_locked(struct dsim_device *dsim,
 
 	reinit_completion(is_long ? &dsim->pl_wr_comp : &dsim->ph_wr_comp);
 
-	__dsim_write_data(dsim, msg, is_long);
+	__dsim_cmd_write_locked(dsim, msg, is_long);
 
 	return dsim_wait_for_cmd_fifo_empty(dsim, is_long);
 }
@@ -1969,14 +2041,15 @@ static void need_wait_vblank(struct dsim_device *dsim)
 
 #define PL_FIFO_THRESHOLD	mult_frac(MAX_PL_FIFO, 75, 100) /* 75% */
 #define IS_LAST(flags)		(((flags) & EXYNOS_DSI_MSG_QUEUE) == 0)
-static int
-dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
+static int dsim_write_data_locked(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 {
 	int ret = 0;
 	u16 flags = msg->flags;
 	bool is_long;
 	bool is_empty_msg;
 	bool is_last;
+
+	WARN_ON(!mutex_is_locked(&dsim->cmd_lock));
 
 	DPU_ATRACE_BEGIN(__func__);
 
@@ -2025,40 +2098,22 @@ dsim_write_data(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 	dsim_debug(dsim, "%s last command\n", is_last ? "" : "Not");
 
 	if (is_last) {
-		if (dsim->total_pend_ph) {
+		if (dsim_cmd_packetgo_is_enabled(dsim)) {
 			reinit_completion(is_long ?
 					&dsim->pl_wr_comp : &dsim->ph_wr_comp);
 
 			if (!is_empty_msg)
-				__dsim_write_data(dsim, msg, is_long);
+				dsim_cmd_packetgo_queue_locked(dsim, msg, is_long);
 
 			if (!(flags & EXYNOS_DSI_MSG_IGNORE_VBLANK))
 				need_wait_vblank(dsim);
 
-			dsim_reg_ready_packetgo(dsim->id, true);
-			dsim_debug(dsim, "packet go ready\n");
-
-			ret = dsim_wait_for_cmd_fifo_empty(dsim, is_long);
-			if (!ret) {
-				dsim_reg_enable_packetgo(dsim->id, false);
-				dsim->total_pend_ph = 0;
-				dsim->total_pend_pl = 0;
-			}
-
-			pm_runtime_put_sync(dsim->dev);
+			ret = dsim_cmd_packetgo_flush_locked(dsim, is_long);
 		} else if (!is_empty_msg) {
 			ret = dsim_write_single_cmd_locked(dsim, msg, is_long);
 		}
 	} else if (!is_empty_msg) {
-		if (!dsim->total_pend_ph) {
-			pm_runtime_get_sync(dsim->dev);
-			dsim_reg_enable_packetgo(dsim->id, true);
-		}
-		dsim->total_pend_ph++;
-		dsim->total_pend_pl += ALIGN(msg->tx_len, 4);
-		__dsim_write_data(dsim, msg, is_long);
-		dsim_debug(dsim, "total pending packet header(%u) payload(%u)\n",
-				dsim->total_pend_ph, dsim->total_pend_pl);
+		dsim_cmd_packetgo_queue_locked(dsim, msg, is_long);
 	}
 
 err:
@@ -2198,7 +2253,7 @@ dsim_write_data_dual(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 
 	mutex_lock(&dsim->cmd_lock);
 
-	ret = dsim_write_data(dsim, msg);
+	ret = dsim_write_data_locked(dsim, msg);
 
 	mutex_unlock(&dsim->cmd_lock);
 
@@ -2236,7 +2291,7 @@ static ssize_t dsim_host_transfer(struct mipi_dsi_host *host,
 		ret = dsim_read_data(dsim, msg);
 		break;
 	default:
-		ret = dsim_write_data(dsim, msg);
+		ret = dsim_write_data_locked(dsim, msg);
 		if (dsim->dual_dsi == DSIM_DUAL_DSI_MAIN) {
 			sec_dsi = exynos_get_dual_dsi(DSIM_DUAL_DSI_SEC);
 			if (sec_dsi)
