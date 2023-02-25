@@ -1815,10 +1815,16 @@ static int __dsim_wait_for_ph_fifo_empty(struct dsim_device *dsim)
 {
 	const struct decon_device *decon = dsim_get_decon(dsim);
 
+	if (dsim_reg_header_fifo_is_empty(dsim->id)) {
+		dsim_debug(dsim, "no need to wait for packet header fifo empty\n");
+		return 0;
+	}
+
 	dsim_debug(dsim, "wait for packet header fifo empty\n");
 
 	if (!wait_for_completion_timeout(&dsim->ph_wr_comp, MIPI_WR_TIMEOUT)) {
 		if (dsim_reg_header_fifo_is_empty(dsim->id)) {
+			dsim_warn(dsim, "timed out but header fifo was empty\n");
 			dsim_reg_clear_int(dsim->id,
 					DSIM_INTSRC_SFR_PH_FIFO_EMPTY);
 			return 0;
@@ -1841,10 +1847,16 @@ static int __dsim_wait_for_pl_fifo_empty(struct dsim_device *dsim)
 {
 	const struct decon_device *decon = dsim_get_decon(dsim);
 
+	if (dsim_reg_payload_fifo_is_empty(dsim->id)) {
+		dsim_debug(dsim, "no need to wait for payload fifo empty\n");
+		return 0;
+	}
+
 	dsim_debug(dsim, "wait for packet payload fifo empty\n");
 
 	if (!wait_for_completion_timeout(&dsim->pl_wr_comp, MIPI_WR_TIMEOUT)) {
 		if (dsim_reg_payload_fifo_is_empty(dsim->id)) {
+			dsim_warn(dsim, "timed out but payload fifo was empty\n");
 			dsim_reg_clear_int(dsim->id,
 					DSIM_INTSRC_SFR_PL_FIFO_EMPTY);
 			return 0;
