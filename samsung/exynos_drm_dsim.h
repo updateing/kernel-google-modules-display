@@ -93,6 +93,7 @@ struct dsim_device {
 
 	int irq;
 	int id;
+	u32 panel_id;
 	spinlock_t slock;
 	struct mutex cmd_lock;
 	struct mutex state_lock;
@@ -124,9 +125,11 @@ struct dsim_device {
 extern struct dsim_device *dsim_drvdata[MAX_DSI_CNT];
 
 #define encoder_to_dsim(e) container_of(e, struct dsim_device, encoder)
+#define host_to_dsi(host) container_of(host, struct dsim_device, dsi_host)
 
 #define MIPI_WR_TIMEOUT				msecs_to_jiffies(80)
 #define MIPI_RD_TIMEOUT				msecs_to_jiffies(100)
+#define INVALID_PANEL_ID			0xFFFFFFFF
 
 struct decon_device;
 

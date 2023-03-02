@@ -89,6 +89,7 @@ struct dpu_bts_win_config {
 	bool is_rot;
 	bool is_comp;
 	bool is_secure;
+	bool hdr_en;
 	u32 dpp_id;
 	u32 zpos;
 	u32 format;
@@ -305,6 +306,7 @@ struct dpu_log_win {
 	u32 win_idx;
 	u32 plane_idx;
 	bool secure;
+	bool hdr_en;
 };
 
 struct dpu_log_rsc_occupancy {

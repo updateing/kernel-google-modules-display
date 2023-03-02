@@ -30,6 +30,7 @@
 
 #include <trace/dpu_trace.h>
 #include "../exynos_drm_connector.h"
+#include "../exynos_drm_dsim.h"
 #include "panel-samsung-drv.h"
 
 #define PANEL_ID_REG		0xA1
@@ -38,6 +39,7 @@
 #define PANEL_ID_READ_SIZE	(PANEL_ID_LEN + PANEL_ID_OFFSET)
 #define PANEL_SLSI_DDIC_ID_REG	0xD6
 #define PANEL_SLSI_DDIC_ID_LEN	5
+#define PROJECT_CODE_MAX	5
 
 static const char ext_info_regs[] = { 0xDA, 0xDB, 0xDC };
 #define EXT_INFO_SIZE ARRAY_SIZE(ext_info_regs)
@@ -315,6 +317,10 @@ static int exynos_panel_read_extinfo(struct exynos_panel *ctx)
 	char buf[EXT_INFO_SIZE];
 	int i, ret;
 
+	/* extinfo already set, skip reading */
+	if (ctx->panel_extinfo[0] != '\0')
+		return 0;
+
 	for (i = 0; i < EXT_INFO_SIZE; i++) {
 		ret = mipi_dsi_dcs_read(dsi, ext_info_regs[i], buf + i, 1);
 		if (ret != 1) {
@@ -372,6 +378,33 @@ void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev)
 }
 EXPORT_SYMBOL(exynos_panel_get_panel_rev);
 
+void exynos_panel_model_init(struct exynos_panel *ctx, const char* project, u8 extra_info)
+{
+
+	u8 vendor_info;
+	u8 panel_rev;
+
+	if (ctx->panel_extinfo[0] == '\0' || ctx->panel_rev == 0 || !project)
+		return;
+
+	if (strlen(project) > PROJECT_CODE_MAX) {
+		dev_err(ctx->dev, "Project Code '%s' is longer than maximum %d charactrers\n",
+			project, PROJECT_CODE_MAX);
+		return;
+	}
+
+	vendor_info  = hex_to_bin(ctx->panel_extinfo[1]) & 0x0f;
+	panel_rev = __builtin_ctz(ctx->panel_rev);
+
+	/*
+	 * Panel Model Format:
+	 * [Project Code]-[Vendor Info][Panel Revision]-[Extra Info]
+	 */
+	scnprintf(ctx->panel_model, PANEL_MODEL_MAX, "%s-%01X%02X-%02X",
+			project, vendor_info, panel_rev, extra_info);
+}
+EXPORT_SYMBOL_GPL(exynos_panel_model_init);
+
 int exynos_panel_init(struct exynos_panel *ctx)
 {
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
@@ -384,7 +417,7 @@ int exynos_panel_init(struct exynos_panel *ctx)
 	if (!ret)
 		ctx->initialized = true;
 
-	if (funcs && funcs->get_panel_rev) {
+	if (!ctx->panel_rev && funcs && funcs->get_panel_rev) {
 		u32 id;
 
 		if (kstrtou32(ctx->panel_extinfo, 16, &id)) {
@@ -394,7 +427,7 @@ int exynos_panel_init(struct exynos_panel *ctx)
 		} else {
 			funcs->get_panel_rev(ctx, id);
 		}
-	} else {
+	} else if (!ctx->panel_rev) {
 		dev_warn(ctx->dev,
 			 "unable to get panel rev, default to latest\n");
 		ctx->panel_rev = PANEL_REV_LATEST;
@@ -886,6 +919,36 @@ void exynos_panel_set_binned_lp(struct exynos_panel *ctx, const u16 brightness)
 }
 EXPORT_SYMBOL(exynos_panel_set_binned_lp);
 
+int exynos_panel_init_brightness(struct exynos_panel_desc *desc,
+				const struct exynos_brightness_configuration *configs,
+				u32 num_configs, u32 panel_rev)
+{
+	const struct exynos_brightness_configuration *matched_config;
+	int i;
+
+	if (!desc || !configs)
+		return -EINVAL;
+
+	matched_config = configs;
+
+	if (panel_rev) {
+		for (i = 0; i < num_configs; i++, configs++) {
+			if (configs->panel_rev & panel_rev) {
+				matched_config = configs;
+				break;
+			}
+		}
+	}
+
+	desc->max_brightness = matched_config->brt_capability.hbm.level.max;
+	desc->min_brightness = matched_config->brt_capability.normal.level.min;
+	desc->dft_brightness = matched_config->dft_brightness,
+	desc->brt_capability = &(matched_config->brt_capability);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(exynos_panel_init_brightness);
+
 int exynos_panel_set_brightness(struct exynos_panel *exynos_panel, u16 br)
 {
 	u16 brightness;
@@ -1067,6 +1130,14 @@ static ssize_t panel_name_show(struct device *dev,
 		p++;
 
 	return snprintf(buf, PAGE_SIZE, "%s\n", p);
+}
+
+static ssize_t panel_model_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	const struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", ctx->panel_model);
 }
 
 static ssize_t gamma_store(struct device *dev, struct device_attribute *attr,
@@ -1601,6 +1672,7 @@ static ssize_t refresh_rate_show(struct device *dev, struct device_attribute *at
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
+static DEVICE_ATTR_RO(panel_model);
 static DEVICE_ATTR_WO(gamma);
 static DEVICE_ATTR_RW(te2_timing);
 static DEVICE_ATTR_RW(te2_lp_timing);
@@ -1618,6 +1690,7 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
 	&dev_attr_panel_extinfo.attr,
 	&dev_attr_panel_name.attr,
+	&dev_attr_panel_model.attr,
 	&dev_attr_gamma.attr,
 	&dev_attr_te2_timing.attr,
 	&dev_attr_te2_lp_timing.attr,
@@ -4031,6 +4104,7 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	char name[32];
 	const struct exynos_panel_funcs *exynos_panel_func;
 	int i;
+	u32 id = host_to_dsi(dsi->host)->panel_id;
 
 	dev_dbg(dev, "%s +\n", __func__);
 
@@ -4045,18 +4119,39 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	if (ret)
 		return ret;
 
-	scnprintf(name, sizeof(name), "panel%d-backlight", atomic_inc_return(&panel_index));
+	exynos_panel_func = ctx->desc->exynos_panel_func;
 
+	if (id != INVALID_PANEL_ID) {
+		exynos_bin2hex(&id, EXT_INFO_SIZE, ctx->panel_extinfo, sizeof(ctx->panel_extinfo));
+
+		if (exynos_panel_func && exynos_panel_func->get_panel_rev)
+			exynos_panel_func->get_panel_rev(ctx, id);
+	}
+	else
+		dev_dbg(ctx->dev, "Invalid panel id passed from bootloader");
+
+	if (exynos_panel_func && exynos_panel_func->panel_config) {
+		ret = exynos_panel_func ->panel_config(ctx);
+		if (ret) {
+			dev_err(ctx->dev, "failed to configure panel settings\n");
+			return ret;
+		}
+	}
+
+	if (ctx->panel_model[0] == '\0')
+		scnprintf(ctx->panel_model, PANEL_MODEL_MAX, "Common Panel");
+
+	scnprintf(name, sizeof(name), "panel%d-backlight", atomic_inc_return(&panel_index));
 	ctx->bl = devm_backlight_device_register(ctx->dev, name, dev,
 			ctx, &exynos_backlight_ops, NULL);
 	if (IS_ERR(ctx->bl)) {
 		dev_err(ctx->dev, "failed to register backlight device\n");
 		return PTR_ERR(ctx->bl);
 	}
+
 	ctx->bl->props.max_brightness = ctx->desc->max_brightness;
 	ctx->bl->props.brightness = ctx->desc->dft_brightness;
 
-	exynos_panel_func = ctx->desc->exynos_panel_func;
 	if (exynos_panel_func && (exynos_panel_func->set_hbm_mode
 				  || exynos_panel_func->set_local_hbm_mode))
 		hbm_data_init(ctx);

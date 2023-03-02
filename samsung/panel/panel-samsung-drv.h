@@ -176,6 +176,16 @@ struct exynos_panel_mode {
 	enum exynos_panel_idle_mode idle_mode;
 };
 
+/**
+ * struct exynos_brightness_configuration - brightness settings for a panel
+ * revision.
+ */
+struct exynos_brightness_configuration {
+	const u32 panel_rev;
+	const u32 dft_brightness;
+	const struct brightness_capability brt_capability;
+};
+
 struct exynos_panel_funcs {
 	/**
 	 * @set_brightness:
@@ -290,6 +300,14 @@ struct exynos_panel_funcs {
 	 */
 	void (*mode_set)(struct exynos_panel *exynos_panel,
 			 const struct exynos_panel_mode *mode);
+
+	/**
+	 * @panel_config:
+	 *
+	 * This callback is used to do one time panel configuration before the
+	 * common driver initialization.
+	 */
+	int (*panel_config)(struct exynos_panel *exynos_panel);
 
 	/**
 	 * @panel_init:
@@ -570,6 +588,7 @@ struct exynos_panel_desc {
 
 #define PANEL_ID_MAX		40
 #define PANEL_EXTINFO_MAX	16
+#define PANEL_MODEL_MAX		14
 #define LOCAL_HBM_MAX_TIMEOUT_MS 3000 /* 3000 ms */
 #define LOCAL_HBM_GAMMA_CMD_SIZE_MAX 16
 
@@ -676,6 +695,7 @@ struct exynos_panel {
 
 	char panel_id[PANEL_ID_MAX];
 	char panel_extinfo[PANEL_EXTINFO_MAX];
+	char panel_model[PANEL_MODEL_MAX];
 	u32 panel_rev;
 	enum drm_panel_orientation orientation;
 
@@ -992,9 +1012,13 @@ int exynos_panel_prepare(struct drm_panel *panel);
 int exynos_panel_read_id(struct exynos_panel *ctx);
 int exynos_panel_read_ddic_id(struct exynos_panel *ctx);
 void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev);
+void exynos_panel_model_init(struct exynos_panel *ctx, const char* project, u8 extra_info);
 int exynos_panel_init(struct exynos_panel *ctx);
 void exynos_panel_reset(struct exynos_panel *ctx);
 int exynos_panel_set_power(struct exynos_panel *ctx, bool on);
+int exynos_panel_init_brightness(struct exynos_panel_desc *desc,
+				const struct exynos_brightness_configuration *configs,
+				u32 num_configs, u32 panel_rev);
 int exynos_panel_set_brightness(struct exynos_panel *exynos_panel, u16 br);
 u16 exynos_panel_get_brightness(struct exynos_panel *exynos_panel);
 void exynos_panel_debugfs_create_cmdset(struct exynos_panel *ctx,

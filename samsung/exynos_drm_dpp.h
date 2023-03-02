@@ -161,6 +161,7 @@ void dpp_dump(struct drm_printer *p, struct dpp_device *dpp);
 void rcd_dump(struct drm_printer *p, struct dpp_device *dpp);
 void dpp_dump_buffer(struct drm_printer *p, struct dpp_device *dpp);
 void cgc_dump(struct drm_printer *p, struct exynos_dma *dma);
+bool dpp_need_enable_hdr(const struct dpp_device *dpp);
 
 static __always_inline const char *get_comp_src_name(u64 comp_src)
 {

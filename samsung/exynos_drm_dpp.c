@@ -259,6 +259,18 @@ void cgc_dump(struct drm_printer *p, struct exynos_dma *dma)
 	__cgc_dump(p, dma->id, dma->regs);
 }
 
+bool dpp_need_enable_hdr(const struct dpp_device *dpp)
+{
+	if (unlikely(!dpp))
+		return false;
+
+	if (dpp->hdr.state.eotf_lut || dpp->hdr.state.oetf_lut ||
+				dpp->hdr.state.gm || dpp->hdr.state.tm)
+		return true;
+
+	return false;
+}
+
 static dma_addr_t dpp_alloc_map_buf_test(void)
 {
 	struct dma_heap *dma_heap;
@@ -949,9 +961,7 @@ static void dpp_hdr_update(struct dpp_device *dpp,
 	exynos_gm_update(dpp, state);
 	exynos_tm_update(dpp, state);
 
-	if (dpp->hdr.state.eotf_lut || dpp->hdr.state.oetf_lut ||
-				dpp->hdr.state.gm || dpp->hdr.state.tm)
-		enable = true;
+	enable = dpp_need_enable_hdr(dpp);
 
 	hdr_reg_set_hdr(dpp->id, enable);
 }
