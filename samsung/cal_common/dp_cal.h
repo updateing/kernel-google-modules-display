@@ -13,6 +13,8 @@
 #ifndef __SAMSUNG_DP_CAL_H__
 #define __SAMSUNG_DP_CAL_H__
 
+#include <linux/usb/typec_dp.h>
+
 /* Register definition */
 enum sst_id {
 	SST1 = 0,
@@ -32,12 +34,12 @@ enum dp_regs_type {
 /* DFP_D (USB Type-C) */
 // It should be matched with enum in \include\linux\usb\typec_dp.h
 enum pin_assignment {
-	PIN_TYPE_A = 0,		/* Not supported after Alt Mode Spec v1.0b */
-	PIN_TYPE_B,		/* Not supported after Alt Mode Spec v1.0b */
-	PIN_TYPE_C,
-	PIN_TYPE_D,
-	PIN_TYPE_E,
-	PIN_TYPE_F,		/* Not supported after Alt Mode Spec v1.0b */
+	PIN_TYPE_A = TYPEC_DP_STATE_A,	/* Not supported after Alt Mode Spec v1.0b */
+	PIN_TYPE_B = TYPEC_DP_STATE_B,	/* Not supported after Alt Mode Spec v1.0b */
+	PIN_TYPE_C = TYPEC_DP_STATE_C,
+	PIN_TYPE_D = TYPEC_DP_STATE_D,
+	PIN_TYPE_E = TYPEC_DP_STATE_E,
+	PIN_TYPE_F = TYPEC_DP_STATE_F,	/* Not supported after Alt Mode Spec v1.0b */
 };
 
 // It should be matched with enum typec_orientation in \include\linux\usb\typec.h
