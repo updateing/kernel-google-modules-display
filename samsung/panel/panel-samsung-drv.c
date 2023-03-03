@@ -2385,11 +2385,16 @@ static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 		to_exynos_connector_state(connector_state);
 	const struct exynos_panel_mode *pmode =
 		exynos_panel_get_mode(ctx, &crtc_state->mode);
+	bool is_video_mode;
 
 	if (!pmode) {
 		dev_warn(ctx->dev, "invalid mode %s\n", crtc_state->mode.name);
 		return -EINVAL;
 	}
+	is_video_mode = (pmode->exynos_mode.mode_flags & MIPI_DSI_MODE_VIDEO) != 0;
+
+	/* self refresh is only supported in command mode */
+	connector_state->self_refresh_aware = !is_video_mode;
 
 	if (crtc_state->connectors_changed || !is_panel_active(ctx))
 		exynos_connector_state->seamless_possible = false;
@@ -3597,7 +3602,6 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 	drm_connector_attach_encoder(connector, bridge->encoder);
 	connector->funcs->reset(connector);
 	connector->status = connector_status_connected;
-	connector->state->self_refresh_aware = true;
 	if (ctx->desc->exynos_panel_func && ctx->desc->exynos_panel_func->commit_done)
 		ctx->exynos_connector.needs_commit = true;
 
