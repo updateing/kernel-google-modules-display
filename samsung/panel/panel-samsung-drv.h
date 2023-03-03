@@ -918,47 +918,47 @@ static inline bool is_local_hbm_disabled(struct exynos_panel *ctx)
 		DUMP_PREFIX_NONE, 16, 1, cmd, len, false);	\
 } while (0)
 
-#define EXYNOS_DCS_WRITE_SEQ(ctx, seq...) do {				\
-	u8 d[] = { seq };						\
-	int ret;							\
-	ret = exynos_dcs_write(ctx, d, ARRAY_SIZE(d));			\
-	if (ret < 0)							\
-		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, d, ARRAY_SIZE(d), ret);	\
-} while (0)
-
-#define EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, flags, seq...) do {				\
+#define EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, flags, seq...) do {		\
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
 	u8 d[] = { seq };						\
 	int ret;							\
-	ret = exynos_dsi_dcs_write_buffer(dsi, d, ARRAY_SIZE(d), flags);		\
+	ret = exynos_dsi_dcs_write_buffer(dsi, d, ARRAY_SIZE(d), flags);\
 	if (ret < 0)							\
 		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, d, ARRAY_SIZE(d), ret);	\
 } while (0)
 
 #define EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, delay, seq...) do {		\
-	EXYNOS_DCS_WRITE_SEQ(ctx, seq);					\
-	usleep_range(delay * 1000, delay * 1000 + 10);			\
+	u8 d[] = { seq };						\
+	int ret;							\
+	ret = exynos_dcs_write_delay(ctx, d, ARRAY_SIZE(d), delay);	\
+	if (ret < 0)							\
+		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, d, ARRAY_SIZE(d), ret);	\
+	else								\
+		usleep_range(delay * 1000, delay * 1000 + 10);		\
 } while (0)
 
-#define EXYNOS_DCS_WRITE_TABLE(ctx, table) do {					\
+#define EXYNOS_DCS_WRITE_SEQ(ctx, seq...) \
+	EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, 0, seq)
+
+#define EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, table, flags) do {			\
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);		\
 	int ret;								\
-	ret = exynos_dcs_write(ctx, table, ARRAY_SIZE(table));			\
+	ret = exynos_dsi_dcs_write_buffer(dsi, table, ARRAY_SIZE(table), flags);\
 	if (ret < 0)								\
 		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, table, ARRAY_SIZE(table), ret);	\
 } while (0)
 
-#define EXYNOS_DCS_WRITE_TABLE_FLAGS(ctx, table, flags) do {					\
-	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);	\
+#define EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, delay, table) do {			\
 	int ret;								\
-	ret = exynos_dsi_dcs_write_buffer(dsi, table, ARRAY_SIZE(table), flags);		\
+	ret = exynos_dcs_write_delay(ctx, table, ARRAY_SIZE(table), delay);	\
 	if (ret < 0)								\
 		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, table, ARRAY_SIZE(table), ret);	\
+	else									\
+		usleep_range(delay * 1000, delay * 1000 + 10);			\
 } while (0)
 
-#define EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, delay, table) do {		\
-	EXYNOS_DCS_WRITE_TABLE(ctx, table);				\
-	usleep_range(delay * 1000, delay * 1000 + 10);			\
-} while (0)
+#define EXYNOS_DCS_WRITE_TABLE(ctx, table) \
+	EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 0, table)
 
 #define EXYNOS_DCS_BUF_ADD(ctx, seq...) \
 	EXYNOS_DCS_WRITE_SEQ_FLAGS(ctx, EXYNOS_DSI_MSG_QUEUE, seq)
@@ -1030,6 +1030,7 @@ void exynos_panel_debugfs_create_cmdset(struct exynos_panel *ctx,
 					const char *name);
 void exynos_panel_send_cmd_set_flags(struct exynos_panel *ctx, const struct exynos_dsi_cmd_set *cmd_set,
 			       u32 flags);
+inline void exynos_panel_msleep(u32 delay_ms);
 static inline void exynos_panel_send_cmd_set(struct exynos_panel *ctx,
 					     const struct exynos_dsi_cmd_set *cmd_set)
 {
@@ -1039,6 +1040,8 @@ void exynos_panel_set_lp_mode(struct exynos_panel *ctx, const struct exynos_pane
 void exynos_panel_set_binned_lp(struct exynos_panel *ctx, const u16 brightness);
 int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 				struct exynos_panel *ctx);
+int exynos_dcs_write_delay(struct exynos_panel *ctx, const void *data, size_t len,
+			   u32 delay_ms);
 ssize_t exynos_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 				const void *data, size_t len, u16 flags);
 ssize_t exynos_dsi_cmd_send_flags(struct mipi_dsi_device *dsi, u16 flags);

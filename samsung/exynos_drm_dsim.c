@@ -121,6 +121,12 @@ MODULE_DEVICE_TABLE(of, dsim_of_match);
 static int dsim_calc_underrun(const struct dsim_device *dsim, uint32_t hs_clock_mhz,
 		uint32_t *underrun);
 
+inline void dsim_trace_msleep(u32 delay_ms)
+{
+	trace_msleep(delay_ms);
+}
+EXPORT_SYMBOL(dsim_trace_msleep);
+
 static struct drm_crtc *drm_encoder_get_new_crtc(struct drm_encoder *encoder,
 						 struct drm_atomic_state *state)
 {
@@ -2120,7 +2126,8 @@ static int dsim_write_data_locked(struct dsim_device *dsim, const struct mipi_ds
 		is_last = true;
 	}
 
-	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, is_last);
+	/* TODO(b/278175371): print actual delay time */
+	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, is_last, dsim->tx_delay_ms);
 	dsim_debug(dsim, "%s last command\n", is_last ? "" : "Not");
 
 	if (is_last) {
@@ -2153,14 +2160,14 @@ dsim_req_read_command(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
 
 	dsim_reg_clear_int(dsim->id, DSIM_INTSRC_SFR_PH_FIFO_EMPTY);
 	reinit_completion(&dsim->ph_wr_comp);
-	trace_dsi_tx(MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE, &rx_len, 1, true);
+	trace_dsi_tx(MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE, &rx_len, 1, true, 0);
 	/* set the maximum packet size returned */
 	dsim_reg_wr_tx_header(dsim->id, MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE,
 			msg->rx_len, 0, false);
 
 	/* read request */
 	mipi_dsi_create_packet(&packet, msg);
-	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, true);
+	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, true, 0);
 	dsim_reg_wr_tx_header(dsim->id, packet.header[0], packet.header[1],
 						packet.header[2], true);
 

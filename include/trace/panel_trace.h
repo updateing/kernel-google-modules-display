@@ -13,21 +13,23 @@
 #include <linux/tracepoint.h>
 
 TRACE_EVENT_CONDITION(dsi_tx,
-	TP_PROTO(u8 type, const u8 *tx_buf, size_t length, bool last),
-	TP_ARGS(type, tx_buf, length, last),
+	TP_PROTO(u8 type, const u8 *tx_buf, size_t length, bool last, u32 delay_ms),
+	TP_ARGS(type, tx_buf, length, last, delay_ms),
 	TP_CONDITION(length > 0),
 	TP_STRUCT__entry(
 			__field(	u8,	type		)
 			__dynamic_array(u8,	tx_buf, length	)
 			__field(	bool,	last		)
+			__field(	u32,	delay_ms	)
 		),
 	TP_fast_assign(
 			__entry->type = type;
 			memcpy(__get_dynamic_array(tx_buf), tx_buf, length);
 			__entry->last = last;
+			__entry->delay_ms = delay_ms;
 		),
-	TP_printk("type=0x%02x length=%u last=%d tx=[%s]", __entry->type,
-			  __get_dynamic_array_len(tx_buf), __entry->last,
+	TP_printk("type=0x%02x length=%u last=%d delay=%d tx=[%s]", __entry->type,
+			  __get_dynamic_array_len(tx_buf), __entry->last, __entry->delay_ms,
 			  __print_hex(__get_dynamic_array(tx_buf),
 				      __get_dynamic_array_len(tx_buf)))
 );
@@ -62,6 +64,14 @@ TRACE_EVENT(dsi_cmd_fifo_status,
 			__entry->payload  = payload;
 		),
 	TP_printk("header=%d payload=%d", __entry->header, __entry->payload)
+);
+
+TRACE_EVENT(msleep,
+	TP_PROTO(u32 delay_ms),
+	TP_ARGS(delay_ms),
+	TP_STRUCT__entry(__field(u32, delay_ms)),
+	TP_fast_assign(__entry->delay_ms = delay_ms;),
+	TP_printk("delay=%d", __entry->delay_ms)
 );
 
 #endif /* _PANEL_TRACE_H_ */

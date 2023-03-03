@@ -64,6 +64,12 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 static void exynos_panel_post_power_on(struct exynos_panel *ctx);
 static void exynos_panel_pre_power_off(struct exynos_panel *ctx);
 
+inline void exynos_panel_msleep(u32 delay_ms)
+{
+	dsim_trace_msleep(delay_ms);
+}
+EXPORT_SYMBOL(exynos_panel_msleep);
+
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
 	return (bl->props.state & BL_STATE_STANDBY) != 0;
@@ -858,6 +864,7 @@ void exynos_panel_send_cmd_set_flags(struct exynos_panel *ctx,
 		if ((c == last_cmd) && !(flags & PANEL_CMD_SET_QUEUE))
 			dsi_flags &= ~EXYNOS_DSI_MSG_QUEUE;
 
+		host_to_dsi(dsi->host)->tx_delay_ms = delay_ms;
 		exynos_dsi_dcs_write_buffer(dsi, c->cmd, c->cmd_len, dsi_flags);
 		if (delay_ms)
 			usleep_range(delay_ms * 1000, delay_ms * 1000 + 10);
@@ -2409,6 +2416,17 @@ static ssize_t exynos_dsi_dcs_transfer(struct mipi_dsi_device *dsi, u8 type,
 
 	return ops->transfer(dsi->host, &msg);
 }
+
+int exynos_dcs_write_delay(struct exynos_panel *ctx, const void *data, size_t len,
+			   u32 delay_ms)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
+
+	host_to_dsi(dsi->host)->tx_delay_ms = delay_ms;
+
+	return exynos_dcs_write(ctx, data, len);
+}
+EXPORT_SYMBOL(exynos_dcs_write_delay);
 
 ssize_t exynos_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 				  const void *data, size_t len, u16 flags)
