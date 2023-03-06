@@ -147,9 +147,8 @@ struct dp_device {
 	struct dp_resources res;
 
 	struct workqueue_struct *dp_wq;
-	struct delayed_work hpd_plug_work;
-	struct delayed_work hpd_unplug_work;
-	struct delayed_work hpd_irq_work;
+	struct work_struct hpd_work;
+	struct work_struct hpd_irq_work;
 
 	struct mutex cmd_lock;
 	struct mutex hpd_lock;

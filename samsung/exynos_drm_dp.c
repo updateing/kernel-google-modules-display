@@ -84,6 +84,7 @@ static void dp_set_hpd_state(struct dp_device *dp,
 			     enum hotplug_state hpd_current_state)
 {
 	mutex_lock(&dp->hpd_state_lock);
+	dp_info(dp, "DP HPD changed to %d\n", hpd_current_state);
 	dp->hpd_current_state = hpd_current_state;
 	mutex_unlock(&dp->hpd_state_lock);
 }
@@ -1220,14 +1221,14 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 	}
 }
 
-/* Delayed Works */
-static void dp_work_hpd_plug(struct work_struct *work)
+/* Works */
+static void dp_work_hpd(struct work_struct *work)
 {
 	struct dp_device *dp = get_dp_drvdata();
 
-	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
-		mutex_lock(&dp->hpd_lock);
+	mutex_lock(&dp->hpd_lock);
 
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
 		/* Reset before performing link training */
 		dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
 
@@ -1255,9 +1256,28 @@ static void dp_work_hpd_plug(struct work_struct *work)
 		dp->typec_link_training_status = LINK_TRAINING_SUCCESS;
 
 		dp_on_by_hpd_plug(dp);
+	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+		hdcp_dplink_connect_state(DP_DISCONNECT);
+		dp_off_by_hpd_plug(dp);
+		dp_link_down(dp);
 
-		mutex_unlock(&dp->hpd_lock);
+		/* PHY power off */
+		dp_hw_deinit(&dp->hw_config);
+		dp_disable_dposc(dp);
+
+		pm_runtime_put_sync(dp->dev);
+		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
+			 atomic_read(&dp->dev->power.usage_count));
+		pm_relax(dp->dev);
+
+		dp->state = DP_STATE_INIT;
+		dp_info(dp, "%s: DP State changed to INIT\n", __func__);
+
+		/* Mark unknown on cable disconnect as well */
+		dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
 	}
+
+	mutex_unlock(&dp->hpd_lock);
 
 	return;
 
@@ -1281,35 +1301,6 @@ HPD_FAIL:
 	dp->typec_link_training_status = LINK_TRAINING_FAILURE;
 
 	mutex_unlock(&dp->hpd_lock);
-}
-
-static void dp_work_hpd_unplug(struct work_struct *work)
-{
-	struct dp_device *dp = get_dp_drvdata();
-
-	if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
-		mutex_lock(&dp->hpd_lock);
-		hdcp_dplink_connect_state(DP_DISCONNECT);
-		dp_off_by_hpd_plug(dp);
-		dp_link_down(dp);
-
-		/* PHY power off */
-		dp_hw_deinit(&dp->hw_config);
-		dp_disable_dposc(dp);
-
-		pm_runtime_put_sync(dp->dev);
-		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
-			 atomic_read(&dp->dev->power.usage_count));
-		pm_relax(dp->dev);
-
-		dp->state = DP_STATE_INIT;
-		dp_info(dp, "%s: DP State changed to INIT\n", __func__);
-
-		/* Mark unknown on cable disconnect as well */
-		dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
-
-		mutex_unlock(&dp->hpd_lock);
-	}
 }
 
 static void dp_work_hpd_irq(struct work_struct *work)
@@ -1338,14 +1329,9 @@ static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 		return;
 	}
 
-	if (state == EXYNOS_HPD_PLUG) {
-		dp_info(dp, "DP HPD changed to EXYNOS_HPD_PLUG\n");
+	if ((state == EXYNOS_HPD_PLUG) || (state == EXYNOS_HPD_UNPLUG)) {
 		dp_set_hpd_state(dp, state);
-		queue_delayed_work(dp->dp_wq, &dp->hpd_plug_work, 0);
-	} else if (state == EXYNOS_HPD_UNPLUG) {
-		dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
-		dp_set_hpd_state(dp, state);
-		queue_delayed_work(dp->dp_wq, &dp->hpd_unplug_work, 0);
+		queue_work(dp->dp_wq, &dp->hpd_work);
 	} else
 		dp_err(dp, "DP HPD changed to abnormal state(%d)\n", state);
 }
@@ -1370,7 +1356,7 @@ static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_s
 			dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
 		} else {
 			dp_warn(dp, "%s: IRQ from sink\n", __func__);
-			queue_delayed_work(dp->dp_wq, &dp->hpd_irq_work, 0);
+			queue_work(dp->dp_wq, &dp->hpd_irq_work);
 		}
 	} else {
 		dp_info(dp, "%s: USB Type-C is HPD UNPLUG status, or not in display ALT mode\n",
@@ -2035,7 +2021,7 @@ static int dp_probe(struct platform_device *pdev)
 	mutex_init(&dp->training_lock);
 	mutex_init(&dp->typec_notification_lock);
 
-	/* Create WorkQueue & Delayed Works*/
+	/* Create WorkQueue & Works for HPD */
 	dp->dp_wq = create_singlethread_workqueue(dev_name(&pdev->dev));
 	if (!dp->dp_wq) {
 		dp_err(dp, "create wq failed.\n");
@@ -2043,9 +2029,8 @@ static int dp_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	INIT_DELAYED_WORK(&dp->hpd_plug_work, dp_work_hpd_plug);
-	INIT_DELAYED_WORK(&dp->hpd_unplug_work, dp_work_hpd_unplug);
-	INIT_DELAYED_WORK(&dp->hpd_irq_work, dp_work_hpd_irq);
+	INIT_WORK(&dp->hpd_work, dp_work_hpd);
+	INIT_WORK(&dp->hpd_irq_work, dp_work_hpd_irq);
 
 	pm_runtime_enable(dev);
 
