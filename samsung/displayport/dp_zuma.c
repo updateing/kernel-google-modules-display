@@ -10,6 +10,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/of_address.h>
 
 #include "../exynos_drm_dp.h"
 
@@ -65,6 +66,37 @@ void dp_disable_dposc(struct dp_device *dp)
 {
 	if (dp->res.dposc_clk)
 		clk_disable_unprepare(dp->res.dposc_clk);
+}
+
+int dp_remap_regs_other(struct dp_device *dp)
+{
+	struct resource res;
+	struct device *dev = dp->dev;
+	struct device_node *np = dev->of_node;
+	int i, ret = 0;
+
+	/* USBDP Combo PHY TCA SFR */
+	/*
+	 * PHY TCA HW is a Combo PHY TCA for USB and DP.
+	 * USB is master IP for this PHY TCA and controlled the life cycle of it.
+	 * To avoid abnormal clean-up the resource, it doesn't use managed resource.
+	 */
+	i = of_property_match_string(np, "reg-names", "phy-tca");
+	if (of_address_to_resource(np, i, &res)) {
+		dp_err(dp, "failed to get USB/DP Combo PHY TCA resource\n");
+		return -EINVAL;;
+	}
+
+	dp->res.phy_tca_regs = ioremap(res.start, resource_size(&res));
+	if (IS_ERR(dp->res.phy_tca_regs)) {
+		dp_err(dp, "failed to remap USB/DP Combo PHY TCA SFR region\n");
+		ret = PTR_ERR(dp->res.phy_tca_regs);
+		return ret;
+	}
+
+	dp_regs_desc_init(dp->res.phy_tca_regs, res.start, "PHY TCA", REGS_PHY_TCA, SST1);
+
+	return 0;
 }
 
 int dp_get_clock(struct dp_device *dp)

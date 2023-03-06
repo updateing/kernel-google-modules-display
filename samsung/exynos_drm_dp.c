@@ -15,6 +15,7 @@
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
+#include <linux/of_address.h>
 #include <linux/irq.h>
 #include <linux/hdmi.h>
 #include <video/videomode.h>
@@ -1716,56 +1717,59 @@ static irqreturn_t dp_irq_handler(int irq, void *dev_data)
 	return IRQ_HANDLED;
 }
 
-static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
+static int dp_remap_regs(struct dp_device *dp, struct platform_device *pdev)
 {
-	struct resource *res;
-#ifdef CONFIG_SOC_ZUMA
-	u64 addr_phy = 0x11130000, addr_phy_tca = 0x11140000;
-	u64 size_phy = 0x250, size_phy_tca = 0xFC;
-#else
-	u64 addr_phy = 0x110F0000;
-	u64 size_phy = 0x2800;
-#endif
-	int ret = 0;
+	struct resource res;
+	struct device *dev = dp->dev;
+	struct device_node *np = dev->of_node;
+	int i, ret = 0;
 
 	/* DP Link SFR */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dp_err(dp, "failed to get mem resource\n");
-		return -ENOENT;
-	}
-
-	dp->res.link_regs = devm_ioremap_resource(dp->dev, res);
+	dp->res.link_regs = devm_platform_ioremap_resource_byname(pdev, "link");
 	if (IS_ERR(dp->res.link_regs)) {
 		dp_err(dp, "failed to remap DP LINK SFR region\n");
-		return -EINVAL;
+		ret = PTR_ERR(dp->res.link_regs);
+		goto err;
 	}
-	dp_regs_desc_init(dp->res.link_regs, res->start, "LINK", REGS_LINK,
-			  SST1);
+	dp_regs_desc_init(dp->res.link_regs, res.start, "LINK", REGS_LINK, SST1);
 
 	/* USBDP Combo PHY SFR */
-	// ToDo: USBDP PHY is shared with USB Driver.
-	// In order to avoid double resource mapping, here uses hard-code.
-	// Need to revisit
-	dp->res.phy_regs = ioremap((phys_addr_t)addr_phy, size_phy);
+	/*
+	 * PHY HW is a Combo PHY for USB and DP.
+	 * USB is master IP for this PHY and controlled the life cycle of it.
+	 * To avoid abnormal clean-up the resource, it doesn't use managed resource.
+	 */
+	i = of_property_match_string(np, "reg-names", "phy");
+	if (of_address_to_resource(np, i, &res)) {
+		dp_err(dp, "failed to get USB/DP Combo PHY resource\n");
+		goto err;
+	}
+
+	dp->res.phy_regs = ioremap(res.start, resource_size(&res));
 	if (IS_ERR(dp->res.phy_regs)) {
-		dp_err(dp, "failed to remap USBDP Combo PHY SFR region\n");
-		return -EINVAL;
+		dp_err(dp, "failed to remap USB/DP Combo PHY SFR region\n");
+		ret = PTR_ERR(dp->res.phy_regs);
+		goto err;
 	}
-	dp_regs_desc_init(dp->res.phy_regs, (phys_addr_t)addr_phy, "PHY",
-			  REGS_PHY, SST1);
+	dp_regs_desc_init(dp->res.phy_regs, res.start, "PHY", REGS_PHY, SST1);
 
-#ifdef CONFIG_SOC_ZUMA
-	dp->res.phy_tca_regs = ioremap((phys_addr_t)addr_phy_tca, size_phy_tca);
-	if (!dp->res.phy_tca_regs) {
-		dp_err(dp, "failed to remap USBDP Combo PHY TCA SFR region\n");
-		return -EINVAL;
-	}
-	dp_regs_desc_init(dp->res.phy_tca_regs, (phys_addr_t)addr_phy_tca,
-			  "PHY TCA", REGS_PHY_TCA, SST1);
-#endif
+	if (dp_remap_regs_other(dp))
+		goto err_phy;
 
-	/* DP Interrupt */
+	return 0;
+
+err_phy:
+	if (dp->res.phy_regs)
+		iounmap(dp->res.phy_regs);
+err:
+	return ret;
+}
+
+static int dp_register_irq(struct dp_device *dp, struct platform_device *pdev)
+{
+	struct resource *res;
+	int ret = 0;
+
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
 		dp_err(dp, "failed to get irq resource\n");
@@ -1781,9 +1785,28 @@ static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
 	}
 	disable_irq(dp->res.irq);
 
+	return 0;
+}
+
+static int dp_init_resources(struct dp_device *dp, struct platform_device *pdev)
+{
+	int ret = 0;
+
+	ret = dp_remap_regs(dp, pdev);
+	if (ret) {
+		dp_err(dp, "failed to remap DP registers\n");
+		return -EINVAL;
+	}
+
 	ret = dp_get_clock(dp);
 	if (ret) {
 		dp_err(dp, "failed to get DP clks\n");
+		return -EINVAL;
+	}
+
+	ret = dp_register_irq(dp, pdev);
+	if (ret) {
+		dp_err(dp, "failed to get DP interrupts\n");
 		return -EINVAL;
 	}
 

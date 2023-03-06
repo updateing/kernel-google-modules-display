@@ -216,5 +216,6 @@ extern void dp_register_func_for_hdcp22(void (*func0)(u32 en),
 void dp_enable_dposc(struct dp_device *dp);
 void dp_disable_dposc(struct dp_device *dp);
 int dp_get_clock(struct dp_device *dp);
+int dp_remap_regs_other(struct dp_device *dp);
 
 #endif // __EXYNOS_DRM_DP_H__
