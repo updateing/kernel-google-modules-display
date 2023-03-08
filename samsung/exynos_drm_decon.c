@@ -93,13 +93,29 @@ static inline unsigned long fps_timeout(int fps)
 
 	return msecs_to_jiffies(frame_time_ms) + FRAME_TIMEOUT;
 }
+void decon_dump(struct decon_device *decon, struct drm_printer *p)
+{
+	unsigned long flags;
 
-void decon_dump(const struct decon_device *decon)
+	spin_lock_irqsave(&decon->slock, flags);
+	decon_dump_locked(decon, p);
+	spin_unlock_irqrestore(&decon->slock, flags);
+}
+
+void decon_dump_locked(const struct decon_device *decon, struct drm_printer *p)
 {
 	int i;
 	struct decon_device *d;
-	struct drm_printer p = console_set_on_cmdline ?
-		drm_debug_printer("[drm]") : drm_info_printer(decon->dev);
+	struct drm_printer printer;
+	struct drm_printer *pointer;
+
+	if (!p) {
+		printer = console_set_on_cmdline ?
+			drm_debug_printer("[drm]") : drm_info_printer(decon->dev);
+		pointer = &printer;
+	} else {
+		pointer = p;
+	}
 
 	for (i = 0; i < REGS_DECON_ID_MAX; ++i) {
 		d = get_decon_drvdata(i);
@@ -107,25 +123,25 @@ void decon_dump(const struct decon_device *decon)
 			continue;
 
 		if (d->state != DECON_STATE_ON) {
-			drm_printf(&p, "%s[%u]: DECON state is not On(%d)\n",
+			drm_printf(pointer, "%s[%u]: DECON state is not On(%d)\n",
 				d->dev->driver->name, d->id, d->state);
 			continue;
 		}
 
-		__decon_dump(&p, d->id, &d->regs, d->config.dsc.enabled, d->dqe != NULL);
+		__decon_dump(pointer, d->id, &d->regs, d->config.dsc.enabled, d->dqe != NULL);
 	}
 
 	if (decon->state != DECON_STATE_ON)
 		return;
 
 	for (i = 0; i < decon->dpp_cnt; ++i)
-		dpp_dump(&p, decon->dpp[i]);
+		dpp_dump(pointer, decon->dpp[i]);
 
 	if (decon->rcd)
-		rcd_dump(&p, decon->rcd);
+		rcd_dump(pointer, decon->rcd);
 
 	if (decon->cgc_dma)
-		cgc_dump(&p, decon->cgc_dma);
+		cgc_dump(pointer, decon->cgc_dma);
 }
 
 static inline u32 win_start_pos(int x, int y)
@@ -1723,7 +1739,7 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_data)
 
 	if (ext_irq & DPU_TIME_OUT_INT_PEND) {
 		decon_err(decon, "%s: timeout irq occurs\n", __func__);
-		decon_dump(decon);
+		decon_dump_locked(decon, NULL);
 		WARN_ON(1);
 	}
 

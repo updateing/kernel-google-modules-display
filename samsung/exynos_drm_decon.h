@@ -506,7 +506,8 @@ static inline struct decon_device *get_decon_drvdata(u32 id)
 }
 
 bool decon_dump_ignore(enum dpu_event_condition condition);
-void decon_dump(const struct decon_device *decon);
+void decon_dump(struct decon_device *decon, struct drm_printer *p);
+void decon_dump_locked(const struct decon_device *decon, struct drm_printer *p);
 void decon_dump_all(struct decon_device *decon,
 		enum dpu_event_condition cond, bool async_buf_dump);
 void decon_enable_te_irq(struct decon_device *decon, bool enable);
