@@ -1632,6 +1632,8 @@ static ssize_t op_hz_store(struct device *dev,
 		return ret;
 	}
 
+	sysfs_notify(&ctx->dev->kobj, NULL, "op_hz");
+
 	return count;
 }
 
@@ -1647,6 +1649,8 @@ static ssize_t op_hz_show(struct device *dev,
 
 	if (!funcs || !funcs->set_op_hz)
 		return -EINVAL;
+
+	dev_dbg(ctx->dev, "%s: %u\n", __func__, ctx->op_hz);
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->op_hz);
 }
