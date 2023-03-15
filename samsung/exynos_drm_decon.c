@@ -370,7 +370,6 @@ static void decon_update_config(struct decon_config *config,
 				const struct exynos_drm_connector_state *exynos_conn_state)
 {
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
-	struct decon_device *decon = crtc_to_decon(crtc_state->crtc);
 
 	config->image_width = mode->hdisplay;
 	config->image_height = mode->vdisplay;
@@ -403,8 +402,6 @@ static void decon_update_config(struct decon_config *config,
 		decon_update_dsi_config(config, crtc_state, exynos_conn_state);
 
 	config->out_bpc = exynos_conn_state->exynos_mode.bpc;
-
-	DPU_EVENT_LOG(DPU_EVT_DECON_UPDATE_CONFIG, decon->id, NULL);
 }
 
 static bool decon_is_seamless_possible(const struct decon_device *decon,
@@ -1265,7 +1262,8 @@ static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_st
 	DPU_ATRACE_BEGIN(__func__);
 
 	if (decon->state == DECON_STATE_HIBERNATION) {
-		WARN_ON(!old_crtc_state->self_refresh_active);
+		WARN_ON(!old_crtc_state->self_refresh_active ||
+			crtc_state->mode_changed || crtc_state->connectors_changed);
 
 		if (old_exynos_crtc_state->bypass) {
 			spin_lock_irqsave(&decon->slock, flags);
@@ -1285,6 +1283,7 @@ static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_st
 			crtc_get_exynos_connector_state(state, crtc_state);
 
 		decon_update_config(&decon->config, crtc_state, exynos_conn_state);
+		DPU_EVENT_LOG(DPU_EVT_DECON_UPDATE_CONFIG, decon->id, NULL);
 
 		if (decon_is_te_enabled(decon))
 			decon_request_te_irq(exynos_crtc, exynos_conn_state);

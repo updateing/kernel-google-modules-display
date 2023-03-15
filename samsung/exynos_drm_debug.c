@@ -282,6 +282,7 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		log->data.crtc_info.planes_changed = crtc_state->planes_changed;
 		log->data.crtc_info.mode_changed = crtc_state->mode_changed;
 		log->data.crtc_info.active_changed = crtc_state->active_changed;
+		log->data.crtc_info.connectors_changed = crtc_state->connectors_changed;
 		break;
 	case DPU_EVT_BTS_RELEASE_BW:
 	case DPU_EVT_BTS_UPDATE_BW:
@@ -850,13 +851,14 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_REQ_CRTC_INFO_OLD:
 		case DPU_EVT_REQ_CRTC_INFO_NEW:
 			scnprintf(buf + len, sizeof(buf) - len,
-				"\tenable(%d) active(%d) sr(%d) [p:%d m:%d a:%d]",
+				"\tenable(%d) active(%d) sr(%d) [p:%d m:%d a:%d c:%d]",
 					log->data.crtc_info.enable,
 					log->data.crtc_info.active,
 					log->data.crtc_info.self_refresh,
 					log->data.crtc_info.planes_changed,
 					log->data.crtc_info.mode_changed,
-					log->data.crtc_info.active_changed);
+					log->data.crtc_info.active_changed,
+					log->data.crtc_info.connectors_changed);
 			break;
 		case DPU_EVT_BTS_RELEASE_BW:
 		case DPU_EVT_BTS_UPDATE_BW:
