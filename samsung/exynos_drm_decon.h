@@ -386,7 +386,7 @@ struct dpu_log_plane_info {
 };
 
 struct dpu_log {
-	ktime_t time;
+	u64 ts_nsec;
 	enum dpu_event_type type;
 
 	union {
