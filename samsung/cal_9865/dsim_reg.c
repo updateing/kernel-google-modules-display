@@ -1634,9 +1634,6 @@ static void dsim_reg_set_config(u32 id, struct dsim_reg_config *config,
 
 	dsim_reg_enable_dsc(id, config->dsc.enabled);
 
-	if (config->mode == DSIM_COMMAND_MODE)
-		dsim_reg_enable_shadow(id, 0);
-
 	if (config->mode == DSIM_VIDEO_MODE) {
 		dsim_reg_disable_hsa(id, 0);
 		dsim_reg_disable_hbp(id, 0);
@@ -2532,14 +2529,16 @@ static inline void __dphy_dump(struct drm_printer *p, u32 id, struct dsim_regs *
 void __dsim_dump(struct drm_printer *p, u32 id, struct dsim_regs *regs)
 {
 	/* change to updated register read mode (meaning: SHADOW in DECON) */
-	cal_drm_printf(p, id, "=== DSIM %d LINK SFR DUMP ===\n", id);
+	cal_drm_printf(p, id, "=== DSIM %d LINK SFR DUMP(applied to hw) ===\n", id);
 	dsim_reg_enable_shadow_read(id, 0);
 	dpu_print_hex_dump(p, regs->regs, regs->regs + 0x0000, 0x124);
 
 	__dphy_dump(p, id, regs);
 
 	/* restore to avoid size mismatch (possible config error at DECON) */
+	cal_drm_printf(p, id, "=== DSIM %d LINK SFR DUMP ===\n", id);
 	dsim_reg_enable_shadow_read(id, 1);
+	dpu_print_hex_dump(p, regs->regs, regs->regs + 0x0000, 0x124);
 }
 
 int dsim_dphy_diag_mask_from_range(uint8_t start, uint8_t end, uint32_t *mask)
