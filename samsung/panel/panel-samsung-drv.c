@@ -3377,6 +3377,13 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		if (ctx->panel_state == PANEL_STATE_NORMAL)
 			exynos_panel_update_te2(ctx);
 	}
+
+	if (is_lp_mode) {
+		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+		if (funcs && funcs->set_post_lp_mode)
+			funcs->set_post_lp_mode(ctx);
+	}
 	mutex_unlock(&ctx->mode_lock);
 
 	if (need_update_backlight && ctx->bl)
@@ -3801,13 +3808,13 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 		sysfs_notify(&ctx->dev->kobj, NULL, "refresh_rate");
 	}
 
+	if (pmode->exynos_mode.is_lp_mode && funcs && funcs->set_post_lp_mode)
+		funcs->set_post_lp_mode(ctx);
+
 	mutex_unlock(&ctx->mode_lock);
 
 	if (need_update_backlight && ctx->bl)
 		backlight_update_status(ctx->bl);
-
-	if (pmode->exynos_mode.is_lp_mode && funcs->set_post_lp_mode)
-		funcs->set_post_lp_mode(ctx);
 
 	DPU_ATRACE_INT("panel_fps", drm_mode_vrefresh(mode));
 	DPU_ATRACE_END(__func__);
