@@ -993,7 +993,6 @@
  */
 
 #define SRAMC_L_COM_SHD_OFFSET                  (0x0800)
-#define SRAMC_L_COM_MODE_REG			0x0010
 
 #define SRAMC_L_COM_TZPC                        (0x0008)
 #define SRAMC_TZPC                              (1 << 0)
@@ -1001,16 +1000,21 @@
 #define SRAMC_L_COM_PSLVERR_CON                 (0x000C)
 #define SRAMC_PSLVERR_EN                        (1 << 0)
 
-#define SRAMC_SCL_ALPHA_ENABLE(_v)              ((_v) << 13)
-#define SRAMC_SCL_ALPHA_ENABLE_MASK             (1 << 13)
-#define SRAMC_SCL_ENABLE(_v)                    ((_v) << 12)
-#define SRAMC_SCL_ENABLE_MASK                   (1 << 12)
-#define SRAMC_COMP_ENABLE(_v)                   ((_v) << 8)
-#define SRAMC_COMP_ENABLE_MASK                  (1 << 8)
-#define SRAMC_ROT_ENABLE(_v)                    ((_v) << 4)
-#define SRAMC_ROT_ENABLE_MASK                   (1 << 4)
-#define SRAMC_FORMAT(_v)                        ((_v) << 0)
-#define SRAMC_FORMAT_MASK                       (3 << 0)
+#define SRAMC_L_COM_MODE_REG                    (0x0010)
+#define SRAMC_SCL_ALPHA_ENABLE(_v)              (((_v) & 0x1) << 13)
+#define SRAMC_SCL_ALPHA_ENABLE_MASK             (0x1 << 13)
+#define SRAMC_SCL_ENABLE(_v)                    (((_v) & 0x1) << 12)
+#define SRAMC_SCL_ENABLE_MASK                   (0x1 << 12)
+#define SRAMC_COMP_YUV_MODE(_v)                 (((_v) & 0x1) << 10)
+#define SRAMC_COMP_YUV_MODE_MASK                (0x1 << 10)
+#define SRAMC_COMP_ENABLE(_v)                   (((_v) & 0x1) << 8)
+#define SRAMC_COMP_ENABLE_MASK                  (0x1 << 8)
+#define SRAMC_ROT_ENABLE(_v)                    (((_v) & 0x1) << 4)
+#define SRAMC_ROT_ENABLE_MASK                   (0x1 << 4)
+#define SRAMC_YUV_MODE(_v)                      (((_v) & 0x1) << 2)
+#define SRAMC_YUV_MODE_MASK                     (0x1 << 2)
+#define SRAMC_FORMAT(_v)                        (((_v) & 0x3) << 0)
+#define SRAMC_FORMAT_MASK                       (0x3 << 0)
 #define SRAMC_FMT_RGB32BIT                      (0)     /* ARGB8888, AR */
 #define SRAMC_FMT_RGB16BIT                      (1)     /* ARGB4444, RG */
 #define SRAMC_FMT_YUV08BIT                      (2)     /* YUV 8bit */
