@@ -303,7 +303,11 @@ static void dp_check_hdcp_cap(struct dp_device *dp)
 {
 	u8 hdcp13_bcap = 0;
 	u8 hdcp22_rxcap[DPCD_HDCP_2_2_REG_RX_CAPS_SIZE];
+	size_t aksv_set_bits = 0;
+	size_t aksv_clear_bits = 0;
+	uint8_t hdcp_aksv[HDCP_AKSV_SIZE] = { 0 };
 	int ret;
+	size_t i;
 
 	dp->hdcp_config.hdcp_ver = HDCP_VERSION_NONE;
 
@@ -334,6 +338,17 @@ static void dp_check_hdcp_cap(struct dp_device *dp)
 			dp->hdcp_config.hdcp_ver = HDCP_VERSION_2_2;
 		else
 			dp_info(dp, "Manually unsupporting HDCP 2.2\n");
+	}
+
+	dp_hw_get_hdcp13_aksv(hdcp_aksv);
+	for (i = 0; i < sizeof(hdcp_aksv); ++i) {
+		aksv_set_bits += __builtin_popcount(hdcp_aksv[i]);
+		aksv_clear_bits += (8 - __builtin_popcount(hdcp_aksv[i]));
+	}
+	if (aksv_set_bits != aksv_clear_bits) {
+		dp_info(dp, "Unfused Chip. Giving up on HDCP %lu %lu\n",
+			aksv_set_bits, aksv_clear_bits);
+		dp->hdcp_config.hdcp_ver = HDCP_VERSION_NONE;
 	}
 
 	dp_info(dp, "HDCP version to be used: %02x\n",

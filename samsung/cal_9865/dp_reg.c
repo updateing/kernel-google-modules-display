@@ -2741,16 +2741,13 @@ bool dp_hw_get_hdcp13_aksv(u8 *aksv)
 	u32 aksv0 = 0, aksv1 = 0;
 	int i;
 
-	if (!dp_reg_get_hdcp13_aksv_valid())
-		return false;
-
 	dp_reg_get_hdcp13_aksv(&aksv0, &aksv1);
 
 	for (i = 0; i < 4; i++)
 		aksv[i] = (u8)((aksv0 >> (i * 8)) & 0xFF);
 	aksv[i] = (u8)(aksv1 & 0xFF);
 
-	return true;
+	return dp_reg_get_hdcp13_aksv_valid();
 }
 
 void dp_hw_get_hdcp13_r0(u32 *r0)
