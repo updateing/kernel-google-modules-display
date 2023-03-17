@@ -372,12 +372,13 @@ static void dpp_test_fixed_config_params(struct dpp_params_info *config, u32 w,
 	config->rcv_num = exynos_devfreq_get_domain_freq(DEVFREQ_DISP) ? : 0x7FFFFFFF;
 }
 
-static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
+static int dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 				const struct exynos_drm_plane_state *state,
 				const struct drm_display_mode *mode)
 {
 	struct drm_framebuffer *fb = state->base.fb;
 	unsigned int simplified_rot;
+	unsigned long long comp_blk_size;
 
 	pr_debug("mode(%dx%d)\n", mode->hdisplay, mode->vdisplay);
 	config->src.x = state->base.src.x1 >> 16;
@@ -406,10 +407,44 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 
 	if (has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), fb->modifier)) {
 		config->comp_type = COMP_TYPE_AFBC;
-		config->blk_size = AFBC_BLOCK_SIZE_GET(fb->modifier);
+		comp_blk_size = AFBC_BLOCK_SIZE_GET(fb->modifier);
+		switch (comp_blk_size) {
+		case AFBC_FORMAT_MOD_BLOCK_SIZE_16x16:
+			config->blk_size = AFBC_BLK_16x16;
+			break;
+		case AFBC_FORMAT_MOD_BLOCK_SIZE_32x8:
+			config->blk_size = AFBC_BLK_32x8;
+			break;
+		case AFBC_FORMAT_MOD_BLOCK_SIZE_64x4:
+			config->blk_size = AFBC_BLK_64x4;
+			break;
+		default:
+			pr_err("AFBC Block Size(%llu) is not supported\n", comp_blk_size);
+			return -EINVAL;
+		}
 	} else if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), fb->modifier)) {
 		config->comp_type = COMP_TYPE_SBWC;
-		config->blk_size = SBWC_BLOCK_SIZE_GET(fb->modifier);
+		comp_blk_size = SBWC_BLOCK_SIZE_GET(fb->modifier);
+		switch (comp_blk_size) {
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x2:
+			config->blk_size = SBWC_BLK_32x2;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x3:
+			config->blk_size = SBWC_BLK_32x3;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x4:
+			config->blk_size = SBWC_BLK_32x4;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x5:
+			config->blk_size = SBWC_BLK_32x5;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x6:
+			config->blk_size = SBWC_BLK_32x6;
+			break;
+		default:
+			pr_err("SBWC Block Size(%llu) is not supported\n", comp_blk_size);
+			return -EINVAL;
+		}
 	} else {
 		config->comp_type = COMP_TYPE_NONE;
 	}
@@ -488,6 +523,8 @@ static void dpp_convert_plane_state_to_config(struct dpp_params_info *config,
 		config->is_block = false;
 	}
 	config->rcv_num = exynos_devfreq_get_domain_freq(DEVFREQ_DISP) ? : 0x7FFFFFFF;
+
+	return 0;
 }
 
 static void __dpp_enable(struct dpp_device *dpp)
@@ -811,12 +848,15 @@ static int dpp_check(struct dpp_device *dpp,
 							plane_state->crtc);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 	const struct drm_framebuffer *fb = state->base.fb;
+	int ret = 0;
 
 	dpp_debug(dpp, "+\n");
 
 	memset(&config, 0, sizeof(struct dpp_params_info));
 
-	dpp_convert_plane_state_to_config(&config, state, mode);
+	ret = dpp_convert_plane_state_to_config(&config, state, mode);
+	if (ret)
+		return ret;
 
 	if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_COLORMAP, fb->modifier)) {
 		if (dpp_check_dst_size(dpp, &config))
@@ -975,12 +1015,15 @@ static int dpp_update(struct dpp_device *dpp,
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 	const struct exynos_drm_crtc_state *exynos_crtc_state =
 					to_exynos_crtc_state(crtc_state);
+	int ret = 0;
 
 	dpp_debug(dpp, "+\n");
 
 	__dpp_enable(dpp);
 
-	dpp_convert_plane_state_to_config(config, state, mode);
+	ret = dpp_convert_plane_state_to_config(config, state, mode);
+	if (ret)
+		return ret;
 
 	config->in_bpc = exynos_crtc_state->in_bpc == 8 ? DPP_BPC_8 : DPP_BPC_10;
 	dpp_debug(dpp, "in/force bpc(%d/%d)\n", exynos_crtc_state->in_bpc,
