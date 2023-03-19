@@ -1863,8 +1863,8 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 	}
 
 	if (of_property_read_u32(np, "ppc", (u32 *)&decon->bts.ppc))
-		decon->bts.ppc = 2UL;
-	decon_debug(decon, "PPC(%llu)\n", decon->bts.ppc);
+		decon->bts.ppc = 2U;
+	decon_debug(decon, "PPC(%u)\n", decon->bts.ppc);
 
 	if (of_property_read_u32(np, "ppc_rotator",
 					(u32 *)&decon->bts.ppc_rotator)) {

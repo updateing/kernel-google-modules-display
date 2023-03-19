@@ -1772,6 +1772,11 @@ static int dsim_host_attach(struct mipi_dsi_host *host,
 		}
 	}
 
+	if (IS_ERR_OR_NULL(dsim->encoder.dev)) {
+		dsim_err(dsim, "encoder is not initialized\n");
+		return PTR_ERR(dsim->encoder.dev);
+	}
+
 	ret = drm_bridge_attach(&dsim->encoder, bridge, NULL, 0);
 	if (ret) {
 		dsim_err(dsim, "Unable to attach panel bridge\n");

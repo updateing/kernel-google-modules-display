@@ -344,7 +344,7 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 				  const struct dpu_bts_win_config *config, u64 resol_clk,
 				  u32 max_clk)
 {
-	u64 aclk_disp, aclk_base, aclk_disp_khz;
+	u64 aclk_disp, aclk_base, aclk_panel_khz, aclk_disp_khz;
 	u32 ppc;
 	u32 src_w, src_h;
 	u32 diff_w, ratio_v;
@@ -363,12 +363,16 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 	if (src_w > config->dst_w || src_h > config->dst_h)
 		is_downscale = true;
 
-	/* case for using dsc encoder 1ea at decon0 or decon1 */
-	if ((decon->id != 2) && (decon->config.dsc.dsc_count == 1))
-		ppc = ((decon->bts.ppc / 2UL) >= 1UL) ?
-				(decon->bts.ppc / 2UL) : 1UL;
-	else
+	/* when calculating aclk for panel, if DSC is enabled, consider DSC encoder
+	 * count as its ppc.
+	 */
+	if (decon->config.dsc.enabled) {
+		ppc = min(decon->bts.ppc, decon->config.dsc.dsc_count);
+		is_dsc = true;
+	} else {
 		ppc = decon->bts.ppc;
+	}
+	aclk_panel_khz = resol_clk / ppc;
 
 	margin = 1100 + ((48000 + 20000) / decon->config.image_width);
 	diff_w = (src_w <= config->dst_w) ? 0 : src_w - config->dst_w;
@@ -392,10 +396,10 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 	aclk_disp_khz = (aclk_disp * margin / 1000) / 1000;
 	if (decon->bts.afbc_clk_ppc_margin && config->is_comp)
 		aclk_disp_khz = mult_frac(aclk_disp_khz, decon->bts.afbc_clk_ppc_margin, 100);
+	aclk_disp_khz /= decon->bts.ppc;
 
-	if (aclk_disp_khz < resol_clk)
-		aclk_disp_khz = resol_clk;
-	aclk_disp_khz /= ppc;
+	if (aclk_disp_khz < aclk_panel_khz)
+		aclk_disp_khz = aclk_panel_khz;
 
 	if (!config->is_rot)
 		return aclk_disp_khz;
@@ -405,9 +409,6 @@ static u64 dpu_bts_calc_aclk_disp(struct decon_device *decon,
 		aclk_base = aclk_disp_khz;
 	else
 		aclk_base = max_clk;
-
-	if (decon->config.dsc.enabled)
-		is_dsc = true;
 
 	aclk_disp_khz = dpu_bts_calc_rotate_aclk(decon, (u32)aclk_base, ppc,
 			src_w, config->dst_w, config->is_comp, is_downscale, is_dsc);

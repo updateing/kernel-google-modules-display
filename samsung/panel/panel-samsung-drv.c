@@ -984,25 +984,25 @@ static int exynos_bl_find_range(struct exynos_panel *ctx,
 {
 	u32 i;
 
-	if (!ctx->bl_notifier.num_ranges)
-		return -EOPNOTSUPP;
-
-	mutex_lock(&ctx->bl_state_lock);
-
-	for (i = 0; i < ctx->bl_notifier.num_ranges; i++) {
-		if (brightness <= ctx->bl_notifier.ranges[i]) {
-			*range = i;
-			mutex_unlock(&ctx->bl_state_lock);
-
-			return 0;
-		}
+	if (!brightness) {
+		*range = 0;
+		return 0;
 	}
 
+	mutex_lock(&ctx->bl_state_lock);
+	if (!ctx->bl_notifier.num_ranges) {
+		mutex_unlock(&ctx->bl_state_lock);
+		return -EOPNOTSUPP;
+	}
+
+	for (i = 0; i < ctx->bl_notifier.num_ranges; i++) {
+		if (brightness <= ctx->bl_notifier.ranges[i])
+			break;
+	}
 	mutex_unlock(&ctx->bl_state_lock);
 
-	dev_warn(ctx->dev, "failed to find bl range\n");
-
-	return -EINVAL;
+	*range = i + 1;
+	return 0;
 }
 
 /**
@@ -1071,14 +1071,13 @@ static int exynos_update_status(struct backlight_device *bl)
 	}
 
 	if (!ctx->hbm_mode &&
-	    exynos_bl_find_range(ctx, brightness, &bl_range) >= 0 &&
+	    !exynos_bl_find_range(ctx, brightness, &bl_range) &&
 	    bl_range != ctx->bl_notifier.current_range) {
 		ctx->bl_notifier.current_range = bl_range;
 
 		sysfs_notify(&ctx->bl->dev.kobj, NULL, "brightness");
 
-		dev_dbg(ctx->dev, "bl range is changed to %d\n",
-			ctx->bl_notifier.current_range);
+		dev_dbg(ctx->dev, "bl range is changed to %d\n", bl_range);
 	}
 	mutex_unlock(&ctx->mode_lock);
 	return 0;
