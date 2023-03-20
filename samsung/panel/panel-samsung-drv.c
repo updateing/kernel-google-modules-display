@@ -463,6 +463,12 @@ int exynos_panel_init(struct exynos_panel *ctx)
 	if (funcs && funcs->panel_init)
 		funcs->panel_init(ctx);
 
+	if (funcs && funcs->run_normal_mode_work) {
+		dev_info(ctx->dev, "%s: schedule normal_mode_work\n", __func__);
+		schedule_delayed_work(&ctx->normal_mode_work,
+				      msecs_to_jiffies(ctx->normal_mode_work_delay_ms));
+	}
+
 	return ret;
 }
 EXPORT_SYMBOL(exynos_panel_init);
@@ -2374,6 +2380,8 @@ static int panel_debugfs_add(struct exynos_panel *ctx, struct dentry *parent)
 	debugfs_create_u32("rev", 0600, parent, &ctx->panel_rev);
 	debugfs_create_bool("lhbm_postwork_disabled", 0600, parent,
 			    &ctx->hbm.local_hbm.post_work_disabled);
+	debugfs_create_u32("normal_mode_work_delay_ms", 0600, parent,
+			   &ctx->normal_mode_work_delay_ms);
 
 	if (!funcs)
 		return -EINVAL;
@@ -3508,6 +3516,13 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 
 	if (need_update_backlight && ctx->bl)
 		backlight_update_status(ctx->bl);
+
+	if (!is_active && ctx->desc->exynos_panel_func &&
+	    ctx->desc->exynos_panel_func->run_normal_mode_work) {
+		dev_info(ctx->dev, "%s: schedule normal_mode_work\n", __func__);
+		schedule_delayed_work(&ctx->normal_mode_work,
+				      msecs_to_jiffies(ctx->normal_mode_work_delay_ms));
+	}
 }
 
 /*
@@ -3599,6 +3614,12 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 			ctx->panel_state = PANEL_STATE_BLANK;
 		} else {
 			ctx->panel_state = PANEL_STATE_OFF;
+
+			if (ctx->desc->exynos_panel_func &&
+			    ctx->desc->exynos_panel_func->run_normal_mode_work) {
+				dev_info(ctx->dev, "%s: cancel normal_mode_work\n", __func__);
+				cancel_delayed_work(&ctx->normal_mode_work);
+			}
 		}
 
 		drm_panel_disable(&ctx->panel);
@@ -4109,6 +4130,21 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	if (need_update_backlight && ctx->bl)
 		backlight_update_status(ctx->bl);
 
+	/* we don't run normal_mode_work in LP mode */
+	if (funcs && funcs->run_normal_mode_work) {
+		if (pmode->exynos_mode.is_lp_mode) {
+			dev_info(ctx->dev, "%s: cancel normal_mode_work while entering LP mode\n",
+				 __func__);
+			cancel_delayed_work(&ctx->normal_mode_work);
+		} else if (old_mode && old_mode->exynos_mode.is_lp_mode &&
+			   ctx->panel_state == PANEL_STATE_NORMAL) {
+			dev_info(ctx->dev, "%s: schedule normal_mode_work while exiting LP mode\n",
+				 __func__);
+			schedule_delayed_work(&ctx->normal_mode_work,
+					      msecs_to_jiffies(ctx->normal_mode_work_delay_ms));
+		}
+	}
+
 	DPU_ATRACE_INT("panel_fps", drm_mode_vrefresh(mode));
 	DPU_ATRACE_END(__func__);
 }
@@ -4234,6 +4270,18 @@ static void local_hbm_post_work(struct kthread_work *work)
 	if (crtc)
 		drm_crtc_vblank_put(crtc);
 	DPU_ATRACE_END(__func__);
+}
+
+static void exynos_panel_normal_mode_work(struct work_struct *work)
+{
+	struct exynos_panel *ctx = container_of(work, struct exynos_panel, normal_mode_work.work);
+
+	dev_info(ctx->dev, "%s\n", __func__);
+	mutex_lock(&ctx->mode_lock);
+	ctx->desc->exynos_panel_func->run_normal_mode_work(ctx);
+	mutex_unlock(&ctx->mode_lock);
+	schedule_delayed_work(&ctx->normal_mode_work,
+			      msecs_to_jiffies(ctx->normal_mode_work_delay_ms));
 }
 
 static void hbm_data_init(struct exynos_panel *ctx)
@@ -4489,6 +4537,12 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 
 	ctx->panel_idle_enabled = exynos_panel_func && exynos_panel_func->set_self_refresh != NULL;
 	INIT_DELAYED_WORK(&ctx->idle_work, panel_idle_work);
+
+	if (exynos_panel_func && exynos_panel_func->run_normal_mode_work &&
+	    ctx->desc->normal_mode_work_delay_ms) {
+		ctx->normal_mode_work_delay_ms = ctx->desc->normal_mode_work_delay_ms;
+		INIT_DELAYED_WORK(&ctx->normal_mode_work, exynos_panel_normal_mode_work);
+	}
 
 	mutex_init(&ctx->mode_lock);
 	mutex_init(&ctx->crtc_lock);

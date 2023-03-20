@@ -478,6 +478,14 @@ struct exynos_panel_funcs {
 	 */
 	unsigned int (*get_te_usec)(struct exynos_panel *exynos_panel,
 				    const struct exynos_panel_mode *pmode);
+
+	/**
+	 * @run_normal_mode_work
+	 *
+	 * This callback is used to run the periodic work for each panel in
+	 * normal mode.
+	 */
+	void (*run_normal_mode_work)(struct exynos_panel *exynos_panel);
 };
 
 /**
@@ -594,6 +602,7 @@ struct exynos_panel_desc {
 	const struct panel_reg_ctrl reg_ctrl_post_enable[PANEL_REG_COUNT];
 	const struct panel_reg_ctrl reg_ctrl_pre_disable[PANEL_REG_COUNT];
 	const struct panel_reg_ctrl reg_ctrl_disable[PANEL_REG_COUNT];
+	const u32 normal_mode_work_delay_ms;
 };
 
 #define PANEL_ID_MAX		40
@@ -765,6 +774,9 @@ struct exynos_panel {
 
 	u32 error_count_te;
 	u32 error_count_unknown;
+
+	u32 normal_mode_work_delay_ms;
+	struct delayed_work normal_mode_work;
 };
 
 /**
