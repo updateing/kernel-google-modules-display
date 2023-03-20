@@ -109,6 +109,7 @@ struct dpp_device {
 	unsigned int win_id;	/* connected window id */
 	bool is_win_connected;	/* Is dpp connected to window ? */
 	bool protection;
+	u32 rdma_mst_security;	/* read MST_SECURITY from rdma register */
 
 	/*
 	 * comp_src means compression source of input buffer compressed by

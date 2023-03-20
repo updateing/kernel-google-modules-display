@@ -280,6 +280,7 @@
 #define IDMA_DG_EN_ALL				(0x7FFFFFFF << 0)
 
 #define RDMA_MST_SECURITY			0x200
+#define RDMA_MST_SECURITY_MASK			(0x1 << 0)
 #define RDMA_SLV_SECURITY			0x204
 
 #define RDMA_DEBUG_CTRL				0x0300

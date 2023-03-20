@@ -201,6 +201,12 @@ void DPU_EVENT_LOG(enum dpu_event_type type, int index, void *priv)
 		log->data.dpp.id = dpp->id;
 		log->data.dpp.win_id = dpp->win_id;
 		break;
+	case DPU_EVT_DPP_SET_PROTECTION:
+		dpp = (struct dpp_device *)priv;
+		log->data.dpp.id = dpp->id;
+		log->data.dpp.mst_security = dpp->rdma_mst_security;
+		log->data.dpp.last_secure_pid = current->pid;
+		break;
 	case DPU_EVT_DMA_RECOVERY:
 		dpp = (struct dpp_device *)priv;
 		log->data.dpp.id = dpp->id;
@@ -532,6 +538,7 @@ static const char *get_event_name(enum dpu_event_type type)
 		"DSIM_PH_FIFO_TIMEOUT",
 		"DSIM_PL_FIFO_TIMEOUT",
 		"DPP_FRAMEDONE",
+		"DPP_SET_PROTECTION",
 		"DMA_RECOVERY",
 		"IDMA_AFBC_CONFLICT",
 		"IDMA_FBC_ERROR",
@@ -685,11 +692,13 @@ static bool is_skip_dpu_event_dump(enum dpu_event_type type, enum dpu_event_cond
 		case DPU_EVT_DSIM_FRAMEDONE:
 		case DPU_EVT_DPP_FRAMEDONE:
 		case DPU_EVT_DMA_RECOVERY:
+		case DPU_EVT_DPP_SET_PROTECTION:
 		case DPU_EVT_IDMA_AFBC_CONFLICT:
 		case DPU_EVT_IDMA_FBC_ERROR:
 		case DPU_EVT_IDMA_READ_SLAVE_ERROR:
 		case DPU_EVT_IDMA_DEADLOCK:
 		case DPU_EVT_IDMA_CFG_ERROR:
+		case DPU_EVT_SYSMMU_FAULT:
 		case DPU_EVT_ATOMIC_COMMIT:
 		case DPU_EVT_TE_INTERRUPT:
 		case DPU_EVT_DSIM_RUNTIME_SUSPEND:
@@ -781,6 +790,13 @@ static void dpu_event_log_print(const struct decon_device *decon, struct drm_pri
 		case DPU_EVT_DPP_FRAMEDONE:
 			scnprintf(buf + len, sizeof(buf) - len,
 					"\tCH:%u WIN:%u", log->data.dpp.id, log->data.dpp.win_id);
+			break;
+		case DPU_EVT_DPP_SET_PROTECTION:
+			scnprintf(buf + len, sizeof(buf) - len,
+					"\tID:%u mst_security:%#x PID: %d",
+					log->data.dpp.id,
+					log->data.dpp.mst_security,
+					log->data.dpp.last_secure_pid);
 			break;
 		case DPU_EVT_DMA_RECOVERY:
 			str_comp = get_comp_src_name(log->data.dpp.comp_src);

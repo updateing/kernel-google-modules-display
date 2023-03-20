@@ -1022,6 +1022,16 @@ void dma_reg_get_shd_addr(u32 id, u32 shd_addr[], const unsigned long attr)
 			shd_addr[0], shd_addr[1], shd_addr[2], shd_addr[3]);
 }
 
+bool dma_reg_is_mst_security_enabled(u32 id, u32 *out_mst_security)
+{
+	u32 val = dma_read(id, RDMA_MST_SECURITY);
+
+	if (out_mst_security)
+		*out_mst_security = val;
+
+	return (val & RDMA_MST_SECURITY_MASK) != 0;
+}
+
 static void dpp_reg_dump_ch_data(struct drm_printer *p, int id, enum dpp_reg_area reg_area,
 					const u32 sel[], u32 cnt)
 {

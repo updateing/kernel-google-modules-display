@@ -631,6 +631,10 @@ static int set_protection(struct dpp_device *dpp, uint64_t modifier)
 	ret = exynos_smc(SMC_PROTECTION_SET, 0, protection_id,
 			(protection ? SMC_PROTECTION_ENABLE :
 			SMC_PROTECTION_DISABLE));
+	WARN(dma_reg_is_mst_security_enabled(dpp->id, &dpp->rdma_mst_security) != !protection,
+						"dpp[%u] mst_security: %#x\n",
+						dpp->id, dpp->rdma_mst_security);
+	DPU_EVENT_LOG(DPU_EVT_DPP_SET_PROTECTION, dpp->decon_id, dpp);
 	if (ret) {
 		dpp_err(dpp, "failed to %s protection(ch:%u, ret:%d)\n",
 				protection ? "enable" : "disable", dpp->id, ret);

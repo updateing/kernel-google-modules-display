@@ -210,6 +210,7 @@ enum dpu_event_type {
 	DPU_EVT_DSIM_PL_FIFO_TIMEOUT,
 
 	DPU_EVT_DPP_FRAMEDONE,
+	DPU_EVT_DPP_SET_PROTECTION,
 	DPU_EVT_DMA_RECOVERY,
 
 	DPU_EVT_IDMA_AFBC_CONFLICT,
@@ -301,6 +302,8 @@ struct dpu_log_dpp {
 	u32 win_id;
 	u64 comp_src;
 	u32 recovery_cnt;
+	pid_t last_secure_pid; /* record last PID which wrote mst_security */
+	bool mst_security;
 };
 
 struct dpu_log_win {
