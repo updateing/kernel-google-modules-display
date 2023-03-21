@@ -3191,6 +3191,51 @@ static ssize_t als_table_show(struct device *dev,
 
 static DEVICE_ATTR_RW(als_table);
 
+static ssize_t acl_mode_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	ssize_t ret;
+	bool acl_mode;
+
+	if (!funcs || !funcs->set_acl_mode)
+		return -ENOTSUPP;
+
+	if (!is_panel_initialized(ctx))
+		return -EAGAIN;
+
+
+	ret = kstrtobool(buf, &acl_mode);
+	if (ret) {
+		dev_err(dev, "invalid acl mode\n");
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	ctx->acl_mode = acl_mode;
+	funcs->set_acl_mode(ctx, acl_mode);
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
+static ssize_t acl_mode_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	if (!is_panel_initialized(ctx))
+		return -EAGAIN;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->acl_mode);
+}
+
+static DEVICE_ATTR_RW(acl_mode);
+
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_hbm_mode.attr,
 	&dev_attr_dimming_on.attr,
@@ -4404,6 +4449,14 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 		if (ret)
 			dev_err(ctx->dev, "unable to create cabc_mode\n");
 	}
+	if (exynos_panel_func && exynos_panel_func->set_acl_mode) {
+		/* set acl mode true as default */
+		ctx->acl_mode = true;
+		ret = sysfs_create_file(&ctx->bl->dev.kobj, &dev_attr_acl_mode.attr);
+		if (ret)
+			dev_err(ctx->dev, "unable to create acl_mode\n");
+	}
+
 	exynos_panel_handoff(ctx);
 
 	ret = mipi_dsi_attach(dsi);
@@ -4444,6 +4497,7 @@ int exynos_panel_remove(struct mipi_dsi_device *dsi)
 
 	sysfs_remove_groups(&ctx->bl->dev.kobj, bl_device_groups);
 	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_cabc_mode.attr);
+	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_acl_mode.attr);
 	devm_backlight_device_unregister(ctx->dev, ctx->bl);
 
 	return 0;

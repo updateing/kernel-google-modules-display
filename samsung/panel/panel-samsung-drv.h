@@ -276,6 +276,15 @@ struct exynos_panel_funcs {
 	void (*set_local_hbm_mode_post)(struct exynos_panel *exynos_panel);
 
 	/**
+	 * @set_acl_mode:
+	 *
+	 * This callback is used to implement panel specific logic for acl mode
+	 * enablement. If this is not defined, it means that panel does not
+	 * support acl.
+	 */
+	void (*set_acl_mode)(struct exynos_panel *exynos_panel, bool on);
+
+	/**
 	 * @set_power:
 	 *
 	 * This callback is used to implement panel specific power on/off sequence.
@@ -721,6 +730,9 @@ struct exynos_panel {
 	u64 last_rr_te_counter;
 	/* TE width before last rr command was sent */
 	u32 last_rr_te_usec;
+
+        /* Automatic Current Limiting(ACL) */
+	bool acl_mode;
 
 	struct {
 		struct local_hbm {
