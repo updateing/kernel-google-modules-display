@@ -292,7 +292,7 @@ static int dp_sink_power_up(struct dp_device *dp, bool up)
 	return 0;
 }
 
-static unsigned long dp_max_hdcp_ver = 2;    /* HDCP2 is the default */
+static unsigned long dp_max_hdcp_ver = 0;    /* Disable HDCP by default */
 module_param(dp_max_hdcp_ver, ulong, 0664);
 MODULE_PARM_DESC(dp_max_hdcp_ver,
 	"support up to specific hdcp version by setting dp_max_hdcp_ver=x");
