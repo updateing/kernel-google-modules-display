@@ -288,6 +288,8 @@ struct exynos_drm_crtc_state {
 	struct drm_rect partial_region;
 	struct drm_property_blob *partial;
 	bool needs_reconfigure;
+
+	struct kthread_work commit_work;
 };
 
 static inline struct exynos_drm_crtc_state *
@@ -346,9 +348,6 @@ struct exynos_drm_pending_histogram_event {
 
 struct exynos_drm_priv_state {
 	struct drm_private_state base;
-
-	struct drm_atomic_state *old_state;
-	struct kthread_work commit_work;
 
 	unsigned int available_win_mask;
 };
