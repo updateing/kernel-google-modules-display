@@ -175,7 +175,7 @@ static void dp_fill_host_caps(struct dp_device *dp)
 	dp->host.fast_training = false;
 	dp->host.enhanced_frame = true;
 	dp->host.scrambler = true;
-	dp->host.ssc = false;
+	dp->host.ssc = true;
 }
 
 static void dp_fill_sink_caps(struct dp_device *dp,
@@ -460,19 +460,40 @@ static void dp_set_hwconfig_video(struct dp_device *dp)
 
 static int dp_link_configure(struct dp_device *dp)
 {
-	u8 values[2];
+	u8 value;
 	int err;
 
-	values[0] = drm_dp_link_rate_to_bw_code(dp->link.link_rate);
-	values[1] = dp->link.num_lanes;
+	value = drm_dp_link_rate_to_bw_code(dp->link.link_rate);
+	err = drm_dp_dpcd_writeb(&dp->dp_aux, DP_LINK_BW_SET, value);
+	if (err < 0) {
+		dp_err(dp, "Failed to write DP_LINK_BW_SET");
+		return err;
+	}
+
+	value = dp->link.num_lanes;
 
 	if (dp_get_enhanced_mode(dp))
-		values[1] |= DP_LANE_COUNT_ENHANCED_FRAME_EN;
+		value |= DP_LANE_COUNT_ENHANCED_FRAME_EN;
 
-	err = drm_dp_dpcd_write(&dp->dp_aux, DP_LINK_BW_SET, values,
-				sizeof(values));
-	if (err < 0)
+	err = drm_dp_dpcd_writeb(&dp->dp_aux, DP_LANE_COUNT_SET, value);
+	if (err < 0) {
+		dp_err(dp, "Failed to write DP_LANE_COUNT_SET");
 		return err;
+	}
+
+	value = dp->link.ssc ? DP_SPREAD_AMP_0_5 : 0;
+	err = drm_dp_dpcd_writeb(&dp->dp_aux, DP_DOWNSPREAD_CTRL, value);
+	if (err < 0) {
+		dp_err(dp, "Failed to write DP_DOWNSPREAD_CTRL");
+		return err;
+	}
+
+	value = DP_SET_ANSI_8B10B;
+	err = drm_dp_dpcd_writeb(&dp->dp_aux, DP_MAIN_LINK_CHANNEL_CODING_SET, value);
+	if (err < 0) {
+		dp_err(dp, "Failed to write DP_MAIN_LINK_CHANNEL_CODING_SET");
+		return err;
+	}
 
 	return 0;
 }
