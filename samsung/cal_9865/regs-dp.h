@@ -386,7 +386,8 @@ enum dp_logical_lane {
 
 #define PCS_HBR2_EYE_SR_CONTROL			       (0x3020)
 #define HBR2_EYE_SR_CTRL			       (0x3 << 16)
-#define HBR2_EYE_SR_COUNT			       (0xFFFF << 0)
+#define HBR2_EYE_SR_COUNT_SET(_v)		       (((_v)&0xFFFF) << 0)
+#define HBR2_EYE_SR_COUNT_MASK			       (0xFFFF << 0)
 
 #define PCS_HBR3_CONTROL			       (0x3024)
 #define HBR3_TPS4_PATTERN_CNT			       (0xFFFF << 0)

@@ -487,8 +487,8 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 		// Set Voltage
 		dp_print_swing_level(dp);
 		dp_hw_set_voltage_and_pre_emphasis(&dp->hw_config,
-						   (u8 *)vol_swing_level,
-						   (u8 *)pre_empha_level);
+						   vol_swing_level,
+						   pre_empha_level);
 
 		// Write Link Training
 		for (i = 0; i < dp->link.num_lanes; i++)
@@ -588,8 +588,8 @@ static bool dp_do_link_training_eq(struct dp_device *dp, u32 interval_us,
 		// Set Voltage
 		dp_print_swing_level(dp);
 		dp_hw_set_voltage_and_pre_emphasis(&dp->hw_config,
-						   (u8 *)vol_swing_level,
-						   (u8 *)pre_empha_level);
+						   vol_swing_level,
+						   pre_empha_level);
 
 		// Write Link Training
 		for (i = 0; i < dp->link.num_lanes; i++)
@@ -1221,6 +1221,120 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 	}
 }
 
+static void dp_get_voltage_and_pre_emphasis_max_reach(u8 *voltage_swing,
+						    u8 *pre_emphasis, u8 *max_reach_value)
+{
+	int i;
+
+	for (i = 0; i < MAX_LANE_CNT; i++) {
+		if (voltage_swing[i] >= MAX_VOLTAGE_LEVEL)
+			max_reach_value[i] |= DP_TRAIN_MAX_SWING_REACHED;
+
+		if (pre_emphasis[i] >= MAX_PREEMPH_LEVEL)
+			max_reach_value[i] |= DP_TRAIN_MAX_PRE_EMPHASIS_REACHED;
+	}
+}
+
+static void dp_automated_test_set_lane_req(struct dp_device *dp, u8 *val)
+{
+	u8 voltage_swing[MAX_LANE_CNT];
+	u8 pre_emphasis[MAX_LANE_CNT];
+	u8 max_reach_value[MAX_LANE_CNT] = {0, };
+	u8 lanes_data[MAX_LANE_CNT];
+	int i;
+
+	voltage_swing[0] = (val[0] & DP_ADJUST_VOLTAGE_SWING_LANE0_MASK) >>
+			   DP_ADJUST_VOLTAGE_SWING_LANE0_SHIFT;
+	pre_emphasis[0]  = (val[0] & DP_ADJUST_PRE_EMPHASIS_LANE0_MASK) >>
+			   DP_ADJUST_PRE_EMPHASIS_LANE0_SHIFT;
+	voltage_swing[1] = (val[0] & DP_ADJUST_VOLTAGE_SWING_LANE1_MASK) >>
+			   DP_ADJUST_VOLTAGE_SWING_LANE1_SHIFT;
+	pre_emphasis[1]  = (val[0] & DP_ADJUST_PRE_EMPHASIS_LANE1_MASK) >>
+			   DP_ADJUST_PRE_EMPHASIS_LANE1_SHIFT;
+	voltage_swing[2] = (val[1] & DP_ADJUST_VOLTAGE_SWING_LANE0_MASK) >>
+			   DP_ADJUST_VOLTAGE_SWING_LANE0_SHIFT;
+	pre_emphasis[2]  = (val[1] & DP_ADJUST_PRE_EMPHASIS_LANE0_MASK) >>
+			   DP_ADJUST_PRE_EMPHASIS_LANE0_SHIFT;
+	voltage_swing[3] = (val[1] & DP_ADJUST_VOLTAGE_SWING_LANE1_MASK) >>
+			   DP_ADJUST_VOLTAGE_SWING_LANE1_SHIFT;
+	pre_emphasis[3]  = (val[1] & DP_ADJUST_PRE_EMPHASIS_LANE1_MASK) >>
+			   DP_ADJUST_PRE_EMPHASIS_LANE1_SHIFT;
+
+	for (i = 0; i < MAX_LANE_CNT; i++) {
+		dp_info(dp, "AutoTest: voltage swing[%d] = %x\n", i, voltage_swing[i]);
+		dp_info(dp, "AutoTest: pre_emphasis[%d] = %x\n", i, pre_emphasis[i]);
+	}
+
+	dp_hw_set_voltage_and_pre_emphasis(&dp->hw_config, voltage_swing, pre_emphasis);
+	dp_get_voltage_and_pre_emphasis_max_reach(voltage_swing, pre_emphasis,
+						max_reach_value);
+
+	lanes_data[0] = (pre_emphasis[0] << DP_TRAIN_PRE_EMPHASIS_SHIFT) |
+			voltage_swing[0] | max_reach_value[0];
+	lanes_data[1] = (pre_emphasis[1] << DP_TRAIN_PRE_EMPHASIS_SHIFT) |
+			voltage_swing[1] | max_reach_value[1];
+	lanes_data[2] = (pre_emphasis[2] << DP_TRAIN_PRE_EMPHASIS_SHIFT) |
+			voltage_swing[2] | max_reach_value[2];
+	lanes_data[3] = (pre_emphasis[3] << DP_TRAIN_PRE_EMPHASIS_SHIFT) |
+			voltage_swing[3] | max_reach_value[3];
+
+	dp_info(dp, "AutoTest: set %02x %02x %02x %02x\n",
+		lanes_data[0], lanes_data[1], lanes_data[2], lanes_data[3]);
+
+	drm_dp_dpcd_write(&dp->dp_aux, DP_TRAINING_LANE0_SET, lanes_data, MAX_LANE_CNT);
+}
+
+static int dp_automated_test_irq_handler(struct dp_device *dp)
+{
+	u8 dpcd_test_req = 0, dpcd_test_res = 0;
+	u8 dpcd_req_lane[2], dpcd_phy_test_pattern = 0;
+
+	drm_dp_dpcd_readb(&dp->dp_aux, DP_TEST_REQUEST, &dpcd_test_req);
+
+	dpcd_test_res = DP_TEST_ACK;
+	drm_dp_dpcd_writeb(&dp->dp_aux, DP_TEST_RESPONSE, dpcd_test_res);
+
+	if (dpcd_test_req & DP_TEST_LINK_PHY_TEST_PATTERN) {
+		dp_hw_stop();
+		msleep(120);
+
+		/* Set Swing & Preemp */
+		drm_dp_dpcd_read(&dp->dp_aux, DP_ADJUST_REQUEST_LANE0_1, dpcd_req_lane, 2);
+		dp_automated_test_set_lane_req(dp, dpcd_req_lane);
+
+		/* Set Quality Pattern */
+		drm_dp_dpcd_readb(&dp->dp_aux, DP_PHY_TEST_PATTERN, &dpcd_phy_test_pattern);
+		switch (dpcd_phy_test_pattern & DP_PHY_TEST_PATTERN_SEL_MASK) {
+		case DP_PHY_TEST_PATTERN_NONE:
+			dp_hw_set_quality_pattern(DISABLE_PATTERN, ENABLE_SCRAM);
+			break;
+		case DP_PHY_TEST_PATTERN_D10_2:
+			dp_hw_set_quality_pattern(D10_2_PATTERN, DISABLE_SCRAM);
+			break;
+		case DP_PHY_TEST_PATTERN_ERROR_COUNT:
+			dp_hw_set_quality_pattern(SERP_PATTERN, ENABLE_SCRAM);
+			break;
+		case DP_PHY_TEST_PATTERN_PRBS7:
+			dp_hw_set_quality_pattern(PRBS7, DISABLE_SCRAM);
+			break;
+		case DP_PHY_TEST_PATTERN_80BIT_CUSTOM:
+			dp_hw_set_quality_pattern(CUSTOM_80BIT, DISABLE_SCRAM);
+			break;
+		case DP_PHY_TEST_PATTERN_CP2520:
+			dp_hw_set_quality_pattern(HBR2_COMPLIANCE, ENABLE_SCRAM);
+			break;
+		default:
+			dp_err(dp, "Not Supported PHY_TEST_PATTERN: %02x\n", dpcd_phy_test_pattern);
+			break;
+		}
+	} else {
+		dp_err(dp, "Not Supported AUTOMATED_TEST_REQUEST: %02x\n", dpcd_test_req);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 /* Works */
 static void dp_work_hpd(struct work_struct *work)
 {
@@ -1317,6 +1431,7 @@ static void dp_work_hpd_irq(struct work_struct *work)
 		hdcp_dplink_handle_irq();
 	} else if (irq & DP_AUTOMATED_TEST_REQUEST) {
 		dp_info(dp, "occurred Automated Test Request IRQ\n");
+		dp_automated_test_irq_handler(dp);
 	} else
 		dp_info(dp, "occurred unknown IRQ (0x%X)\n", irq);
 }

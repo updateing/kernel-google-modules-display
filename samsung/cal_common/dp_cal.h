@@ -99,6 +99,21 @@ typedef enum {
 	TRAINING_PATTERN_4 = 5,
 } dp_training_pattern;
 
+typedef enum {
+	DISABLE_PATTERN	= 0,
+	D10_2_PATTERN	= 1,	// D10.2 Test Pattern
+	SERP_PATTERN	= 2,	// Symbol Error Rate measurement Pattern
+	PRBS7		= 3,	// PRBS 7bit Pattern
+	CUSTOM_80BIT	= 4,	// Custom 80bit (PLT) Test Pattern
+	HBR2_COMPLIANCE	= 5,	// HBR2 Compliance Test Pattern CP2520
+} dp_qual_pattern;
+
+typedef enum {
+	ENABLE_SCRAM	= 0,
+	DISABLE_SCRAM	= 1,
+} dp_scrambling;
+
+
 // Interrupts
 enum dp_interrupt_mask {
 	PLL_LOCK_CHG_INT_MASK,
@@ -314,6 +329,7 @@ void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe);
 void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe);
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern);
+void dp_hw_set_quality_pattern(dp_qual_pattern pattern, dp_scrambling scramble);
 void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config, u8 *voltage, u8 *pre_emphasis);
 
 void dp_hw_init_audio(void);

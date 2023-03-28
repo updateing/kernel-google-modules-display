@@ -1340,9 +1340,9 @@ static void dp_reg_set_bit_swap(u32 en)
 	dp_write_mask(SST1, PCS_CONTROL, BIT_SWAP_SET(en), BIT_SWAP_MASK);
 }
 
-static void dp_reg_set_scramble_bypass(u32 en)
+static void dp_reg_set_scramble_bypass(dp_scrambling scram)
 {
-	dp_write_mask(SST1, PCS_CONTROL, SCRAMBLE_BYPASS_SET(en),
+	dp_write_mask(SST1, PCS_CONTROL, SCRAMBLE_BYPASS_SET(scram),
 		      SCRAMBLE_BYPASS_MASK);
 }
 
@@ -1382,10 +1382,23 @@ static void dp_hw_set_lane_map_config(struct dp_hw_config *hw_config)
 }
 
 // PCS Test Pattern Control
-static void dp_reg_set_quality_pattern(u32 en)
+static void dp_reg_set_quality_pattern(dp_qual_pattern pattern)
 {
 	dp_write_mask(SST1, PCS_TEST_PATTERN_CONTROL,
-		      LINK_QUALITY_PATTERN_SET(en), LINK_QUALITY_PATTERN_MASK);
+		      LINK_QUALITY_PATTERN_SET(pattern), LINK_QUALITY_PATTERN_MASK);
+}
+
+static void dp_reg_set_custom_pattern(void)
+{
+	dp_write(SST1, PCS_TEST_PATTERN_SET0, 0x3E0F83E0);  // 00111110 00001111 10000011 11100000
+	dp_write(SST1, PCS_TEST_PATTERN_SET1, 0x0F83E0F8);  // 00001111 10000011 11100000 11111000
+	dp_write(SST1, PCS_TEST_PATTERN_SET2, 0x0000F83E);  // 11111000 00111110
+}
+
+static void dp_reg_set_hbr2_scrambler_reset(u32 uResetCount)
+{
+	dp_write_mask(SST1, PCS_HBR2_EYE_SR_CONTROL,
+		      HBR2_EYE_SR_COUNT_SET(uResetCount), HBR2_EYE_SR_COUNT_MASK);
 }
 
 // Synopsys Data Path Control
@@ -2527,14 +2540,26 @@ void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe)
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern)
 {
-	dp_reg_set_quality_pattern(0);
+	dp_reg_set_quality_pattern(DISABLE_PATTERN);
 	dp_reg_set_training_pattern(pattern);
 	dp_reg_set_bit_swap(1);
 
 	if (pattern == NORMAL_DATA || pattern == TRAINING_PATTERN_4)
-		dp_reg_set_scramble_bypass(0);
+		dp_reg_set_scramble_bypass(ENABLE_SCRAM);
 	else
-		dp_reg_set_scramble_bypass(1);
+		dp_reg_set_scramble_bypass(DISABLE_SCRAM);
+}
+
+void dp_hw_set_quality_pattern(dp_qual_pattern pattern, dp_scrambling scramble)
+{
+	dp_reg_set_training_pattern(NORMAL_DATA);
+	if (pattern == CUSTOM_80BIT)
+		dp_reg_set_custom_pattern();
+	else if (pattern == HBR2_COMPLIANCE)
+		dp_reg_set_hbr2_scrambler_reset(252*2);
+	dp_reg_set_quality_pattern(pattern);
+	dp_reg_set_bit_swap(1);
+	dp_reg_set_scramble_bypass(scramble);
 }
 
 void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config,
