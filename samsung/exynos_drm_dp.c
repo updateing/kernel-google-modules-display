@@ -590,7 +590,8 @@ err:
 static void dp_init_link_training_eq(struct dp_device *dp, u8 tps)
 {
 	/* Set DP Training Pattern */
-	if (tps & DP_SUPPORT_TPS(4)) {
+	if ((tps & DP_SUPPORT_TPS(4)) &&
+	    drm_dp_link_rate_to_bw_code(dp->link.link_rate) == DP_LINK_BW_8_1) {
 		dp_info(dp, "enable DP training pattern 4\n");
 		dp_hw_set_training_pattern(TRAINING_PATTERN_4);
 		drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
