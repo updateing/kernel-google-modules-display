@@ -108,7 +108,7 @@ static u8 dp_get_max_num_lanes(struct dp_device *dp)
 
 static u8 dp_get_supported_pattern(struct dp_device *dp)
 {
-	return fls(dp->host.support_tps & dp->sink.support_tps);
+	return (dp->host.support_tps & dp->sink.support_tps);
 }
 
 static bool dp_get_enhanced_mode(struct dp_device *dp)
@@ -590,12 +590,12 @@ err:
 static void dp_init_link_training_eq(struct dp_device *dp, u8 tps)
 {
 	/* Set DP Training Pattern */
-	if (tps | DP_SUPPORT_TPS(4)) {
+	if (tps & DP_SUPPORT_TPS(4)) {
 		dp_info(dp, "enable DP training pattern 4\n");
 		dp_hw_set_training_pattern(TRAINING_PATTERN_4);
 		drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 				   DP_TRAINING_PATTERN_4);
-	} else if (tps | DP_SUPPORT_TPS(3)) {
+	} else if (tps & DP_SUPPORT_TPS(3)) {
 		dp_info(dp, "enable DP training pattern 3\n");
 		dp_hw_set_training_pattern(TRAINING_PATTERN_3);
 		drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
