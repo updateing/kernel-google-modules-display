@@ -372,9 +372,9 @@ static void dp_print_swing_level(struct dp_device *dp)
 	u8 *vol_swing_level = dp->host.vol_swing_level;
 	u8 *pre_empha_level = dp->host.pre_empha_level;
 
-	dp_debug(dp, "Volt_Swing  : %02X %02X %02X %02X\n", vol_swing_level[0],
+	dp_info(dp, "Voltage_Swing: %02X %02X %02X %02X\n", vol_swing_level[0],
 		 vol_swing_level[1], vol_swing_level[2], vol_swing_level[3]);
-	dp_debug(dp, "Pre_Emphasis: %02X %02X %02X %02X\n", pre_empha_level[0],
+	dp_info(dp, "Pre_Emphasis : %02X %02X %02X %02X\n", pre_empha_level[0],
 		 pre_empha_level[1], pre_empha_level[2], pre_empha_level[3]);
 }
 
@@ -495,6 +495,7 @@ static void dp_init_link_training_cr(struct dp_device *dp)
 	dp_link_configure(dp);
 
 	/* Set DP Training Pattern in DP PHY */
+	dp_info(dp, "enable DP training pattern 1\n");
 	dp_hw_set_training_pattern(TRAINING_PATTERN_1);
 
 	/* Enable DP Training Pattern */
@@ -590,15 +591,18 @@ static void dp_init_link_training_eq(struct dp_device *dp, u8 tps)
 {
 	/* Set DP Training Pattern */
 	if (tps | DP_SUPPORT_TPS(4)) {
+		dp_info(dp, "enable DP training pattern 4\n");
 		dp_hw_set_training_pattern(TRAINING_PATTERN_4);
 		drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 				   DP_TRAINING_PATTERN_4);
 	} else if (tps | DP_SUPPORT_TPS(3)) {
+		dp_info(dp, "enable DP training pattern 3\n");
 		dp_hw_set_training_pattern(TRAINING_PATTERN_3);
 		drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 				   DP_TRAINING_PATTERN_3 |
 					   DP_LINK_SCRAMBLING_DISABLE);
 	} else {
+		dp_info(dp, "enable DP training pattern 2\n");
 		dp_hw_set_training_pattern(TRAINING_PATTERN_2);
 		drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 				   DP_TRAINING_PATTERN_2 |
