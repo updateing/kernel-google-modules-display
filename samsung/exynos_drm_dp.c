@@ -849,12 +849,13 @@ static enum bit_depth dp_get_bpc(struct dp_device *dp)
 	struct drm_connector *connector = &dp->connector;
 	struct drm_display_info *display_info = &connector->display_info;
 
-	if (display_info->bpc == 8)
-		return BPC_8;
-	else if (display_info->bpc == 10)
-		return BPC_10;
-	else
-		return BPC_6;
+	dp_info(dp, "display_info->bpc = %u\n", display_info->bpc);
+
+	/*
+	 * For now, force DP to use bpc = 8.
+	 * TODO: Revisit this later for DP HDR support.
+	 */
+	return BPC_8;
 }
 
 static void dp_set_video_timing(struct dp_device *dp)
