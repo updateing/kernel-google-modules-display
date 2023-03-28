@@ -745,6 +745,9 @@ struct exynos_panel {
 
 		struct workqueue_struct *wq;
 	} hbm;
+
+	u32 error_count_te;
+	u32 error_count_unknown;
 };
 
 /**

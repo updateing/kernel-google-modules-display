@@ -1632,6 +1632,8 @@ static ssize_t op_hz_store(struct device *dev,
 		return ret;
 	}
 
+	sysfs_notify(&ctx->dev->kobj, NULL, "op_hz");
+
 	return count;
 }
 
@@ -1647,6 +1649,8 @@ static ssize_t op_hz_show(struct device *dev,
 
 	if (!funcs || !funcs->set_op_hz)
 		return -EINVAL;
+
+	dev_dbg(ctx->dev, "%s: %u\n", __func__, ctx->op_hz);
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->op_hz);
 }
@@ -1668,6 +1672,31 @@ static ssize_t refresh_rate_show(struct device *dev, struct device_attribute *at
 	return scnprintf(buf, PAGE_SIZE, "%d\n", rr);
 }
 
+static ssize_t error_count_te_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	u32 count;
+	mutex_lock(&ctx->mode_lock);
+	count = ctx->error_count_te;
+	mutex_unlock(&ctx->mode_lock);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", count);
+}
+
+static ssize_t error_count_unknown_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+
+	u32 count;
+	mutex_lock(&ctx->mode_lock);
+	count = ctx->error_count_unknown;
+	mutex_unlock(&ctx->mode_lock);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", count);
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
@@ -1684,6 +1713,8 @@ static DEVICE_ATTR_RW(osc2_clk_khz);
 static DEVICE_ATTR_RO(available_osc2_clk_khz);
 static DEVICE_ATTR_RW(op_hz);
 static DEVICE_ATTR_RO(refresh_rate);
+static DEVICE_ATTR_RO(error_count_te);
+static DEVICE_ATTR_RO(error_count_unknown);
 
 static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
@@ -1702,6 +1733,8 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_available_osc2_clk_khz.attr,
 	&dev_attr_op_hz.attr,
 	&dev_attr_refresh_rate.attr,
+	&dev_attr_error_count_te.attr,
+	&dev_attr_error_count_unknown.attr,
 	NULL
 };
 
@@ -2040,6 +2073,7 @@ static void exynos_panel_connector_atomic_commit(
 			    struct exynos_drm_connector_state *exynos_new_state)
 {
 	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_connector);
+	struct dsim_device *dsim = host_to_dsi(to_mipi_dsi_device(ctx->dev)->host);
 	const struct exynos_panel_funcs *exynos_panel_func = ctx->desc->exynos_panel_func;
 
 	if (!exynos_panel_func)
@@ -2051,6 +2085,17 @@ static void exynos_panel_connector_atomic_commit(
 	mutex_unlock(&ctx->mode_lock);
 
 	ctx->last_commit_ts = ktime_get();
+
+	/*
+	 * TODO: Identify other kinds of errors and ensure detection is debounced
+	 *	 correctly
+	 */
+	if (exynos_old_state->is_recovering && dsim->config.mode == DSIM_COMMAND_MODE) {
+		mutex_lock(&ctx->mode_lock);
+		ctx->error_count_te++;
+		sysfs_notify(&ctx->dev->kobj, NULL, "error_count_te");
+		mutex_unlock(&ctx->mode_lock);
+	}
 
 	if (exynos_old_state->is_recovering &&
 	    ctx->hbm.local_hbm.requested_state == LOCAL_HBM_ENABLED) {
@@ -3377,6 +3422,13 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		if (ctx->panel_state == PANEL_STATE_NORMAL)
 			exynos_panel_update_te2(ctx);
 	}
+
+	if (is_lp_mode) {
+		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+		if (funcs && funcs->set_post_lp_mode)
+			funcs->set_post_lp_mode(ctx);
+	}
 	mutex_unlock(&ctx->mode_lock);
 
 	if (need_update_backlight && ctx->bl)
@@ -3801,13 +3853,13 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 		sysfs_notify(&ctx->dev->kobj, NULL, "refresh_rate");
 	}
 
+	if (pmode->exynos_mode.is_lp_mode && funcs && funcs->set_post_lp_mode)
+		funcs->set_post_lp_mode(ctx);
+
 	mutex_unlock(&ctx->mode_lock);
 
 	if (need_update_backlight && ctx->bl)
 		backlight_update_status(ctx->bl);
-
-	if (pmode->exynos_mode.is_lp_mode && funcs->set_post_lp_mode)
-		funcs->set_post_lp_mode(ctx);
 
 	DPU_ATRACE_INT("panel_fps", drm_mode_vrefresh(mode));
 	DPU_ATRACE_END(__func__);
