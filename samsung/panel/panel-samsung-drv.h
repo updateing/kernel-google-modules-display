@@ -713,6 +713,8 @@ struct exynos_panel {
 	 * mean rr switch so it differs from last_mode_set_ts
 	 */
 	ktime_t last_rr_switch_ts;
+	/* Record the last come out lp mode timestamp */
+	ktime_t last_lp_exit_ts;
 	u32 last_rr;
 	/* TE low or high when last rr was sent */
 	int last_rr_te_gpio_value;

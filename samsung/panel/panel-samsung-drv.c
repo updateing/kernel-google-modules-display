@@ -3571,6 +3571,96 @@ static u64 exynos_panel_vsync_start_time_us(u32 te_us, u32 te_period_us)
 	return te_period_us * 55 / 100;
 }
 
+/* avoid accumulate te varaince cause predicted value is not precision enough */
+#define ACCEPTABLE_TE_PERIOD_DETLA_NS		(3 * NSEC_PER_SEC)
+#define ACCEPTABLE_TE_RR_SWITCH_DELTA_US	(500)
+static ktime_t exynos_panel_te_ts_prediction(struct exynos_panel *ctx, ktime_t last_te,
+					     u32 te_period_us)
+{
+	const struct exynos_panel_desc *desc = ctx->desc;
+	s64 rr_switch_delta_us, te_last_rr_switch_delta_us;
+	u32 te_period_before_rr_switch_us;
+	u32 rr_switch_applied_te_count;
+	s64 te_period_delta_ns;
+
+	if (!desc || last_te == 0)
+		return 0;
+
+	rr_switch_delta_us = ktime_us_delta(last_te, ctx->last_rr_switch_ts);
+	te_period_before_rr_switch_us = ctx->last_rr != 0 ? USEC_PER_SEC / ctx->last_rr : 0;
+
+	if (ctx->last_rr_switch_ts == ctx->last_lp_exit_ts) {
+		/* New refresh rate should take effect immediately after exiting AOD mode */
+		rr_switch_applied_te_count = 1;
+	} else {
+		/* New rr will take effect at the first vsync after sending rr command, but we
+		 * only know te rising ts. The worse case, new rr take effect at 2nd TE
+		 */
+		rr_switch_applied_te_count = 2;
+	}
+
+	if (rr_switch_delta_us < 0 && te_period_before_rr_switch_us != 0) {
+		/* last know TE ts is before sending last rr switch */
+		ktime_t last_te_before_rr_switch, now;
+		s64 since_last_te_us;
+		s64 accumlated_te_period_delta_ns;
+
+		/* donʼt predict if last rr switch ts too close to te */
+		te_last_rr_switch_delta_us =  (-rr_switch_delta_us % te_period_before_rr_switch_us);
+		if (te_last_rr_switch_delta_us >
+			(te_period_before_rr_switch_us - ACCEPTABLE_TE_RR_SWITCH_DELTA_US) ||
+			te_last_rr_switch_delta_us < ACCEPTABLE_TE_RR_SWITCH_DELTA_US) {
+			return 0;
+		}
+
+		te_period_delta_ns = (-rr_switch_delta_us / te_period_before_rr_switch_us) *
+					te_period_before_rr_switch_us * NSEC_PER_USEC;
+		if (te_period_delta_ns < ACCEPTABLE_TE_PERIOD_DETLA_NS) {
+			/* try to get last TE ts before sending last rr switch command */
+			ktime_t first_te_after_rr_switch;
+
+			last_te_before_rr_switch = last_te + te_period_delta_ns;
+			now = ktime_get();
+			since_last_te_us = ktime_us_delta(now, last_te_before_rr_switch);
+			if (since_last_te_us < te_period_before_rr_switch_us) {
+				/* now and last predict te is in the same te */
+				return last_te_before_rr_switch;
+			}
+
+			first_te_after_rr_switch =
+				last_te_before_rr_switch + te_period_before_rr_switch_us;
+
+			if (rr_switch_applied_te_count == 1) {
+				since_last_te_us = ktime_us_delta(now, first_te_after_rr_switch);
+				accumlated_te_period_delta_ns = te_period_delta_ns;
+				te_period_delta_ns =
+					(since_last_te_us / te_period_us) *
+					te_period_us * NSEC_PER_USEC;
+				accumlated_te_period_delta_ns += te_period_delta_ns;
+				if (accumlated_te_period_delta_ns < ACCEPTABLE_TE_PERIOD_DETLA_NS)
+					return (first_te_after_rr_switch + te_period_delta_ns);
+			} else {
+				return first_te_after_rr_switch;
+			}
+		}
+	} else if (rr_switch_delta_us > ((rr_switch_applied_te_count - 1) *
+			te_period_before_rr_switch_us)) {
+		/* new rr has already taken effect at last know TE ts */
+		ktime_t now;
+		s64 since_last_te_us;
+
+		now = ktime_get();
+		since_last_te_us = ktime_us_delta(now, last_te);
+		te_period_delta_ns =
+			(since_last_te_us / te_period_us) * te_period_us * NSEC_PER_USEC;
+
+		if (te_period_delta_ns < ACCEPTABLE_TE_PERIOD_DETLA_NS)
+			return (last_te + te_period_delta_ns);
+	}
+
+	return 0;
+}
+
 static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 						const struct exynos_panel_mode *current_mode,
 						struct exynos_panel *ctx)
@@ -3625,6 +3715,17 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 		vblank_counter = drm_crtc_vblank_count_and_time(crtc, &last_te);
 		now = ktime_get();
 		since_last_te_us = ktime_us_delta(now, last_te);
+		if (!vblank_taken) {
+			ktime_t predicted_te = exynos_panel_te_ts_prediction(ctx, last_te,
+					USEC_PER_SEC / drm_mode_vrefresh(&current_mode->mode));
+			if (predicted_te) {
+				DPU_ATRACE_BEGIN("predicted_te");
+				last_te = predicted_te;
+				since_last_te_us = ktime_us_delta(now, last_te);
+				DPU_ATRACE_INT("predicted_te_delta_us", (int)since_last_te_us);
+				DPU_ATRACE_END("predicted_te");
+			}
+		}
 		/**
 		 * If a refresh rate switch happens right before last_te. last TE width could be for
 		 * new rr or for old rr depending on if last rr is sent at TE high or low.
@@ -3771,6 +3872,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	const struct exynos_panel_mode *old_mode;
 	bool need_update_backlight = false;
+	bool come_out_lp_mode = false;
 
 	if (WARN_ON(!pmode))
 		return;
@@ -3822,6 +3924,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				ctx->panel_state = PANEL_STATE_NORMAL;
 				need_update_backlight = true;
 				state_changed = true;
+				come_out_lp_mode = true;
 			}
 			ctx->current_binned_lp = NULL;
 		} else if (funcs->mode_set) {
@@ -3874,6 +3977,8 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				ctx->desc->exynos_panel_func->get_te_usec(ctx, old_mode);
 		else
 			ctx->last_rr_te_usec = old_mode->exynos_mode.te_usec;
+		if (come_out_lp_mode)
+			ctx->last_lp_exit_ts = ctx->last_rr_switch_ts;
 		sysfs_notify(&ctx->dev->kobj, NULL, "refresh_rate");
 	}
 
