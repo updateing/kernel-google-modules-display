@@ -1015,6 +1015,10 @@ static inline bool is_local_hbm_disabled(struct exynos_panel *ctx)
 	i > 0;										\
 	i--, data++)									\
 
+#define EXYNOS_VREFRESH_TO_PERIOD_USEC(rate) DIV_ROUND_UP(USEC_PER_SEC, (rate) ? (rate) : 60)
+
+int exynos_panel_wait_for_vblank(struct exynos_panel *ctx);
+void exynos_panel_wait_for_vsync_done(struct exynos_panel *ctx, u32 te_us, u32 period_us);
 unsigned int panel_get_idle_time_delta(struct exynos_panel *ctx);
 int exynos_panel_configure_te2_edges(struct exynos_panel *ctx,
 				     u32 *timings, bool lp_mode);

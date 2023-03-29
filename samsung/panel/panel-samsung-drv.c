@@ -3621,6 +3621,39 @@ static u64 exynos_panel_vsync_start_time_us(u32 te_us, u32 te_period_us)
 	return te_period_us * 55 / 100;
 }
 
+int exynos_panel_wait_for_vblank(struct exynos_panel *ctx)
+{
+	struct drm_crtc *crtc = NULL;
+
+	if (ctx->exynos_connector.base.state)
+		crtc = ctx->exynos_connector.base.state->crtc;
+
+	if (crtc && !drm_crtc_vblank_get(crtc)) {
+		drm_crtc_wait_one_vblank(crtc);
+		drm_crtc_vblank_put(crtc);
+		return 0;
+	}
+
+	WARN_ON(1);
+	return -ENODEV;
+}
+EXPORT_SYMBOL(exynos_panel_wait_for_vblank);
+
+void exynos_panel_wait_for_vsync_done(struct exynos_panel *ctx, u32 te_us, u32 period_us)
+{
+	u32 delay_us;
+
+	if (unlikely(exynos_panel_wait_for_vblank(ctx))) {
+		delay_us = period_us + 1000;
+		usleep_range(delay_us, delay_us + 10);
+		return;
+	}
+
+	delay_us = exynos_panel_vsync_start_time_us(te_us, period_us);
+	usleep_range(delay_us, delay_us + 10);
+}
+EXPORT_SYMBOL(exynos_panel_wait_for_vsync_done);
+
 /* avoid accumulate te varaince cause predicted value is not precision enough */
 #define ACCEPTABLE_TE_PERIOD_DETLA_NS		(3 * NSEC_PER_SEC)
 #define ACCEPTABLE_TE_RR_SWITCH_DELTA_US	(500)
