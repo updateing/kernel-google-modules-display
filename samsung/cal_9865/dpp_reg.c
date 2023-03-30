@@ -90,47 +90,56 @@ static void sramc_reg_set_dst_hpos(u32 id, u32 top, u32 bottom)
 
 static void sramc_reg_set_rsc_config(u32 id, struct dpp_params_info *p)
 {
-        u32 format = 0;
-        bool scl_en = false, scl_alpha_en = false;
-        bool comp_en = false, rot_en = false;
-        u32 mode = 0;
-        const struct dpu_fmt *fmt = dpu_find_fmt_info(p->format);
+	u32 format = 0;
+	bool scl_en = false, scl_alpha_en = false;
+	bool comp_en = false, comp_yuv_afbc = false;
+	bool rot_en = false, yuv_422 = false;
+	u32 mode = 0;
+	const struct dpu_fmt *fmt = dpu_find_fmt_info(p->format);
 
-        sramc_reg_set_dst_hpos(id, p->dst.y, (p->dst.y + p->dst.h - 1));
+	sramc_reg_set_dst_hpos(id, p->dst.y, (p->dst.y + p->dst.h - 1));
 
-        if (fmt->cs == DPU_COLORSPACE_RGB) {
-                if (fmt->bpc == 8 || fmt->bpc == 10)
-                        format = SRAMC_FMT_RGB32BIT;
-                else
-                        format = SRAMC_FMT_RGB16BIT;
-        } else {
-                if (fmt->bpc == 10)
-                        format = SRAMC_FMT_YUV10BIT;
-                else
-                        format = SRAMC_FMT_YUV08BIT;
-        }
+	if (fmt->cs == DPU_COLORSPACE_RGB) {
+		if (fmt->bpc == 8 || fmt->bpc == 10)
+			format = SRAMC_FMT_RGB32BIT;
+		else
+			format = SRAMC_FMT_RGB16BIT;
+	} else {
+		if (fmt->bpc == 10)
+			format = SRAMC_FMT_YUV10BIT;
+		else
+			format = SRAMC_FMT_YUV08BIT;
 
-        /* check scaling */
-        if (p->is_scale)
-                scl_en = true;
-        if (scl_en) {
-                if (fmt->cs == DPU_COLORSPACE_RGB && fmt->len_alpha > 0)
-                        scl_alpha_en = true;
-        }
+		if (fmt->cs == DPU_COLORSPACE_YUV422)
+			yuv_422 = true;
+	}
 
-        /* check rotation */
-        if (p->rot >= DPP_ROT_90)
-                rot_en = true;
+	/* check scaling */
+	if (p->is_scale)
+		scl_en = true;
+	if (scl_en) {
+		if (fmt->cs == DPU_COLORSPACE_RGB && fmt->len_alpha > 0)
+			scl_alpha_en = true;
+	}
 
-        /* check buffer compression */
-        if (p->comp_type != COMP_TYPE_NONE)
-                comp_en = true;
+	/* check rotation */
+	if (p->rot >= DPP_ROT_90)
+		rot_en = true;
 
-        mode = SRAMC_SCL_ALPHA_ENABLE(scl_alpha_en) |
-		SRAMC_SCL_ENABLE(scl_en) | SRAMC_COMP_ENABLE(comp_en) |
-		SRAMC_ROT_ENABLE(rot_en) | SRAMC_FORMAT(format);
+	/* check buffer compression */
+	if (p->comp_type != COMP_TYPE_NONE) {
+		comp_en = true;
 
-        sramc_reg_set_mode_enable(id, mode);
+		if ((p->comp_type == COMP_TYPE_AFBC) &&
+		    (fmt->cs != DPU_COLORSPACE_RGB))
+			comp_yuv_afbc = true;
+	}
+
+	mode = SRAMC_SCL_ALPHA_ENABLE(scl_alpha_en) | SRAMC_SCL_ENABLE(scl_en) |
+	       SRAMC_COMP_YUV_MODE(comp_yuv_afbc) | SRAMC_COMP_ENABLE(comp_en) |
+	       SRAMC_ROT_ENABLE(rot_en) | SRAMC_YUV_MODE(yuv_422) | SRAMC_FORMAT(format);
+
+	sramc_reg_set_mode_enable(id, mode);
 }
 
 /****************** IDMA CAL functions ******************/
@@ -1209,17 +1218,19 @@ void dpp_reg_configure_params(u32 id, struct dpp_params_info *p,
 	if (test_bit(DPP_ATTR_AFBC, &attr) || test_bit(DPP_ATTR_SBWC, &attr))
 		idma_reg_set_comp(id, p->comp_type, p->rcv_num);
 
-	if (test_bit(DPP_ATTR_AFBC, &attr))
+	if (test_bit(DPP_ATTR_AFBC, &attr)) {
 		dma_write_mask(id, RDMA_AFBC_PARAM,
-				IDMA_AFBC_BLK_SIZE(p->blk_size - 1),
+				IDMA_AFBC_BLK_SIZE(p->blk_size),
 				IDMA_AFBC_BLK_SIZE_MASK);
+	}
 
-	if (test_bit(DPP_ATTR_SBWC, &attr))
+	if (test_bit(DPP_ATTR_SBWC, &attr)) {
 		dma_write_mask(id, RDMA_SBWC_PARAM,
 				IDMA_CHM_BLK_BYTENUM(p->blk_size) |
 				IDMA_LUM_BLK_BYTENUM(p->blk_size),
 				IDMA_CHM_BLK_BYTENUM_MASK |
 				IDMA_LUM_BLK_BYTENUM_MASK);
+	}
 
 	/*
 	 * To check HW stuck

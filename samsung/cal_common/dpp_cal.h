@@ -87,6 +87,12 @@ enum dpp_comp_type {
 	COMP_TYPE_SBWC,
 };
 
+enum dpp_afbc_blk_size {
+	AFBC_BLK_16x16 = 0,
+	AFBC_BLK_32x8,
+	AFBC_BLK_64x4,
+};
+
 enum dpp_sbwc_blk_size {
 	SBWC_BLK_32x2 = 2,
 	SBWC_BLK_32x3 = 3,
@@ -255,7 +261,7 @@ struct dpp_params_info {
 
 	unsigned long rcv_num;
 	enum dpp_comp_type comp_type;
-	enum dpp_sbwc_blk_size blk_size;
+	u32 blk_size;
 	bool is_lossy;
 };
 

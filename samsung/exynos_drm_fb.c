@@ -102,6 +102,14 @@ static size_t get_plane_size(const struct drm_mode_fb_cmd2 *mode_cmd, u32 idx,
 		else if (idx == 1)
 			size = UV_SIZE_SBWC(mode_cmd->width, mode_cmd->height,
 					is_10bpc);
+	} else if (has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0),
+				mode_cmd->modifier[idx]) &&
+				IS_YUV(dpu_find_fmt_info(mode_cmd->pixel_format))) {
+		is_10bpc = IS_10BPC(dpu_find_fmt_info(mode_cmd->pixel_format));
+		if (is_10bpc)
+			size = AFBC_10B_Y_SIZE(mode_cmd->width, mode_cmd->height);
+		else
+			size = AFBC_8B_Y_SIZE(mode_cmd->width, mode_cmd->height);
 	} else {
 		height = (idx == 0) ? mode_cmd->height :
 			DIV_ROUND_UP(mode_cmd->height, info->vsub);

@@ -124,6 +124,7 @@ static void wb_convert_connector_state_to_config(struct dpp_params_info *config,
 {
 	struct drm_framebuffer *fb = state->base.writeback_job->fb;
 	const struct drm_crtc_state *crtc_state = state->base.crtc->state;
+	unsigned long long comp_blk_size;
 
 	pr_debug("%s +\n", __func__);
 
@@ -137,7 +138,28 @@ static void wb_convert_connector_state_to_config(struct dpp_params_info *config,
 
 	if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), fb->modifier)) {
 		config->comp_type = COMP_TYPE_SBWC;
-		config->blk_size = SBWC_BLOCK_SIZE_GET(fb->modifier);
+		comp_blk_size = SBWC_BLOCK_SIZE_GET(fb->modifier);
+		switch (comp_blk_size) {
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x2:
+			config->blk_size = SBWC_BLK_32x2;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x3:
+			config->blk_size = SBWC_BLK_32x3;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x4:
+			config->blk_size = SBWC_BLK_32x4;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x5:
+			config->blk_size = SBWC_BLK_32x5;
+			break;
+		case SBWC_FORMAT_MOD_BLOCK_SIZE_32x6:
+			config->blk_size = SBWC_BLK_32x6;
+			break;
+		default:
+			pr_err("SBWC Block Size(%llu) is not supported\n", comp_blk_size);
+			config->blk_size = SBWC_BLK_32x2;
+			break;
+		}
 	} else {
 		config->comp_type = COMP_TYPE_NONE;
 	}
