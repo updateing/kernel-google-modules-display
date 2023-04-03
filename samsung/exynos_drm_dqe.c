@@ -274,7 +274,7 @@ void handle_histogram_event(struct exynos_dqe *dqe)
 	e = dqe->state.event;
 	if (e) {
 		pr_debug("Histogram event(0x%pK) will be handled\n", dqe->state.event);
-		memcpy(&e->event.bins, &dqe->state.hist_chan[dqe->state.histogram_id],
+		memcpy(&e->event.bins, &dqe->state.hist_chan[dqe->state.histogram_id].hist_bins,
 		       sizeof(struct histogram_bins));
 		e->event.crtc_id = crtc_id;
 		drm_send_event(dev, &e->base);
