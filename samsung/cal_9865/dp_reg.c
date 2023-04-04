@@ -2531,7 +2531,7 @@ void dp_hw_set_training_pattern(dp_training_pattern pattern)
 	dp_reg_set_training_pattern(pattern);
 	dp_reg_set_bit_swap(1);
 
-	if (pattern == NORAMAL_DATA || pattern == TRAINING_PATTERN_4)
+	if (pattern == NORMAL_DATA || pattern == TRAINING_PATTERN_4)
 		dp_reg_set_scramble_bypass(0);
 	else
 		dp_reg_set_scramble_bypass(1);

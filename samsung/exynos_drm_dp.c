@@ -782,7 +782,7 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 	dp_info(dp, "DP Link: training done: Rate(%u Mbps) and Lanes(%u)\n",
 		dp->link.link_rate / 100, dp->link.num_lanes);
 
-	dp_hw_set_training_pattern(NORAMAL_DATA);
+	dp_hw_set_training_pattern(NORMAL_DATA);
 	drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 			   dp->host.scrambler ? 0 : DP_LINK_SCRAMBLING_DISABLE);
 
@@ -790,7 +790,7 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 err:
 	dp_info(dp, "DP Link: training failed\n");
 
-	dp_hw_set_training_pattern(NORAMAL_DATA);
+	dp_hw_set_training_pattern(NORMAL_DATA);
 	drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_DISABLE);
 

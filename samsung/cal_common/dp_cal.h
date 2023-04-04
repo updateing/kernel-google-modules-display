@@ -91,7 +91,7 @@ enum dp_link_rate_type {
 };
 
 typedef enum {
-	NORAMAL_DATA = 0,
+	NORMAL_DATA = 0,
 	TRAINING_PATTERN_1 = 1,
 	TRAINING_PATTERN_2 = 2,
 	TRAINING_PATTERN_3 = 3,
