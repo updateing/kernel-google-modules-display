@@ -2210,6 +2210,8 @@ static int decon_probe(struct platform_device *pdev)
 	if (!decon)
 		return -ENOMEM;
 
+	dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
+
 	decon->dev = dev;
 
 	ret = decon_parse_dt(decon, dev->of_node);
