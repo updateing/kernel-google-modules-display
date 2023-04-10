@@ -10,11 +10,12 @@
  * published by the Free Software Foundation.
  */
 
-#include <dqe_cal.h>
-#include <decon_cal.h>
-#include <drm/samsung_drm.h>
 #include <asm/barrier.h>
+#include <decon_cal.h>
+#include <dqe_cal.h>
 #include <drm/drm_print.h>
+#include <drm/samsung_drm.h>
+#include <linux/soc/samsung/exynos-smc.h>
 
 #include "regs-dqe.h"
 
@@ -715,10 +716,23 @@ void dqe_reg_get_histogram_bins(u32 dqe_id, enum exynos_histogram_id hist_id,
 	int regs_cnt = DIV_ROUND_UP(HISTOGRAM_BIN_COUNT, 2);
 	int i;
 	u32 val;
+	u16 dqe_channel = (dqe_id & 0xff << 8) | (hist_id & 0xff);
+	phys_addr_t pa;
 
 	if (hist_id >= HISTOGRAM_MAX)
 		return;
 
+	/*
+	 * note: we rely on bins being backed by physical memory allocation
+	 * since it's part of the dev structure allocated as devm_kzalloc(see drm_dqe.c)
+	 */
+	pa = virt_to_phys(bins);
+	i = (int)exynos_smc(SMC_DRM_HISTOGRAM_BINS_SEC, dqe_channel, pa, sizeof(*bins));
+	rmb();
+	if (!i)
+		return;
+
+	/* fallback into per-register queries */
 	for (i = 0; i < regs_cnt; ++i) {
 		val = hist_read(dqe_id, DQE_HIST_BIN(hist_id, i));
 		bins->data[i * 2] = HIST_BIN_L_GET(val);
