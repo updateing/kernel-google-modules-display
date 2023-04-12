@@ -56,5 +56,8 @@ exynos-drm-$(CONFIG_EXYNOS_BTS)			+= exynos_drm_bts.o
 ccflags-$(CONFIG_DRM_SAMSUNG_DP_AUDIO) += -I$(srctree)/../private/google-modules/aoc/alsa
 exynos-drm-audio-$(CONFIG_DRM_SAMSUNG_DP_AUDIO)	+= dp_audio/dp_dma.o
 
-obj-$(CONFIG_DRM_SAMSUNG)			+= exynos-drm.o exynos-drm-audio.o
+obj-$(CONFIG_DRM_SAMSUNG)			+= exynos-drm.o
+ifeq ($(CONFIG_DRM_SAMSUNG_DP_AUDIO),y)
+obj-$(CONFIG_DRM_SAMSUNG)			+= exynos-drm-audio.o
+endif
 obj-y	+= panel/
