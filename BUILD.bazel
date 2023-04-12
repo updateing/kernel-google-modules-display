@@ -28,7 +28,6 @@ kernel_module(
     ],
     outs = [
         "samsung/exynos-drm.ko",
-        "samsung/exynos-drm-audio.ko",
         "samsung/panel/panel-boe-nt37290.ko",
         "samsung/panel/panel-common.ko",
         "samsung/panel/panel-samsung-drv.ko",
