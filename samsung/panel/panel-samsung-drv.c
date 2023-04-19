@@ -3682,7 +3682,7 @@ static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 	DPU_ATRACE_END("mipi_time_window");
 }
 
-static bool panel_update_local_hbm_notimeout(struct exynos_panel *ctx)
+static bool panel_update_local_hbm_notimeout_locked(struct exynos_panel *ctx)
 {
 	const struct exynos_panel_mode *pmode;
 	struct local_hbm *lhbm = &ctx->hbm.local_hbm;
@@ -3714,7 +3714,13 @@ static bool panel_update_local_hbm_notimeout(struct exynos_panel *ctx)
 			lhbm->en_cmd_ts = ktime_get();
 			kthread_queue_work(&lhbm->worker, &lhbm->post_work);
 		} else {
+			/*
+			 * post_work also holds mode_lock. Release the lock
+			 * before finishing post_work to avoid deadlock.
+			 */
+			mutex_unlock(&ctx->mode_lock);
 			kthread_cancel_work_sync(&lhbm->post_work);
+			mutex_lock(&ctx->mode_lock);
 		}
 	}
 
@@ -3741,13 +3747,13 @@ static void panel_update_local_hbm_locked(struct exynos_panel *ctx)
 					 msecs_to_jiffies(ctx->hbm.local_hbm.max_timeout_ms));
 			return;
 		}
-		if (!panel_update_local_hbm_notimeout(ctx))
+		if (!panel_update_local_hbm_notimeout_locked(ctx))
 			return;
 		queue_delayed_work(ctx->hbm.wq, &ctx->hbm.local_hbm.timeout_work,
 				   msecs_to_jiffies(ctx->hbm.local_hbm.max_timeout_ms));
 	} else {
 		cancel_delayed_work(&ctx->hbm.local_hbm.timeout_work);
-		panel_update_local_hbm_notimeout(ctx);
+		panel_update_local_hbm_notimeout_locked(ctx);
 	}
 }
 
@@ -3893,7 +3899,7 @@ static void local_hbm_timeout_work(struct work_struct *work)
 	dev_info(ctx->dev, "%s: turn off LHBM\n", __func__);
 	mutex_lock(&ctx->mode_lock);
 	ctx->hbm.local_hbm.requested_state = LOCAL_HBM_DISABLED;
-	panel_update_local_hbm_notimeout(ctx);
+	panel_update_local_hbm_notimeout_locked(ctx);
 	mutex_unlock(&ctx->mode_lock);
 }
 
