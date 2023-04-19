@@ -1567,7 +1567,7 @@ static int dpu_sysmmu_fault_handler(struct iommu_fault *fault, void *data)
 {
 	struct decon_device *decon = data;
 
-	if (!decon)
+	if (!decon || !decon_is_effectively_active(decon))
 		return 0;
 
 	DPU_EVENT_LOG(DPU_EVT_SYSMMU_FAULT, decon->id, NULL);

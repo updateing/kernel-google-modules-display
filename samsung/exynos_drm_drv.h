@@ -104,6 +104,7 @@ struct exynos_hdr_state {
  * Exynos drm plane state structure.
  *
  * @base: plane_state object (contains drm_framebuffer pointer)
+ * @old_fb: old drm_framebuffer pointer
  * @src: rectangle of the source image data to be displayed (clipped to
  *       visible part).
  * @crtc: rectangle of the target image position on hardware screen
@@ -117,6 +118,7 @@ struct exynos_hdr_state {
 
 struct exynos_drm_plane_state {
 	struct drm_plane_state base;
+	struct drm_framebuffer *old_fb;
 	uint32_t blob_id_restriction;
 	uint32_t max_luminance;
 	uint32_t min_luminance;

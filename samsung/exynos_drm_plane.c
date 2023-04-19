@@ -26,15 +26,16 @@
 static struct drm_plane_state *
 exynos_drm_plane_duplicate_state(struct drm_plane *plane)
 {
-	struct exynos_drm_plane_state *exynos_state;
+	struct drm_plane_state *old_state = plane->state;
+	struct exynos_drm_plane_state *old_exynos_state, *new_exynos_state;
 	struct exynos_drm_plane_state *copy;
 
-	exynos_state = to_exynos_plane_state(plane->state);
-	copy = kzalloc(sizeof(*exynos_state), GFP_KERNEL);
+	old_exynos_state = to_exynos_plane_state(old_state);
+	copy = kzalloc(sizeof(*old_exynos_state), GFP_KERNEL);
 	if (!copy)
 		return NULL;
 
-	memcpy(copy, exynos_state, sizeof(*exynos_state));
+	memcpy(copy, old_exynos_state, sizeof(*old_exynos_state));
 
 	if (copy->eotf_lut)
 		drm_property_blob_get(copy->eotf_lut);
@@ -48,6 +49,15 @@ exynos_drm_plane_duplicate_state(struct drm_plane *plane)
 		drm_property_blob_get(copy->block);
 
 	__drm_atomic_helper_plane_duplicate_state(plane, &copy->base);
+
+	new_exynos_state = copy;
+	if (old_state->fb) {
+		drm_framebuffer_get(old_state->fb);
+		new_exynos_state->old_fb = old_state->fb;
+	} else {
+		new_exynos_state->old_fb = NULL;
+	}
+
 	return &copy->base;
 }
 
@@ -56,6 +66,12 @@ static void exynos_drm_plane_destroy_state(struct drm_plane *plane,
 {
 	struct exynos_drm_plane_state *old_exynos_state =
 					to_exynos_plane_state(old_state);
+
+	if (old_exynos_state->old_fb) {
+		drm_framebuffer_put(old_exynos_state->old_fb);
+		old_exynos_state->old_fb = NULL;
+	}
+
 	drm_property_blob_put(old_exynos_state->eotf_lut);
 	drm_property_blob_put(old_exynos_state->oetf_lut);
 	drm_property_blob_put(old_exynos_state->gm);

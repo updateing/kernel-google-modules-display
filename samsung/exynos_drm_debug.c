@@ -2009,7 +2009,10 @@ void dpu_print_hex_dump(struct drm_printer *p, void __iomem *regs, const void *b
 		else
 			linelen = ROW_LEN;
 
-		snprintf(prefix_buf, sizeof(prefix_buf), "[%08lX] ", offset);
+		if (regs)
+			snprintf(prefix_buf, sizeof(prefix_buf), "[%08lX] ", offset);
+		else
+			snprintf(prefix_buf, sizeof(prefix_buf), "[%08X] ", i);
 		hex_dump_to_buffer(ptr, linelen, ROW_LEN, 4,
 				linebuf, sizeof(linebuf), false);
 

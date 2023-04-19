@@ -192,7 +192,8 @@ static inline const char *get_comp_type_str(enum dpp_comp_type type)
 void dpp_dump_buffer(struct drm_printer *p, struct dpp_device *dpp)
 {
 	const struct drm_plane_state *plane_state;
-	struct drm_framebuffer *fb;
+	struct exynos_drm_plane_state *exynos_plane_state;
+	struct drm_framebuffer *fb, *old_fb;
 	void *vaddr;
 
 	if (dpp->state != DPP_STATE_ON) {
@@ -222,16 +223,45 @@ void dpp_dump_buffer(struct drm_printer *p, struct dpp_device *dpp)
 	vaddr = exynos_drm_fb_to_vaddr(fb);
 	if (vaddr) {
 		dpp_drm_printf(p, dpp,
-				"=== buffer dump[%s:%s]: dpp%d dma addr 0x%llx, vaddr 0x%pK ===\n",
+				"=== buffer dump[%s:%s]: dpp%d dma addr 0x%pad, vaddr 0x%p ===\n",
 				get_comp_type_str(dpp->win_config.comp_type),
 				get_comp_src_name(dpp->comp_src),
-				dpp->id, dpp->win_config.addr[0], vaddr);
-		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_ADDRESS, 32, 4, vaddr, 256, false);
+				dpp->id, &dpp->win_config.addr[0], vaddr);
+		dpu_print_hex_dump(p, NULL, vaddr, 256);
 	} else {
 		dpp_drm_printf(p, dpp, "unable to find vaddr\n");
 	}
 
 	drm_framebuffer_put(fb);
+
+	exynos_plane_state = to_exynos_plane_state(plane_state);
+	old_fb = exynos_plane_state->old_fb;
+	if (old_fb && old_fb != fb) {
+		drm_framebuffer_get(old_fb);
+		vaddr = exynos_drm_fb_to_vaddr(old_fb);
+		if (vaddr) {
+			dma_addr_t dma_addr = exynos_drm_fb_dma_addr(old_fb, 0);
+			u64 comp_src = old_fb->modifier & AFBC_FORMAT_MOD_SOURCE_MASK;
+			u64 comp_type;
+
+			if (has_all_bits(DRM_FORMAT_MOD_ARM_AFBC(0), fb->modifier))
+				comp_type = COMP_TYPE_AFBC;
+			else if (has_all_bits(DRM_FORMAT_MOD_SAMSUNG_SBWC(0), fb->modifier))
+				comp_type = COMP_TYPE_SBWC;
+			else
+				comp_type = COMP_TYPE_NONE;
+
+			dpp_drm_printf(p, dpp,
+				"=== old buffer dump[%s:%s]: dma addr 0x%pad, vaddr 0x%p ===\n",
+				get_comp_type_str(comp_type),
+				get_comp_src_name(comp_src),
+				&dma_addr, vaddr);
+			dpu_print_hex_dump(p, NULL, vaddr, 256);
+		} else {
+			dpp_drm_printf(p, dpp, "unable to find vaddr for old buffer\n");
+		}
+		drm_framebuffer_put(old_fb);
+	}
 }
 
 void dpp_dump(struct drm_printer *p, struct dpp_device *dpp)
