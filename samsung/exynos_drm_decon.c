@@ -1687,6 +1687,7 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_data)
 			__func__, irq_sts_reg, ext_irq);
 
 	if (irq_sts_reg & DPU_FRAME_DONE_INT_PEND) {
+		DPU_ATRACE_INT_PID("frame_transfer", 0, decon->thread->pid);
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMEDONE, decon->id, decon);
 		exynos_dqe_save_lpd_data(decon->dqe);
 		if (decon->dqe)
@@ -1738,6 +1739,7 @@ static bool decon_check_fs_pending_locked(struct decon_device *decon)
 	pending_irq = decon_reg_get_fs_interrupt_and_clear(decon->id);
 
 	if (pending_irq & DPU_FRAME_START_INT_PEND) {
+		DPU_ATRACE_INT_PID("frame_transfer", 1, decon->thread->pid);
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMESTART, decon->id, decon);
 		decon_send_vblank_event_locked(decon);
 		if (decon->config.mode.op_mode == DECON_VIDEO_MODE)
