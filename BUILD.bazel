@@ -23,10 +23,12 @@ kernel_module(
         "samsung/panel/Kbuild",
     ]) + [
         "//private/google-modules/display/include:headers",
+        "//private/google-modules/hdcp/samsung:headers",
         "//private/google-modules/soc/gs:gs_soc_headers",
     ],
     outs = [
         "samsung/exynos-drm.ko",
+        "samsung/exynos-drm-audio.ko",
         "samsung/panel/panel-boe-nt37290.ko",
         "samsung/panel/panel-common.ko",
         "samsung/panel/panel-samsung-drv.ko",
@@ -45,6 +47,7 @@ kernel_module(
         "//private/google-modules/soc/gs:__pkg__",
     ],
     deps = [
+        "//private/google-modules/hdcp/samsung:hdcp.samsung",
         "//private/google-modules/soc/gs:gs_soc_module",
     ],
 )

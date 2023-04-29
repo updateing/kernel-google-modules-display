@@ -1293,9 +1293,7 @@ static const struct drm_encoder_funcs dsim_encoder_funcs = {
 static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 	const char *pname, enum panel_priority_index idx)
 {
-	struct mipi_dsi_device_info info = {
-		.node = NULL,
-	};
+	struct mipi_dsi_device_info *info = &dsim->dsi_device_info;
 	struct device_node *node;
 	const char *name;
 	const char *dual_dsi;
@@ -1307,6 +1305,8 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 
 	dsim_debug(dsim, "preferred panel is %.*s\n", cmp_len, pname);
 
+	info->node = NULL;
+
 	for_each_available_child_of_node(dsim->dsi_host.dev->of_node, node) {
 		bool found;
 
@@ -1315,8 +1315,8 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 		 * abort panel detection in that case
 		 */
 		if (of_find_property(node, "reg", NULL)) {
-			if (info.node)
-				of_node_put(info.node);
+			if (info->node)
+				of_node_put(info->node);
 
 			return -ENODEV;
 		}
@@ -1325,10 +1325,10 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 		 * We already detected panel we want but keep iterating
 		 * in case there are devices with reg property
 		 */
-		if (info.node)
+		if (info->node)
 			continue;
 
-		if (of_property_read_u32(node, "channel", &info.channel))
+		if (of_property_read_u32(node, "channel", &info->channel))
 			continue;
 
 		name = of_get_property(node, "label", NULL);
@@ -1343,16 +1343,16 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 			 * index in the panel name, i.e. "priority-index:panel-name"
 			 */
 			if (found && idx > PANEL_PRIORITY_PRI_IDX)
-				scnprintf(info.type, sizeof(info.type),
+				scnprintf(info->type, sizeof(info->type),
 					"%d:%s", idx, name);
 			else
-				strlcpy(info.type, name, sizeof(info.type));
-			info.node = of_node_get(node);
+				strlcpy(info->type, name, sizeof(info->type));
+			info->node = of_node_get(node);
 		}
 	}
 
-	if (info.node) {
-		if (!of_property_read_string(info.node, "dual-dsi", &dual_dsi)) {
+	if (info->node) {
+		if (!of_property_read_string(info->node, "dual-dsi", &dual_dsi)) {
 			if (!strcmp(dual_dsi, "main"))
 				dsim->dual_dsi = DSIM_DUAL_DSI_MAIN;
 			else if (!strcmp(dual_dsi, "sec"))
@@ -1360,11 +1360,10 @@ static int dsim_add_mipi_dsi_device(struct dsim_device *dsim,
 			else
 				dsim->dual_dsi = DSIM_DUAL_DSI_NONE;
 		}
-		if (dsim->dual_dsi != DSIM_DUAL_DSI_SEC)
-			mipi_dsi_device_register_full(&dsim->dsi_host, &info);
 
 		if (dsim->dual_dsi == DSIM_DUAL_DSI_NONE)
 			panel_usage |= BIT(idx);
+
 		return 0;
 	}
 
@@ -1461,6 +1460,7 @@ static int dsim_bind(struct device *dev, struct device *master, void *data)
 		return -ENOTSUPP;
 	}
 
+	mipi_dsi_device_register_full(&dsim->dsi_host, &dsim->dsi_device_info);
 	ret = mipi_dsi_host_register(&dsim->dsi_host);
 
 	dsim_debug(dsim, "%s -\n", __func__);
