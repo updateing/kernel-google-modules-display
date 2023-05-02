@@ -124,6 +124,7 @@ static int dsim_calc_underrun(const struct dsim_device *dsim, uint32_t hs_clock_
 inline void dsim_trace_msleep(u32 delay_ms)
 {
 	trace_msleep(delay_ms);
+	usleep_range(delay_ms * 1000, delay_ms * 1000 + 10);
 }
 EXPORT_SYMBOL(dsim_trace_msleep);
 
