@@ -1631,11 +1631,16 @@ static ssize_t op_hz_store(struct device *dev,
 		return ret;
 	}
 
+	if (ctx->op_hz == hz) {
+		dev_dbg(ctx->dev, "%s: skip the same op rate: %u Hz\n", __func__, hz);
+		return count;
+	}
+
 	mutex_lock(&ctx->mode_lock);
 	ret = funcs->set_op_hz(ctx, hz);
 	mutex_unlock(&ctx->mode_lock);
 	if (ret) {
-		dev_err(ctx->dev, "failed to set op rate: %d Hz\n", hz);
+		dev_err(ctx->dev, "failed to set op rate: %u Hz\n", hz);
 		return ret;
 	}
 
@@ -1659,7 +1664,7 @@ static ssize_t op_hz_show(struct device *dev,
 
 	dev_dbg(ctx->dev, "%s: %u\n", __func__, ctx->op_hz);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->op_hz);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", ctx->op_hz);
 }
 
 static ssize_t refresh_rate_show(struct device *dev, struct device_attribute *attr,
