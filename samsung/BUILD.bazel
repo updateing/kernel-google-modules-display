@@ -8,7 +8,7 @@ filegroup(
         "exynos_drm_connector.h",
         "panel/panel-common.h",
         "panel/panel-samsung-drv.h",
-        "//private/google-modules/display/include:headers",
+        "//private/google-modules/display/common/include:headers",
         "//private/google-modules/display/samsung/include:headers",
     ],
     visibility = [
@@ -25,7 +25,6 @@ kernel_module(
         "Kbuild",
         "panel/Kbuild",
     ]) + [
-        "//private/google-modules/display/include:headers",
         "//private/google-modules/display/samsung:headers",
         "//private/google-modules/hdcp/samsung:headers",
         "//private/google-modules/soc/gs:gs_soc_headers",

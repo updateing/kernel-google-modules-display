@@ -3,7 +3,7 @@
 # Makefile for the drm device driver.  This driver provides support for the
 # Direct Rendering Infrastructure (DRI) in XFree86 4.1.0 and higher.
 
-subdir-ccflags-y += -I$(srctree)/$(src)/../include
+subdir-ccflags-y += -I$(srctree)/$(src)/../common/include
 subdir-ccflags-y += -I$(srctree)/$(src)/include/uapi
 
 ccflags-y += -I$(srctree)/$(src)/cal_common
