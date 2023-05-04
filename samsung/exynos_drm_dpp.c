@@ -992,6 +992,19 @@ exynos_gm_update(struct dpp_device *dpp, struct exynos_drm_plane_state *state)
 	if (info->force_en)
 		state->hdr_state.gm = &gm->force_data;
 
+	// When GM is enabled, EOTF should be enabled as well
+	if (state->hdr_state.gm && !state->hdr_state.eotf_lut) {
+		printk_ratelimited("dpp[%u]: when GM is enabled, EOTF need to be enabled\n",
+			dpp->id);
+#if IS_ENABLED(CONFIG_SOC_ZUMA)
+		/*
+		 * In ZUMA, HDR engine canʼt work normally casue DPU stuck, disable GM
+		 * to avoid the issue
+		 */
+		state->hdr_state.gm = NULL;
+#endif
+	}
+
 	if (dpp->hdr.state.gm != state->hdr_state.gm || info->dirty) {
 		hdr_reg_set_gm(dpp->id, state->hdr_state.gm);
 		dpp->hdr.state.gm = state->hdr_state.gm;
