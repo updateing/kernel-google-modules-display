@@ -80,6 +80,17 @@ static inline bool is_backlight_lp_state(const struct backlight_device *bl)
 	return (bl->props.state & BL_STATE_LP) != 0;
 }
 
+static struct drm_crtc *get_exynos_panel_connector_crtc(struct exynos_panel *ctx)
+{
+	struct drm_crtc *crtc = NULL;
+
+	mutex_lock(&ctx->crtc_lock);
+	crtc = ctx->crtc;
+	mutex_unlock(&ctx->crtc_lock);
+
+	return crtc;
+}
+
 int exynos_panel_configure_te2_edges(struct exynos_panel *ctx,
 				     u32 *timings, bool lp_mode)
 {
@@ -2874,19 +2885,6 @@ static ssize_t dimming_on_show(struct device *dev,
 }
 static DEVICE_ATTR_RW(dimming_on);
 
-static struct drm_crtc *get_exynos_panel_connector_crtc(struct exynos_panel *ctx)
-{
-	struct drm_mode_config *config;
-	struct drm_crtc *crtc = NULL;
-
-	config = &ctx->exynos_connector.base.dev->mode_config;
-	drm_modeset_lock(&config->connection_mutex, NULL);
-	if (ctx->exynos_connector.base.state)
-		crtc = ctx->exynos_connector.base.state->crtc;
-	drm_modeset_unlock(&config->connection_mutex);
-	return crtc;
-}
-
 static ssize_t local_hbm_mode_store(struct device *dev,
 			       struct device_attribute *attr,
 			       const char *buf, size_t count)
@@ -3454,6 +3452,12 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	const bool is_lp_mode = ctx->current_mode &&
 				ctx->current_mode->exynos_mode.is_lp_mode;
 
+	if (ctx->exynos_connector.base.state) {
+		mutex_lock(&ctx->crtc_lock);
+		ctx->crtc = ctx->exynos_connector.base.state->crtc;
+		mutex_unlock(&ctx->crtc_lock);
+	}
+
 	mutex_lock(&ctx->mode_lock);
 	if (ctx->panel_state == PANEL_STATE_HANDOFF) {
 		is_active = !exynos_panel_init(ctx);
@@ -3593,6 +3597,10 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		}
 
 		drm_panel_disable(&ctx->panel);
+
+		mutex_lock(&ctx->crtc_lock);
+		ctx->crtc = NULL;
+		mutex_unlock(&ctx->crtc_lock);
 	}
 }
 
@@ -4453,6 +4461,7 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	INIT_DELAYED_WORK(&ctx->idle_work, panel_idle_work);
 
 	mutex_init(&ctx->mode_lock);
+	mutex_init(&ctx->crtc_lock);
 	mutex_init(&ctx->bl_state_lock);
 	mutex_init(&ctx->lp_state_lock);
 

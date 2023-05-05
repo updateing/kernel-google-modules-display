@@ -630,6 +630,7 @@ struct te2_data {
 struct exynos_panel {
 	struct device *dev;
 	struct drm_panel panel;
+	struct drm_crtc *crtc;
 	struct dentry *debugfs_entry;
 	struct dentry *debugfs_cmdset_entry;
 	struct gpio_desc *reset_gpio;
@@ -695,6 +696,7 @@ struct exynos_panel {
 	enum exynos_cabc_mode cabc_mode;
 	struct backlight_device *bl;
 	struct mutex mode_lock;
+	struct mutex crtc_lock;
 	struct mutex bl_state_lock;
 	struct exynos_bl_notifier bl_notifier;
 
