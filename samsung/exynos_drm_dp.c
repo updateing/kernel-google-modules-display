@@ -1879,8 +1879,26 @@ static ssize_t link_status_show(struct device *dev, struct device_attribute *att
 }
 static DEVICE_ATTR_RO(link_status);
 
-static struct attribute *dp_attrs[] = { &dev_attr_orientation.attr, &dev_attr_pin_assignment.attr,
-					&dev_attr_hpd.attr, &dev_attr_link_status.attr, NULL };
+static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			     size_t size)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	mutex_lock(&dp->typec_notification_lock);
+	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_PLUG);
+	mutex_unlock(&dp->typec_notification_lock);
+	return size;
+}
+static DEVICE_ATTR_WO(irq_hpd);
+
+static struct attribute *dp_attrs[] = {
+	&dev_attr_orientation.attr,
+	&dev_attr_pin_assignment.attr,
+	&dev_attr_hpd.attr,
+	&dev_attr_link_status.attr,
+	&dev_attr_irq_hpd.attr,
+	NULL
+};
 
 static const struct attribute_group dp_group = {
 	.name = "drm-displayport",
