@@ -14,6 +14,7 @@
 #define __SAMSUNG_DP_CAL_H__
 
 #include <linux/usb/typec_dp.h>
+#include <linux/usb/dwc3-exynos.h>
 
 /* Register definition */
 enum sst_id {
@@ -334,8 +335,5 @@ void dp_hw_set_hdcp13_function(u32 en);
 void dp_hw_set_hdcp13_encryption(u32 en);
 void dp_hw_set_hdcp22_function(u32 en);
 void dp_hw_set_hdcp22_encryption(u32 en);
-
-/* USB Interface Prototypes for Combo-PHY Handshaking */
-extern int dwc3_exynos_phy_enable(int owner, bool on);
 
 #endif /* __SAMSUNG_DP_CAL_H__ */
