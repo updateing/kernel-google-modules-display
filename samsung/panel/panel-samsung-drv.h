@@ -59,6 +59,7 @@
 #define PANEL_REV_DVT1		BIT(9)
 #define PANEL_REV_DVT1_1	BIT(10)
 #define PANEL_REV_PVT		BIT(11)
+#define PANEL_REV_MP		BIT(12)
 #define PANEL_REV_LATEST	BIT(31)
 #define PANEL_REV_ALL		(~0)
 #define PANEL_REV_GE(rev)	(~((rev) - 1))
