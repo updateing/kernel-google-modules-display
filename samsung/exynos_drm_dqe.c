@@ -116,7 +116,6 @@ int histogram_request_ioctl(struct drm_device *dev, void *data,
 		return -ENODEV;
 	}
 
-
 	e = create_histogram_event(dev, file);
 	if (IS_ERR(e)) {
 		pr_err("failed to create a histogram event\n");
@@ -639,6 +638,7 @@ void exynos_dqe_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state,
 
 void exynos_dqe_reset(struct exynos_dqe *dqe)
 {
+	int i;
 	dqe->initialized = false;
 	dqe->state.gamma_matrix = NULL;
 	dqe->state.degamma_lut = NULL;
@@ -649,13 +649,18 @@ void exynos_dqe_reset(struct exynos_dqe *dqe)
 	dqe->state.cgc_dither_config = NULL;
 	dqe->cgc.first_write = false;
 	dqe->force_atc_config.dirty = true;
-	dqe->state.histogram_threshold = 0;
-	dqe->state.histogram_pos = POST_DQE;
-	dqe->state.histogram_id = HISTOGRAM_0;
-	dqe->state.roi = NULL;
-	dqe->state.weights = NULL;
 	dqe->state.rcd_enabled = false;
 	dqe->state.cgc_gem = NULL;
+
+	/* reflect histogram state  */
+	dqe->state.histogram_pos = POST_DQE;
+	dqe->state.histogram_id = HISTOGRAM_0;
+	dqe->state.histogram_threshold = 1;
+	dqe->state.roi = NULL;
+	dqe->state.weights = NULL;
+	for (i = 0; i < HISTOGRAM_MAX; i++) {
+		dqe->state.hist_chan[i].hist_state = HISTOGRAM_OFF;
+	}
 }
 
 void exynos_dqe_save_lpd_data(struct exynos_dqe *dqe)
