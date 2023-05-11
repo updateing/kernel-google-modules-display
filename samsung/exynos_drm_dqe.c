@@ -209,39 +209,22 @@ int histogram_chan_configure(struct exynos_dqe *dqe, const enum exynos_histogram
 	return 0;
 }
 
-int histogram_chan_start(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
-			 const enum histogram_state hist_state, histogram_chan_callback hist_cb)
+int histogram_chan_set_state(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
+			     const enum histogram_state hist_state,
+			     histogram_chan_callback hist_cb)
 {
 	struct decon_device *decon = dqe->decon;
 	u32 id = decon->id;
-
-	pr_debug("decon_id=%u, hist_id=%d hist_state=%d, curr_state=%d\n", id, hist_id, hist_state,
-		 dqe->state.hist_chan[hist_id].hist_state);
 
 	if (!dqe || hist_id >= HISTOGRAM_MAX)
 		return -EINVAL;
 
+	pr_debug("decon_id=%u, hist_id=%d hist_state=%d, curr_state=%d\n",
+		 id, hist_id, hist_state, dqe->state.hist_chan[hist_id].hist_state);
+
 	dqe->state.hist_chan[hist_id].hist_cb = hist_cb;
 	dqe->state.hist_chan[hist_id].hist_state = hist_state;
 	dqe_reg_set_histogram(id, hist_id, hist_state);
-
-	return 0;
-}
-
-int histogram_chan_stop(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id)
-{
-	struct decon_device *decon = dqe->decon;
-	u32 id = decon->id;
-
-	if (hist_id >= HISTOGRAM_MAX)
-		return -EINVAL;
-
-	if (dqe->state.hist_chan[hist_id].hist_state == HISTOGRAM_OFF)
-		return 0;
-
-	dqe->state.hist_chan[hist_id].hist_cb = NULL;
-	dqe->state.hist_chan[hist_id].hist_state = HISTOGRAM_OFF;
-	dqe_reg_set_histogram(id, hist_id, HISTOGRAM_OFF);
 
 	return 0;
 }
@@ -493,8 +476,8 @@ static void exynos_lhbm_histogram_update(struct decon_device *decon)
 
 	histogram_chan_configure(decon->dqe, HISTOGRAM_CHAN_LHBM, &decon->dqe->lhbm_hist_config,
 				 flags);
-	histogram_chan_start(decon->dqe, HISTOGRAM_CHAN_LHBM, HISTOGRAM_ROI,
-			     exynos_lhbm_histogram_callback);
+	histogram_chan_set_state(decon->dqe, HISTOGRAM_CHAN_LHBM, HISTOGRAM_ROI,
+				 exynos_lhbm_histogram_callback);
 }
 #endif
 
@@ -537,7 +520,7 @@ static void exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_st
 	else
 		hist_state = HISTOGRAM_OFF;
 
-	histogram_chan_start(dqe, hist_id, hist_state, NULL);
+	histogram_chan_set_state(dqe, hist_id, hist_state, NULL);
 #ifdef CONFIG_SOC_ZUMA
 	exynos_lhbm_histogram_update(decon);
 #endif

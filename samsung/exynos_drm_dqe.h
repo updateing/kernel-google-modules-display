@@ -188,7 +188,7 @@ void exynos_dqe_restore_lpd_data(struct exynos_dqe *dqe);
 
 int histogram_chan_configure(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
 			     struct histogram_chan_config *config, u32 flags);
-int histogram_chan_start(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
-			 const enum histogram_state hist_state, histogram_chan_callback hist_cb);
-int histogram_chan_stop(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id);
+int histogram_chan_set_state(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
+			     const enum histogram_state hist_state,
+			     histogram_chan_callback hist_cb);
 #endif /* __EXYNOS_DRM_DQE_H__ */
