@@ -247,7 +247,8 @@ void handle_histogram_event(struct exynos_dqe *dqe)
 			continue;
 
 		pr_debug("collect dqe%d channel%d histogram\n", id, hist_id);
-		dqe_reg_get_histogram_bins(id, hist_id, &dqe->state.hist_chan[hist_id].hist_bins);
+		dqe_reg_get_histogram_bins(dqe->dev, id, hist_id,
+					   &dqe->state.hist_chan[hist_id].hist_bins);
 		if (hist_cb)
 			(hist_cb)(id, hist_id, &dqe->state.hist_chan[hist_id].hist_bins);
 	}
@@ -973,6 +974,8 @@ struct exynos_dqe *exynos_dqe_register(struct decon_device *decon)
 
 	pr_info("display quality enhancer is supported(DQE_V%d)\n",
 			dqe_version + 1);
+
+	dma_coerce_mask_and_coherent(dqe->dev, DMA_BIT_MASK(64));
 
 	return dqe;
 }

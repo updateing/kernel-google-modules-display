@@ -13,11 +13,12 @@
 #ifndef __SAMSUNG_DQE_CAL_H__
 #define __SAMSUNG_DQE_CAL_H__
 
-#include <linux/types.h>
-#include <drm/samsung_drm.h>
+#include <cal_config.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_print.h>
-#include <cal_config.h>
+#include <drm/samsung_drm.h>
+#include <linux/dma-direct.h>
+#include <linux/types.h>
 #if defined(CONFIG_SOC_ZUMA)
 #include <linux/soc/samsung/exynos-smc.h>
 #endif
@@ -310,7 +311,7 @@ void dqe_reg_set_histogram_weights(u32 dqe_id, enum exynos_histogram_id hist_id,
 void dqe_reg_set_histogram_threshold(u32 dqe_id, enum exynos_histogram_id hist_id, u32 threshold);
 void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id,
 			   enum histogram_state state);
-void dqe_reg_get_histogram_bins(u32 dqe_id, enum exynos_histogram_id hist_id,
+void dqe_reg_get_histogram_bins(struct device *dev, u32 dqe_id, enum exynos_histogram_id hist_id,
 				struct histogram_bins *bins);
 static inline void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_histogram_id hist_id,
 					     enum exynos_prog_pos pos)

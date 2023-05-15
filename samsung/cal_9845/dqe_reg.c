@@ -596,7 +596,7 @@ void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id, enum hi
 	hist_write_mask(dqe_id, DQE_HIST, val, HIST_EN | HIST_ROI_ON);
 }
 
-void dqe_reg_get_histogram_bins(u32 dqe_id, enum exynos_histogram_id hist_id,
+void dqe_reg_get_histogram_bins(struct device *dev, u32 dqe_id, enum exynos_histogram_id hist_id,
 				struct histogram_bins *bins)
 {
 	int regs_cnt = DIV_ROUND_UP(HISTOGRAM_BIN_COUNT, 2);
