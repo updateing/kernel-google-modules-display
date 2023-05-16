@@ -198,6 +198,11 @@ struct dp_device {
 	enum plug_orientation typec_orientation;
 	enum pin_assignment typec_pin_assignment;
 	enum link_training_status typec_link_training_status;
+
+	/* DP Link CRCs enabled */
+	bool dp_link_crc_enabled;
+	struct dentry *dp_crc_enabled_debugfs_file;
+	struct dentry *dp_crc_values_debugfs_file;
 };
 
 static inline struct dp_device *get_dp_drvdata(void)

@@ -96,6 +96,7 @@ static void dp_init_info(struct dp_device *dp)
 	dp->audio_state = DP_AUDIO_DISABLE;
 	dp->output_type = EXYNOS_DISPLAY_TYPE_DP0_SST1;
 	dp->bist_used = false;
+	dp->dp_link_crc_enabled = false;
 }
 
 static u32 dp_get_max_link_rate(struct dp_device *dp)
@@ -1027,6 +1028,7 @@ static void dp_enable(struct drm_encoder *encoder)
 	dp_set_avi_infoframe(dp);
 	dp_set_spd_infoframe();
 
+	dp->dp_link_crc_enabled = false;
 	enable_irq(dp->res.irq);
 	dp_hw_start();
 	dp_info(dp, "enabled DP as cur_mode = %s@%d\n", dp->cur_mode.name,
@@ -1889,12 +1891,140 @@ static void dp_connector_reset(struct drm_connector *connector)
 }
 
 /* DP DRM Connector Functions */
+static ssize_t dp_crc_enabled_write(struct file *file, const char __user *buffer, size_t len,
+				    loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct dp_device *dp = s->private;
+	int res;
+	int enable = 0;
+
+	res = kstrtoint_from_user(buffer, len, 0, &enable);
+	if (res) {
+		dp_warn(dp, "%s: invalid value %s\n", __func__, buffer);
+		return len;
+	}
+
+	res = dp_crc_set_enabled(SST1, enable);
+	if (res == 0) {
+		mutex_lock(&dp->cmd_lock);
+		dp->dp_link_crc_enabled = enable ? true : false;
+		mutex_unlock(&dp->cmd_lock);
+		dp_debug(dp, "%s: dp_crc_set_enabled(SST1, %d) successfully\n", __func__, enable);
+	} else
+		dp_warn(dp, "%s: dp_crc_set_enabled(SST1, %d) failed res=%d\n", __func__, enable,
+			res);
+
+	return len;
+}
+
+static int dp_crc_enabled_show(struct seq_file *s, void *unused)
+{
+	struct dp_device *dp = s->private;
+
+	mutex_lock(&dp->cmd_lock);
+	seq_printf(s, "%d\n", dp->dp_link_crc_enabled);
+	mutex_unlock(&dp->cmd_lock);
+	return 0;
+}
+
+static int dp_crc_enabled_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dp_crc_enabled_show, inode->i_private);
+}
+
+static const struct file_operations dp_crc_enabled_fops = {
+	.owner = THIS_MODULE,
+	.open = dp_crc_enabled_open,
+	.read = seq_read,
+	.write = dp_crc_enabled_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int dp_crc_values_show(struct seq_file *s, void *unused)
+{
+	struct dp_device *dp = s->private;
+	bool crc_enabled = false;
+	int res = 0;
+	u32 crc_data[3];
+
+	mutex_lock(&dp->cmd_lock);
+	crc_enabled = dp->dp_link_crc_enabled;
+	mutex_unlock(&dp->cmd_lock);
+	if (!crc_enabled) {
+		seq_puts(s, "CRCs are disabled\n");
+		return 0;
+	}
+
+	res = dp_crc_get(SST1, crc_data);
+	if (res != 0) {
+		seq_printf(s, "dp_crc_get failed, res=%d\n", res);
+		dp_warn(dp, "%s: dp_crc_get failed, res=%d\n", __func__, res);
+		return 0;
+	}
+
+	dp_debug(dp, "%s: Got CRCs R:%04X G:%04X B:%04X\n", __func__, crc_data[0], crc_data[1],
+		 crc_data[2]);
+	seq_printf(s, "R:%04X G:%04X B:%04X\n", crc_data[0], crc_data[1], crc_data[2]);
+	return 0;
+}
+
+static int dp_crc_values_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dp_crc_values_show, inode->i_private);
+}
+
+static ssize_t dp_crc_values_write(struct file *file, const char __user *buffer, size_t len,
+				   loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct dp_device *dp = s->private;
+	int res = 0;
+
+	res = dp_crc_reset(SST1);
+	if (res)
+		dp_warn(dp, "%s: dp_crc_reset failed, res=%d\n", __func__, res);
+	else
+		dp_debug(dp, "%s: dp_crc_reset finished successfully\n", __func__);
+
+	return len;
+}
+
+static const struct file_operations dp_crc_values_fops = {
+	.owner = THIS_MODULE,
+	.open = dp_crc_values_open,
+	.read = seq_read,
+	.write = dp_crc_values_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int drm_dp_late_register(struct drm_connector *connector)
+{
+	struct dentry *root = connector->debugfs_entry;
+
+	dp_drvdata->dp_crc_enabled_debugfs_file =
+		debugfs_create_file("dp_crc_enabled", 0644, root, dp_drvdata, &dp_crc_enabled_fops);
+	dp_drvdata->dp_crc_values_debugfs_file =
+		debugfs_create_file("dp_crc_values", 0644, root, dp_drvdata, &dp_crc_values_fops);
+	return 0;
+}
+
+static void drm_dp_early_unregister(struct drm_connector *connector)
+{
+	debugfs_remove(dp_drvdata->dp_crc_enabled_debugfs_file);
+	debugfs_remove(dp_drvdata->dp_crc_values_debugfs_file);
+}
+
 static const struct drm_connector_funcs dp_connector_funcs = {
 	.reset = dp_connector_reset,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.destroy = drm_connector_cleanup,
 	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
+	.late_register = drm_dp_late_register,
+	.early_unregister = drm_dp_early_unregister,
 };
 
 /* DP DRM Connector Helper Functions */
@@ -2094,6 +2224,12 @@ static int dp_remap_regs(struct dp_device *dp, struct platform_device *pdev)
 	int i, ret = 0;
 
 	/* DP Link SFR */
+	i = of_property_match_string(np, "reg-names", "link");
+	if (of_address_to_resource(np, i, &res)) {
+		dp_err(dp, "failed to get DP Link resource\n");
+		goto err;
+	}
+
 	dp->res.link_regs = devm_platform_ioremap_resource_byname(pdev, "link");
 	if (IS_ERR(dp->res.link_regs)) {
 		dp_err(dp, "failed to remap DP LINK SFR region\n");
