@@ -1446,6 +1446,14 @@ static int dp_automated_test_irq_handler(struct dp_device *dp)
 	return 0;
 }
 
+static void dp_update_link_status(struct dp_device *dp, enum link_training_status link_status)
+{
+	if (link_status != dp->typec_link_training_status) {
+		dp->typec_link_training_status = link_status;
+		sysfs_notify(&dp->dev->kobj, "drm-displayport", "link_status");
+	}
+}
+
 static int dp_link_down_event_handler(struct dp_device *dp)
 {
 	/*
@@ -1457,13 +1465,12 @@ static int dp_link_down_event_handler(struct dp_device *dp)
 	dp_off_by_hpd_plug(dp);
 
 	/* Step_2. DP Link Up again */
-	dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
 	if (dp_link_up(dp)) {
 		dp_err(dp, "failed to DP Link Up during re-negotiation\n");
-		dp->typec_link_training_status = LINK_TRAINING_FAILURE;
+		dp_update_link_status(dp, LINK_TRAINING_FAILURE);
 		return -ENOLINK;
 	}
-	dp->typec_link_training_status = LINK_TRAINING_SUCCESS;
+	dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
 
 	/* Step_3. DP On */
 	dp_on_by_hpd_plug(dp);
@@ -1475,13 +1482,11 @@ static int dp_link_down_event_handler(struct dp_device *dp)
 static void dp_work_hpd(struct work_struct *work)
 {
 	struct dp_device *dp = get_dp_drvdata();
+	enum link_training_status link_status = LINK_TRAINING_UNKNOWN;
 
 	mutex_lock(&dp->hpd_lock);
 
 	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
-		/* Reset before performing link training */
-		dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
-
 		pm_runtime_get_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_get_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
@@ -1495,14 +1500,16 @@ static void dp_work_hpd(struct work_struct *work)
 
 		if (dp_check_dp_sink(dp) < 0) {
 			dp_err(dp, "failed to check DP Sink status\n");
+			link_status = LINK_TRAINING_FAILURE_SINK;
 			goto HPD_FAIL;
 		}
 
 		if (dp_link_up(dp)) {
 			dp_err(dp, "failed to DP Link Up\n");
+			link_status = LINK_TRAINING_FAILURE;
 			goto HPD_FAIL;
 		}
-		dp->typec_link_training_status = LINK_TRAINING_SUCCESS;
+		dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
 
 		dp_on_by_hpd_plug(dp);
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
@@ -1520,9 +1527,6 @@ static void dp_work_hpd(struct work_struct *work)
 
 		dp->state = DP_STATE_INIT;
 		dp_info(dp, "%s: DP State changed to INIT\n", __func__);
-
-		/* Mark unknown on cable disconnect as well */
-		dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
 	}
 
 	mutex_unlock(&dp->hpd_lock);
@@ -1546,7 +1550,8 @@ HPD_FAIL:
 	/* in error case, add delay to avoid very short interval reconnection */
 	msleep(300);
 
-	dp->typec_link_training_status = LINK_TRAINING_FAILURE;
+	// Use cached error so LINK_TRAINING_FAILURE doesn't retrigger hpd immediately.
+	dp_update_link_status(dp, link_status);
 
 	mutex_unlock(&dp->hpd_lock);
 }
@@ -1683,6 +1688,9 @@ static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_s
 
 		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG)
 			dp_hpd_changed(dp, EXYNOS_HPD_UNPLUG);
+
+		/* Mark unknown on HPD UNPLUG */
+		dp_update_link_status(dp, LINK_TRAINING_UNKNOWN);
 	}
 
 	return NOTIFY_OK;
