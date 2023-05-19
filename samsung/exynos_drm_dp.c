@@ -357,9 +357,8 @@ static void dp_validate_link_training(struct dp_device *dp, bool *cr_done,
 		if (same_pre && same_volt)
 			*same_before_adjust = true;
 
-		if (!*cr_done && req_vol[i] + req_pre[i] >= 3) {
+		if (!*cr_done && req_max[i] != 0) {
 			*max_swing_reached = true;
-			return;
 		}
 	}
 }
@@ -503,8 +502,8 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 					  link_status);
 
 		if (max_swing_reached) {
-			dp_info(dp, "requested to adjust max swing level\n");
 			if (!try_max_swing) {
+				dp_info(dp, "adjust to max swing level\n");
 				try_max_swing = true;
 				continue;
 			} else {
@@ -514,7 +513,6 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 		}
 
 		if (cr_done) {
-			dp_print_swing_level(dp);
 			dp_info(dp, "CR Done. Move to Training_EQ.\n");
 			return true;
 		}
@@ -605,8 +603,8 @@ static bool dp_do_link_training_eq(struct dp_device *dp, u32 interval_us,
 					  link_status);
 
 		if (max_swing_reached) {
-			dp_info(dp, "requested to adjust max swing level\n");
 			if (!try_max_swing) {
+				dp_info(dp, "adjust to max swing level\n");
 				try_max_swing = true;
 				continue;
 			} else {
@@ -618,7 +616,6 @@ static bool dp_do_link_training_eq(struct dp_device *dp, u32 interval_us,
 		if (cr_done) {
 			if (drm_dp_channel_eq_ok(link_status,
 						 dp->link.num_lanes)) {
-				dp_print_swing_level(dp);
 				dp_info(dp,
 					"EQ Done. Move to Training_Done.\n");
 				return true;
