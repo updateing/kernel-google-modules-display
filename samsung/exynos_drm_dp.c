@@ -662,14 +662,6 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 					"reducing link rate to %u during CR phase\n",
 					dp->link.link_rate);
 				continue;
-			} else if (dp->link.num_lanes > 1) {
-				dp->link.num_lanes >>= 1;
-				dp->link.link_rate = dp_get_max_link_rate(dp);
-
-				dp_info(dp,
-					"reducing lanes number to %u during CR phase\n",
-					dp->link.num_lanes);
-				continue;
 			}
 
 			dp_err(dp, "Link training failed during CR phase\n");
@@ -678,18 +670,9 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 
 		// Link Training: Channel Equalization
 		if (!dp_do_link_training_eq(dp, interval_us, supported_tps)) {
-			if (dp->link.num_lanes > 1) {
-				dp->link.num_lanes >>= 1;
-
-				dp_info(dp,
-					"reducing lanes number to %u during EQ phase\n",
-					dp->link.num_lanes);
-				continue;
-			} else if (drm_dp_link_rate_to_bw_code(
-					   dp->link.link_rate) !=
-				   DP_LINK_BW_1_62) {
+			if (drm_dp_link_rate_to_bw_code(dp->link.link_rate) !=
+			    DP_LINK_BW_1_62) {
 				dp_get_lower_link_rate(&dp->link);
-				dp->link.num_lanes = dp_get_max_num_lanes(dp);
 
 				dp_info(dp,
 					"reducing link rate to %u during EQ phase\n",
