@@ -27,6 +27,7 @@
 #include <hdr_cal.h>
 
 #include "regs-dpp.h"
+#include "regs-hdr.h"
 
 #include "../exynos_drm_format.h"
 #include "../exynos_drm_plane.h"
@@ -1406,7 +1407,7 @@ void cgc_dma_dump_regs(struct drm_printer *p, u32 id, void __iomem *dma_regs)
 	dpu_print_hex_dump(p, dma_regs, dma_regs + 0x0300 + DMA_SHD_OFFSET, 0x24);
 }
 
-static void dpp_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, unsigned long attr)
+static void dpp_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs)
 {
 	cal_drm_printf(p, id, "=== DPP%d SFR DUMP ===\n", id);
 	dpu_print_hex_dump(p, regs, regs + 0x0000, 0x64);
@@ -1429,7 +1430,7 @@ static void dpp_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, uns
 	}
 }
 
-static void sramc_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, unsigned long attr)
+static void sramc_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs)
 {
 	cal_drm_printf(p, id, "=== SRAMC%d SFR DUMP ===\n", id);
 	dpu_print_hex_dump(p, regs, regs, 0x20);
@@ -1438,31 +1439,45 @@ static void sramc_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, u
 	dpu_print_hex_dump(p, regs, regs + SRAMC_L_COM_SHD_OFFSET, 0x20);
 }
 
-static void hdrc_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, unsigned long attr)
+static void hdr_comm_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs)
 {
-	cal_drm_printf(p, id, "=== HDRC%d SFR DUMP ===\n", id);
-	dpu_print_hex_dump(p, regs, regs, 0x100);
+	cal_drm_printf(p, id, "=== HDRCOMM%d SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs, 0x84);
 
-	cal_drm_printf(p, id, "=== HDRC%d SHADOW SFR DUMP ===\n", id);
-	dpu_print_hex_dump(p, regs, regs + LSI_COMM_SHD_OFFSET, 0x100);
+	cal_drm_printf(p, id, "=== HDRCOMM%d SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs + LSI_COMM_SHD_OFFSET, 0x84);
+}
+
+static void hdr_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs)
+{
+	cal_drm_printf(p, id, "=== HDR%d SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs, 0x27C);
+
+	cal_drm_printf(p, id, "=== HDR%d SHADOW SFR DUMP ===\n", id);
+	dpu_print_hex_dump(p, regs, regs + HDR_SHD_OFFSET, 0x27C);
 }
 
 void __dpp_dump(struct drm_printer *p, u32 id, void __iomem *regs, void __iomem *dma_regs,
-		void __iomem *sramc_regs, void __iomem *hdrc_regs, unsigned long attr)
+		void __iomem *sramc_regs, void __iomem *hdr_comm_regs, void __iomem *hdr_regs,
+		unsigned long attr)
 {
 	dma_reg_dump_com_debug_regs(p, id);
 
 	dma_dump_regs(p, id, dma_regs);
 	dma_reg_dump_debug_regs(p, id);
 
-	dpp_dump_regs(p, id, regs, attr);
+	dpp_dump_regs(p, id, regs);
 	dpp_reg_dump_debug_regs(p, id);
 
-	if(test_bit(DPP_ATTR_SRAMC, &attr))
-		sramc_dump_regs(p, id, sramc_regs, attr);
+	if (test_bit(DPP_ATTR_SRAMC, &attr))
+		sramc_dump_regs(p, id, sramc_regs);
 
-	if(test_bit(DPP_ATTR_HDR_COMM, &attr))
-		hdrc_dump_regs(p, id, hdrc_regs, attr);
+	if (test_bit(DPP_ATTR_HDR_COMM, &attr))
+		hdr_comm_dump_regs(p, id, hdr_comm_regs);
+
+	if (test_bit(DPP_ATTR_HDR, &attr) ||
+		test_bit(DPP_ATTR_HDR10_PLUS, &attr))
+		hdr_dump_regs(p, id, hdr_regs);
 }
 
 int __dpp_check(u32 id, const struct dpp_params_info *p, unsigned long attr)

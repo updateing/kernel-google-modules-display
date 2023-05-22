@@ -271,7 +271,8 @@ void dpp_dump(struct drm_printer *p, struct dpp_device *dpp)
 		return;
 	}
 	__dpp_dump(p, dpp->id, dpp->regs.dpp_base_regs, dpp->regs.dma_base_regs,
-		   dpp->regs.sramc_base_regs, dpp->regs.hdr_comm_base_regs, dpp->attr);
+		   dpp->regs.sramc_base_regs, dpp->regs.hdr_comm_base_regs,
+		   dpp->regs.hdr_base_regs, dpp->attr);
 }
 
 void rcd_dump(struct drm_printer *p, struct dpp_device *dpp)

@@ -1147,7 +1147,8 @@ static void dpp_dump_regs(struct drm_printer *p, u32 id, void __iomem *regs, uns
 }
 
 void __dpp_dump(struct drm_printer *p, u32 id, void __iomem *regs, void __iomem *dma_regs,
-		void __iomem *sramc_regs, void __iomem *hdrc_regs, unsigned long attr)
+		void __iomem *sramc_regs, void __iomem *hdr_comm_regs, void __iomem *hdr_regs,
+		unsigned long attr)
 {
 	dma_reg_dump_com_debug_regs(p, id);
 
