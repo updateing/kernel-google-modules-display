@@ -1335,6 +1335,33 @@ static int dp_automated_test_irq_handler(struct dp_device *dp)
 	return 0;
 }
 
+static int dp_sink_specific_irq_handler(struct dp_device *dp)
+{
+	/*
+	 * When DP Sink catches some error situations, it can trigger Sink Specific IRQ.
+	 * DP Source will handle DP Link Re-negotiation while keeping DP connection.
+	 */
+
+	/* Step_1. DP Off */
+	hdcp_dplink_connect_state(DP_DISCONNECT);
+	dp_off_by_hpd_plug(dp);
+
+	/* Step_2. DP Link Up again */
+	dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
+	hdcp_dplink_connect_state(DP_CONNECT);
+	if (dp_link_up(dp)) {
+		dp_err(dp, "failed to DP Link Up during re-negotiation\n");
+		dp->typec_link_training_status = LINK_TRAINING_FAILURE;
+		return -ENOLINK;
+	}
+	dp->typec_link_training_status = LINK_TRAINING_SUCCESS;
+
+	/* Step_3. DP On */
+	dp_on_by_hpd_plug(dp);
+
+	return 0;
+}
+
 /* Works */
 static void dp_work_hpd(struct work_struct *work)
 {
@@ -1432,6 +1459,9 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	} else if (irq & DP_AUTOMATED_TEST_REQUEST) {
 		dp_info(dp, "occurred Automated Test Request IRQ\n");
 		dp_automated_test_irq_handler(dp);
+	} else if (irq & DP_SINK_SPECIFIC_IRQ) {
+		dp_info(dp, "occurred Sink Specific IRQ\n");
+		dp_sink_specific_irq_handler(dp);
 	} else
 		dp_info(dp, "occurred unknown IRQ (0x%X)\n", irq);
 }
@@ -1469,8 +1499,10 @@ static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_s
 			dp->hw_config.pin_type = dp->typec_pin_assignment;
 
 			dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
-		} else {
-			dp_warn(dp, "%s: IRQ from sink\n", __func__);
+		}
+	} else if (hpd == EXYNOS_HPD_IRQ) {
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+			dp_info(dp, "%s: Service IRQ from sink\n", __func__);
 			queue_work(dp->dp_wq, &dp->hpd_irq_work);
 		}
 	} else {
@@ -2014,7 +2046,7 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 	struct dp_device *dp = dev_get_drvdata(dev);
 
 	mutex_lock(&dp->typec_notification_lock);
-	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_PLUG);
+	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
 	mutex_unlock(&dp->typec_notification_lock);
 	return size;
 }
