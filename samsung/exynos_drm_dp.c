@@ -129,7 +129,12 @@ static bool dp_get_fast_training(struct dp_device *dp)
 #define MAX_VOLTAGE_LEVEL 3
 #define MAX_PREEMPH_LEVEL 3
 
-static unsigned long dp_rate = 2;    /* HBR2 is the default */
+#define DP_LINK_RATE_RBR  0
+#define DP_LINK_RATE_HBR  1
+#define DP_LINK_RATE_HBR2 2
+#define DP_LINK_RATE_HBR3 3
+
+static unsigned long dp_rate = DP_LINK_RATE_HBR2;    /* HBR2 is the default */
 module_param(dp_rate, ulong, 0664);
 MODULE_PARM_DESC(dp_rate, "use specific DP link rate by setting dp_rate=x");
 
@@ -140,16 +145,16 @@ MODULE_PARM_DESC(dp_lanes, "use specific number of DP lanes by setting dp_lanes=
 static void dp_fill_host_caps(struct dp_device *dp)
 {
 	switch (dp_rate) {
-	case 0:
+	case DP_LINK_RATE_RBR:
 		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_1_62);
 		break;
-	case 1:
+	case DP_LINK_RATE_HBR:
 		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_2_7);
 		break;
-	case 3:
+	case DP_LINK_RATE_HBR3:
 		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1);
 		break;
-	case 2:
+	case DP_LINK_RATE_HBR2:
 	default:
 		dp->host.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_5_4);
 		break;
@@ -1891,12 +1896,42 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_WO(irq_hpd);
 
+static const char *const link_rate_opts[] = {
+	[DP_LINK_RATE_RBR] = "RBR",
+	[DP_LINK_RATE_HBR] = "HBR",
+	[DP_LINK_RATE_HBR2] = "HBR2",
+	[DP_LINK_RATE_HBR3] = "HBR3",
+};
+
+static ssize_t link_rate_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+	int link_rate = sysfs_match_string(link_rate_opts, buf);
+
+	if (link_rate < 0)
+		return -EINVAL;
+
+	dp_rate = link_rate;
+	dp_fill_host_caps(dp);
+
+	return size;
+}
+
+static ssize_t link_rate_show(struct device *dev, struct device_attribute *attr,
+				char *buf)
+{
+	return sysfs_emit(buf, "%s\n", link_rate_opts[dp_rate]);
+}
+static DEVICE_ATTR_RW(link_rate);
+
 static struct attribute *dp_attrs[] = {
 	&dev_attr_orientation.attr,
 	&dev_attr_pin_assignment.attr,
 	&dev_attr_hpd.attr,
 	&dev_attr_link_status.attr,
 	&dev_attr_irq_hpd.attr,
+	&dev_attr_link_rate.attr,
 	NULL
 };
 
