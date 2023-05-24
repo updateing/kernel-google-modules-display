@@ -1925,6 +1925,31 @@ static ssize_t link_rate_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(link_rate);
 
+static ssize_t link_lanes_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+	unsigned long link_lanes;
+
+	if (kstrtoul(buf, 10, &link_lanes) != 0)
+		return -EINVAL;
+
+	if (link_lanes != 1 && link_lanes != 2 && link_lanes != 4)
+		return -EINVAL;
+
+	dp_lanes = link_lanes;
+	dp_fill_host_caps(dp);
+
+	return size;
+}
+
+static ssize_t link_lanes_show(struct device *dev, struct device_attribute *attr,
+				char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", dp_lanes);
+}
+static DEVICE_ATTR_RW(link_lanes);
+
 static struct attribute *dp_attrs[] = {
 	&dev_attr_orientation.attr,
 	&dev_attr_pin_assignment.attr,
@@ -1932,6 +1957,7 @@ static struct attribute *dp_attrs[] = {
 	&dev_attr_link_status.attr,
 	&dev_attr_irq_hpd.attr,
 	&dev_attr_link_rate.attr,
+	&dev_attr_link_lanes.attr,
 	NULL
 };
 
