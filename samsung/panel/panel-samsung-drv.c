@@ -69,6 +69,7 @@ inline void exynos_panel_msleep(u32 delay_ms)
 	dsim_trace_msleep(delay_ms);
 }
 EXPORT_SYMBOL(exynos_panel_msleep);
+static void exynos_panel_node_attach(struct exynos_drm_connector *exynos_connector);
 
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
@@ -1955,10 +1956,17 @@ static int exynos_panel_connector_set_property(
 	return 0;
 }
 
+static int exynos_panel_connector_late_register(struct exynos_drm_connector *exynos_connector)
+{
+	exynos_panel_node_attach(exynos_connector);
+	return 0;
+}
+
 static const struct exynos_drm_connector_funcs exynos_panel_connector_funcs = {
 	.atomic_print_state = exynos_panel_connector_print_state,
 	.atomic_get_property = exynos_panel_connector_get_property,
 	.atomic_set_property = exynos_panel_connector_set_property,
+	.late_register = exynos_panel_connector_late_register,
 };
 
 static void exynos_panel_set_dimming(struct exynos_panel *ctx, bool dimming_on)
@@ -3386,13 +3394,36 @@ static const char *exynos_panel_get_sysfs_name(struct exynos_panel *ctx)
 	return "primary-panel";
 }
 
+static void exynos_panel_node_attach(struct exynos_drm_connector *exynos_connector)
+{
+	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_connector);
+	struct drm_connector *connector = &exynos_connector->base;
+	const char *sysfs_name = exynos_panel_get_sysfs_name(ctx);
+	struct drm_bridge *bridge = &ctx->bridge;
+	int ret;
+
+	ret = sysfs_create_link(&connector->kdev->kobj, &ctx->dev->kobj,
+				"panel");
+	if (ret)
+		dev_warn(ctx->dev, "unable to link panel sysfs (%d)\n", ret);
+
+	exynos_debugfs_panel_add(ctx, connector->debugfs_entry);
+	exynos_dsi_debugfs_add(to_mipi_dsi_device(ctx->dev), ctx->debugfs_entry);
+	panel_debugfs_add(ctx, ctx->debugfs_entry);
+
+	ret = sysfs_create_link(&bridge->dev->dev->kobj, &ctx->dev->kobj, sysfs_name);
+	if (ret)
+		dev_warn(ctx->dev, "unable to link %s sysfs (%d)\n", sysfs_name, ret);
+	else
+		dev_dbg(ctx->dev, "succeed to link %s sysfs\n", sysfs_name);
+}
+
 static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 				      enum drm_bridge_attach_flags flags)
 {
 	struct drm_device *dev = bridge->dev;
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_connector *connector = &ctx->exynos_connector.base;
-	const char *sysfs_name = exynos_panel_get_sysfs_name(ctx);
 	int ret;
 
 	ret = exynos_drm_connector_init(dev, &ctx->exynos_connector,
@@ -3419,23 +3450,7 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 	if (ctx->desc->exynos_panel_func && ctx->desc->exynos_panel_func->commit_done)
 		ctx->exynos_connector.needs_commit = true;
 
-	ret = sysfs_create_link(&connector->kdev->kobj, &ctx->dev->kobj,
-				"panel");
-	if (ret)
-		dev_warn(ctx->dev, "unable to link panel sysfs (%d)\n", ret);
-
-	exynos_debugfs_panel_add(ctx, connector->debugfs_entry);
-	exynos_dsi_debugfs_add(to_mipi_dsi_device(ctx->dev), ctx->debugfs_entry);
-	panel_debugfs_add(ctx, ctx->debugfs_entry);
-
 	drm_kms_helper_hotplug_event(connector->dev);
-
-
-	ret = sysfs_create_link(&bridge->dev->dev->kobj, &ctx->dev->kobj, sysfs_name);
-	if (ret)
-		dev_warn(ctx->dev, "unable to link %s sysfs (%d)\n", sysfs_name, ret);
-	else
-		dev_dbg(ctx->dev, "succeed to link %s sysfs\n", sysfs_name);
 
 	return 0;
 }
