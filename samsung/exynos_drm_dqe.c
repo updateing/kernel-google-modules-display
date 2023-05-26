@@ -513,9 +513,9 @@ static void exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_st
 		dqe->state.histogram_pos = state->histogram_pos;
 	}
 
-	if (dqe->state.event && state->roi)
+	if (state->weights && state->roi)
 		hist_state = HISTOGRAM_ROI;
-	else if (dqe->state.event && !state->roi)
+	else if (state->weights)
 		hist_state = HISTOGRAM_FULL;
 	else
 		hist_state = HISTOGRAM_OFF;
