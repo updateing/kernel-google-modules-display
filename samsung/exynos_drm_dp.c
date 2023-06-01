@@ -1444,26 +1444,32 @@ HPD_FAIL:
 	mutex_unlock(&dp->hpd_lock);
 }
 
+static u8 sysfs_triggered_irq = 0;
+
 static void dp_work_hpd_irq(struct work_struct *work)
 {
 	struct dp_device *dp = get_dp_drvdata();
 	u8 irq = 0;
 
-	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR,
-		&irq) <= 0)
+	if (sysfs_triggered_irq != 0) {
+		irq = sysfs_triggered_irq;
+		sysfs_triggered_irq = 0;
+	} else if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR, &irq) <= 0) {
+		dp_err(dp, "[HPD IRQ] cannot read DP_DEVICE_SERVICE_IRQ_VECTOR\n");
 		return;
+	}
 
 	if (irq & DP_CP_IRQ) {
-		dp_info(dp, "occurred Content Protection IRQ\n");
+		dp_info(dp, "[HPD IRQ] Content Protection\n");
 		hdcp_dplink_handle_irq();
 	} else if (irq & DP_AUTOMATED_TEST_REQUEST) {
-		dp_info(dp, "occurred Automated Test Request IRQ\n");
+		dp_info(dp, "[HPD IRQ] Automated Test Request\n");
 		dp_automated_test_irq_handler(dp);
 	} else if (irq & DP_SINK_SPECIFIC_IRQ) {
-		dp_info(dp, "occurred Sink Specific IRQ\n");
+		dp_info(dp, "[HPD IRQ] Sink Specific\n");
 		dp_sink_specific_irq_handler(dp);
 	} else
-		dp_info(dp, "occurred unknown IRQ (0x%X)\n", irq);
+		dp_info(dp, "[HPD IRQ] unknown IRQ (0x%X)\n", irq);
 }
 
 /* Type-C Handshaking Functions */
@@ -2106,6 +2112,32 @@ static ssize_t link_lanes_show(struct device *dev, struct device_attribute *attr
 }
 static DEVICE_ATTR_RW(link_lanes);
 
+static ssize_t trigger_automated_test_irq_store(struct device *dev, struct device_attribute *attr,
+						const char *buf, size_t size)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	mutex_lock(&dp->typec_notification_lock);
+	sysfs_triggered_irq = DP_AUTOMATED_TEST_REQUEST;
+	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
+	mutex_unlock(&dp->typec_notification_lock);
+	return size;
+}
+static DEVICE_ATTR_WO(trigger_automated_test_irq);
+
+static ssize_t trigger_sink_specific_irq_store(struct device *dev, struct device_attribute *attr,
+					       const char *buf, size_t size)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	mutex_lock(&dp->typec_notification_lock);
+	sysfs_triggered_irq = DP_SINK_SPECIFIC_IRQ;
+	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
+	mutex_unlock(&dp->typec_notification_lock);
+	return size;
+}
+static DEVICE_ATTR_WO(trigger_sink_specific_irq);
+
 static struct attribute *dp_attrs[] = {
 	&dev_attr_orientation.attr,
 	&dev_attr_pin_assignment.attr,
@@ -2114,6 +2146,8 @@ static struct attribute *dp_attrs[] = {
 	&dev_attr_irq_hpd.attr,
 	&dev_attr_link_rate.attr,
 	&dev_attr_link_lanes.attr,
+	&dev_attr_trigger_automated_test_irq.attr,
+	&dev_attr_trigger_sink_specific_irq.attr,
 	NULL
 };
 
