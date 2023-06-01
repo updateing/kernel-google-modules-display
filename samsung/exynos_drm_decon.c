@@ -1463,6 +1463,7 @@ static void decon_enter_hibernation(struct decon_device *decon)
 
 	reset = _decon_wait_for_framedone(decon);
 	spin_lock_irqsave(&decon->slock, flags);
+	exynos_dqe_hibernation_enter(decon->dqe);
 	_decon_disable_locked(decon, reset);
 	pm_runtime_put(decon->dev);
 	decon->state = DECON_STATE_HIBERNATION;
@@ -1746,9 +1747,9 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_data)
 		DPU_ATRACE_INT_PID("frame_transfer", 0, decon->thread->pid);
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMEDONE, decon->id, decon);
 		exynos_dqe_save_lpd_data(decon->dqe);
+		atomic_dec_if_positive(&decon->frames_pending);
 		if (decon->dqe)
 			handle_histogram_event(decon->dqe);
-		atomic_dec_if_positive(&decon->frames_pending);
 		wake_up_all(&decon->framedone_wait);
 		decon_debug(decon, "%s: frame done\n", __func__);
 	}
