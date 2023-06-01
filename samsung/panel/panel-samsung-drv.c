@@ -3443,6 +3443,8 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 
 	drm_connector_helper_add(connector, &exynos_connector_helper_funcs);
 
+	drm_connector_register(connector);
+
 	drm_connector_attach_encoder(connector, bridge->encoder);
 	connector->funcs->reset(connector);
 	connector->status = connector_status_connected;

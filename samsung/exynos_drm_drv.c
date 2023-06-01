@@ -21,7 +21,6 @@
 #include <drm/drm_atomic_uapi.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_ioctl.h>
-#include <drm/drm_managed.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_self_refresh_helper.h>
 #include <drm/drm_vblank.h>
@@ -1048,8 +1047,10 @@ static int exynos_drm_bind(struct device *dev)
 	exynos_drm_connector_create_properties(drm);
 
 	priv_state = kzalloc(sizeof(*priv_state), GFP_KERNEL);
-	if (!priv_state)
-		return -ENOMEM;
+	if (!priv_state) {
+		ret = -ENOMEM;
+		goto err_free_drm;
+	}
 
 	priv_state->available_win_mask = BIT(MAX_WIN_PER_DECON) - 1;
 
@@ -1122,6 +1123,8 @@ err_unbind_all:
 	component_unbind_all(dev, drm);
 err_priv_state_cleanup:
 	drm_atomic_private_obj_fini(&private->obj);
+err_free_drm:
+	drm_dev_put(drm);
 
 	return ret;
 }
