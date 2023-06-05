@@ -320,6 +320,9 @@ void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p)
 {
 	u32 val, val1, en;
 
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
+
 	val = hist_read(dqe_id, DQE_HIST(hist_id));
 	en = cal_mask(val, HIST_EN);
 	cal_drm_printf(p, 0, "Histogram%u: %s\n", hist_id, en ? "enabled" : "disabled");
@@ -351,14 +354,6 @@ void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p)
 
 		dqe_reg_print_hist_lut(dqe_id, DQE_HIST_BIN(hist_id, 0), HIST_BIN_SIZE, 0, p);
 	}
-}
-
-void dqe_reg_print_hist(u32 dqe_id, struct drm_printer *p)
-{
-	int i;
-
-	for (i = 0; i < HISTOGRAM_MAX; i++)
-		dqe_reg_print_hist_ch(dqe_id, i, p);
 }
 
 void dqe_reg_print_gamma_matrix(u32 dqe_id, struct drm_printer *p)
@@ -876,7 +871,7 @@ void dqe_reg_set_cgc_coef_dma_req_internal(u32 dqe_id)
 }
 
 void dqe_reg_set_histogram_pos_internal(u32 dqe_id, enum exynos_histogram_id hist_id,
-					enum exynos_prog_pos pos)
+					enum histogram_prog_pos pos)
 {
 
 	if (hist_id >= HISTOGRAM_MAX) {

@@ -51,7 +51,7 @@ int dqe_reg_wait_cgc_dma_done_internal(u32 id, unsigned long timeout_us)
 }
 
 void dqe_reg_set_histogram_pos_internal(u32 dqe_id, enum exynos_histogram_id hist_id,
-					enum exynos_prog_pos pos)
+					enum histogram_prog_pos pos)
 {
 	if (hist_id >= HISTOGRAM_MAX) {
 		pr_warn("%s: invalid hist_id(%d)\n", __func__, hist_id);
