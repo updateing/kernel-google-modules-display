@@ -1125,6 +1125,8 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 		dp->state = DP_STATE_ON;
 		dp_info(dp, "%s: DP State changed to ON\n", __func__);
 
+		hdcp_dplink_connect_state(DP_CONNECT);
+
 		if (dev) {
 			connector->status = connector_status_connected;
 			dp_info(dp,
@@ -1192,6 +1194,8 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 
 	if (dp->state >= DP_STATE_ON) {
 		if (!dp->bist_used) {
+			hdcp_dplink_connect_state(DP_DISCONNECT);
+
 			if (dev) {
 				connector->status =
 					connector_status_disconnected;
@@ -1343,12 +1347,10 @@ static int dp_sink_specific_irq_handler(struct dp_device *dp)
 	 */
 
 	/* Step_1. DP Off */
-	hdcp_dplink_connect_state(DP_DISCONNECT);
 	dp_off_by_hpd_plug(dp);
 
 	/* Step_2. DP Link Up again */
 	dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
-	hdcp_dplink_connect_state(DP_CONNECT);
 	if (dp_link_up(dp)) {
 		dp_err(dp, "failed to DP Link Up during re-negotiation\n");
 		dp->typec_link_training_status = LINK_TRAINING_FAILURE;
@@ -1382,7 +1384,6 @@ static void dp_work_hpd(struct work_struct *work)
 		/* PHY power on */
 		usleep_range(10000, 10030);
 		dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
-		hdcp_dplink_connect_state(DP_CONNECT);
 		usleep_range(10000, 11000);
 
 		if (dp_check_dp_sink(dp) < 0) {
@@ -1398,7 +1399,6 @@ static void dp_work_hpd(struct work_struct *work)
 
 		dp_on_by_hpd_plug(dp);
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
-		hdcp_dplink_connect_state(DP_DISCONNECT);
 		dp_off_by_hpd_plug(dp);
 		dp_link_down(dp);
 
