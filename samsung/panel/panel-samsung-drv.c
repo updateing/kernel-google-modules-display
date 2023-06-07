@@ -833,6 +833,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->panel_idle_vrefresh = 0;
 	ctx->current_binned_lp = NULL;
 	ctx->cabc_mode = CABC_OFF;
+	ctx->ssc_mode = false;
 
 	mutex_lock(&ctx->mode_lock);
 	_exynos_panel_disable_normal_feat_locked(ctx);
@@ -3279,6 +3280,48 @@ static ssize_t als_table_show(struct device *dev,
 
 static DEVICE_ATTR_RW(als_table);
 
+static ssize_t ssc_mode_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	bool ssc_mode;
+	int ret;
+
+	if (!funcs || !funcs->set_ssc_mode)
+		return -ENOTSUPP;
+
+	if (!is_panel_active(ctx)) {
+		dev_err(ctx->dev, "panel is not enabled\n");
+		return -EPERM;
+	}
+
+	ret = kstrtobool(buf, &ssc_mode);
+	if (ret) {
+		dev_err(ctx->dev, "invalid ssc_mode value\n");
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	if (ssc_mode != ctx->ssc_mode) {
+		funcs->set_ssc_mode(ctx, ssc_mode);
+	}
+	mutex_unlock(&ctx->mode_lock);
+	return count;
+}
+
+static ssize_t ssc_mode_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->ssc_mode);
+}
+static DEVICE_ATTR_RW(ssc_mode);
+
 static ssize_t acl_mode_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
@@ -4856,6 +4899,12 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 		if (ret)
 			dev_err(ctx->dev, "unable to create acl_mode\n");
 	}
+	if (exynos_panel_func && exynos_panel_func->set_ssc_mode) {
+		dev_info(ctx->dev, "create ssc_mode sysfs node\n");
+		ret = sysfs_create_file(&ctx->bl->dev.kobj, &dev_attr_ssc_mode.attr);
+		if (ret)
+			dev_err(ctx->dev, "unable to create ssc_mode\n");
+	}
 
 	ctx->mode_in_progress = MODE_DONE;
 
@@ -4900,6 +4949,7 @@ int exynos_panel_remove(struct mipi_dsi_device *dsi)
 	sysfs_remove_groups(&ctx->bl->dev.kobj, bl_device_groups);
 	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_cabc_mode.attr);
 	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_acl_mode.attr);
+	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_ssc_mode.attr);
 	devm_backlight_device_unregister(ctx->dev, ctx->bl);
 
 	return 0;
