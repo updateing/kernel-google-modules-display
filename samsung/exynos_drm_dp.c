@@ -1487,11 +1487,20 @@ static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 		dp_err(dp, "DP HPD changed to abnormal state(%d)\n", state);
 }
 
+static bool dp_enabled = false;
+module_param(dp_enabled, bool, 0664);
+MODULE_PARM_DESC(dp_enabled, "Enable/disable DP notification processing");
+
 /*
  * Function should be called with typec_notification_lock held.
  */
 static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_state hpd)
 {
+	if (!dp_enabled) {
+		dp_info(dp, "%s: DP is disabled, ignoring DP notifications\n", __func__);
+		return NOTIFY_OK;
+	}
+
 	if (hpd == EXYNOS_HPD_PLUG) {
 		if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
 			dp_info(dp, "%s: USB Type-C is HPD PLUG status\n", __func__);
