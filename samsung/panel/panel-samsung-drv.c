@@ -3213,7 +3213,7 @@ static ssize_t acl_mode_store(struct device *dev,
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	ssize_t ret;
-	bool acl_mode;
+	u32 acl_mode;
 
 	if (!funcs || !funcs->set_acl_mode)
 		return -ENOTSUPP;
@@ -3222,8 +3222,8 @@ static ssize_t acl_mode_store(struct device *dev,
 		return -EAGAIN;
 
 
-	ret = kstrtobool(buf, &acl_mode);
-	if (ret) {
+	ret = kstrtouint(buf, 0, &acl_mode);
+	if (ret || (acl_mode > ACL_ENHANCED)) {
 		dev_err(dev, "invalid acl mode\n");
 		return ret;
 	}

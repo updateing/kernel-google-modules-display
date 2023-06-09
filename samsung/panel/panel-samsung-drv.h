@@ -152,6 +152,12 @@ struct exynos_panel_te2_timing {
 	u16 falling_edge;
 };
 
+enum exynos_acl_mode {
+	ACL_OFF = 0,
+	ACL_NORMAL,
+	ACL_ENHANCED,
+};
+
 /**
  * struct exynos_panel_mode - panel mode info
  */
@@ -283,7 +289,7 @@ struct exynos_panel_funcs {
 	 * enablement. If this is not defined, it means that panel does not
 	 * support acl.
 	 */
-	void (*set_acl_mode)(struct exynos_panel *exynos_panel, bool on);
+	void (*set_acl_mode)(struct exynos_panel *exynos_panel, enum exynos_acl_mode mode);
 
 	/**
 	 * @set_power:
@@ -758,8 +764,8 @@ struct exynos_panel {
 	/* TE width before last rr command was sent */
 	u32 last_rr_te_usec;
 
-        /* Automatic Current Limiting(ACL) */
-	bool acl_mode;
+	/* Automatic Current Limiting(ACL) */
+	enum exynos_acl_mode acl_mode;
 
 	struct {
 		struct local_hbm {
