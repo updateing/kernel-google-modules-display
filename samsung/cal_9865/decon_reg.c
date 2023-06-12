@@ -18,6 +18,7 @@
 #include <cal_config.h>
 #include <decon_cal.h>
 #include <dqe_cal.h>
+#include <trace/dpu_trace.h>
 #ifdef __linux__
 #include "../exynos_drm_decon.h"
 #include <linux/of_address.h>
@@ -1412,6 +1413,8 @@ int decon_dsc_reg_init(u32 id, struct decon_config *config, u32 overlap_w,
 	u32 dsc_id;
 	struct decon_dsc dsc_enc;
 
+	DPU_ATRACE_BEGIN(__func__);
+
 	/* Basically, all SW-resets in DPU are not necessary */
 	if (swrst) {
 		for (dsc_id = 0; dsc_id < config->dsc.dsc_count; dsc_id++)
@@ -1423,6 +1426,8 @@ int decon_dsc_reg_init(u32 id, struct decon_config *config, u32 overlap_w,
 	decon_reg_config_data_path_size(id, dsc_enc.width_per_enc,
 			config->image_height, overlap_w, &dsc_enc,
 			&config->dsc);
+
+	DPU_ATRACE_END(__func__);
 
 	return 0;
 }
@@ -1457,10 +1462,7 @@ static void decon_reg_configure_lcd(u32 id, struct decon_config *config)
 
 	decon_reg_set_data_path(id, config);
 
-	if (config->dsc.enabled) {
-		/* call decon_reg_config_data_path_size () inside */
-		decon_dsc_reg_init(id, config, overlap_w, 0);
-	} else {
+	if (!config->dsc.enabled) {
 		decon_reg_config_data_path_size(id, config->image_width,
 				config->image_height, overlap_w, NULL,
 				&config->dsc);

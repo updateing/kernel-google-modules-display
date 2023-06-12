@@ -30,6 +30,23 @@ struct exynos_dqe_funcs {
 			u32 width, u32 height);
 };
 
+/*
+ * simple histogram state machine
+ */
+enum histogram_run_state {
+	HSTATE_DISABLED,			/* disabled */
+	HSTATE_HIBERNATION,			/* disabled due hibernation */
+	HSTATE_PENDING_FRAMEDONE,		/* enabled, going to be read on frame done */
+	HSTATE_IDLE,				/* enabled, can be read at any time, DPU is IDLE */
+};
+
+struct histogram_chan_state {
+	enum histogram_state state;		/* h/w state */
+	enum histogram_run_state run_state;	/* runner state */
+	struct histogram_bins bins;
+	histogram_chan_callback cb;
+};
+
 struct exynos_dqe_state {
 	const struct drm_color_lut *degamma_lut;
 	const struct exynos_matrix *linear_matrix;
@@ -52,11 +69,7 @@ struct exynos_dqe_state {
 	enum exynos_histogram_id histogram_id;
 
 	/* track per channel h/w histogram */
-	struct {
-		enum histogram_state hist_state;
-		struct histogram_bins hist_bins;
-		histogram_chan_callback hist_cb;
-	} hist_chan[HISTOGRAM_MAX];
+	struct histogram_chan_state hist_chan[HISTOGRAM_MAX];
 };
 
 struct dither_debug_override {
@@ -182,6 +195,7 @@ void handle_histogram_event(struct exynos_dqe *dqe);
 void exynos_dqe_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state,
 			u32 width, u32 height);
 void exynos_dqe_reset(struct exynos_dqe *dqe);
+void exynos_dqe_hibernation_enter(struct exynos_dqe *dqe);
 struct exynos_dqe *exynos_dqe_register(struct decon_device *decon);
 void exynos_dqe_save_lpd_data(struct exynos_dqe *dqe);
 void exynos_dqe_restore_lpd_data(struct exynos_dqe *dqe);

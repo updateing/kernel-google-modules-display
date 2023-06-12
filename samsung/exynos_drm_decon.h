@@ -485,6 +485,8 @@ struct decon_device {
 	int				te_gpio;
 	atomic_t			te_ref;
 	struct completion te_rising; /* signaled when irq_te is triggered */
+	/* whether the first TE after booting is triggered */
+	bool is_first_te_triggered;
 
 	spinlock_t			slock;
 

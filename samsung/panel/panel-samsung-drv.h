@@ -777,6 +777,9 @@ struct exynos_panel {
 
 	u32 normal_mode_work_delay_ms;
 	struct delayed_work normal_mode_work;
+
+	/* indicate whether RRS (Runtime Resolution Switch) is in progress */
+	bool rrs_in_progress;
 };
 
 /**
