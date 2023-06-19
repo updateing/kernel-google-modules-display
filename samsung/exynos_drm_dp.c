@@ -1125,6 +1125,8 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 		dp->state = DP_STATE_ON;
 		dp_info(dp, "%s: DP State changed to ON\n", __func__);
 
+		hdcp_dplink_connect_state(DP_CONNECT);
+
 		if (dev) {
 			connector->status = connector_status_connected;
 			dp_info(dp,
@@ -1192,6 +1194,8 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 
 	if (dp->state >= DP_STATE_ON) {
 		if (!dp->bist_used) {
+			hdcp_dplink_connect_state(DP_DISCONNECT);
+
 			if (dev) {
 				connector->status =
 					connector_status_disconnected;
@@ -1335,6 +1339,31 @@ static int dp_automated_test_irq_handler(struct dp_device *dp)
 	return 0;
 }
 
+static int dp_sink_specific_irq_handler(struct dp_device *dp)
+{
+	/*
+	 * When DP Sink catches some error situations, it can trigger Sink Specific IRQ.
+	 * DP Source will handle DP Link Re-negotiation while keeping DP connection.
+	 */
+
+	/* Step_1. DP Off */
+	dp_off_by_hpd_plug(dp);
+
+	/* Step_2. DP Link Up again */
+	dp->typec_link_training_status = LINK_TRAINING_UNKNOWN;
+	if (dp_link_up(dp)) {
+		dp_err(dp, "failed to DP Link Up during re-negotiation\n");
+		dp->typec_link_training_status = LINK_TRAINING_FAILURE;
+		return -ENOLINK;
+	}
+	dp->typec_link_training_status = LINK_TRAINING_SUCCESS;
+
+	/* Step_3. DP On */
+	dp_on_by_hpd_plug(dp);
+
+	return 0;
+}
+
 /* Works */
 static void dp_work_hpd(struct work_struct *work)
 {
@@ -1355,7 +1384,6 @@ static void dp_work_hpd(struct work_struct *work)
 		/* PHY power on */
 		usleep_range(10000, 10030);
 		dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
-		hdcp_dplink_connect_state(DP_CONNECT);
 		usleep_range(10000, 11000);
 
 		if (dp_check_dp_sink(dp) < 0) {
@@ -1371,7 +1399,6 @@ static void dp_work_hpd(struct work_struct *work)
 
 		dp_on_by_hpd_plug(dp);
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
-		hdcp_dplink_connect_state(DP_DISCONNECT);
 		dp_off_by_hpd_plug(dp);
 		dp_link_down(dp);
 
@@ -1417,23 +1444,32 @@ HPD_FAIL:
 	mutex_unlock(&dp->hpd_lock);
 }
 
+static u8 sysfs_triggered_irq = 0;
+
 static void dp_work_hpd_irq(struct work_struct *work)
 {
 	struct dp_device *dp = get_dp_drvdata();
 	u8 irq = 0;
 
-	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR,
-		&irq) <= 0)
+	if (sysfs_triggered_irq != 0) {
+		irq = sysfs_triggered_irq;
+		sysfs_triggered_irq = 0;
+	} else if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR, &irq) <= 0) {
+		dp_err(dp, "[HPD IRQ] cannot read DP_DEVICE_SERVICE_IRQ_VECTOR\n");
 		return;
+	}
 
 	if (irq & DP_CP_IRQ) {
-		dp_info(dp, "occurred Content Protection IRQ\n");
+		dp_info(dp, "[HPD IRQ] Content Protection\n");
 		hdcp_dplink_handle_irq();
 	} else if (irq & DP_AUTOMATED_TEST_REQUEST) {
-		dp_info(dp, "occurred Automated Test Request IRQ\n");
+		dp_info(dp, "[HPD IRQ] Automated Test Request\n");
 		dp_automated_test_irq_handler(dp);
+	} else if (irq & DP_SINK_SPECIFIC_IRQ) {
+		dp_info(dp, "[HPD IRQ] Sink Specific\n");
+		dp_sink_specific_irq_handler(dp);
 	} else
-		dp_info(dp, "occurred unknown IRQ (0x%X)\n", irq);
+		dp_info(dp, "[HPD IRQ] unknown IRQ (0x%X)\n", irq);
 }
 
 /* Type-C Handshaking Functions */
@@ -1451,11 +1487,20 @@ static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 		dp_err(dp, "DP HPD changed to abnormal state(%d)\n", state);
 }
 
+static bool dp_enabled = false;
+module_param(dp_enabled, bool, 0664);
+MODULE_PARM_DESC(dp_enabled, "Enable/disable DP notification processing");
+
 /*
  * Function should be called with typec_notification_lock held.
  */
 static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_state hpd)
 {
+	if (!dp_enabled) {
+		dp_info(dp, "%s: DP is disabled, ignoring DP notifications\n", __func__);
+		return NOTIFY_OK;
+	}
+
 	if (hpd == EXYNOS_HPD_PLUG) {
 		if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
 			dp_info(dp, "%s: USB Type-C is HPD PLUG status\n", __func__);
@@ -1469,8 +1514,10 @@ static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_s
 			dp->hw_config.pin_type = dp->typec_pin_assignment;
 
 			dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
-		} else {
-			dp_warn(dp, "%s: IRQ from sink\n", __func__);
+		}
+	} else if (hpd == EXYNOS_HPD_IRQ) {
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+			dp_info(dp, "%s: Service IRQ from sink\n", __func__);
 			queue_work(dp->dp_wq, &dp->hpd_irq_work);
 		}
 	} else {
@@ -2014,7 +2061,7 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 	struct dp_device *dp = dev_get_drvdata(dev);
 
 	mutex_lock(&dp->typec_notification_lock);
-	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_PLUG);
+	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
 	mutex_unlock(&dp->typec_notification_lock);
 	return size;
 }
@@ -2074,6 +2121,32 @@ static ssize_t link_lanes_show(struct device *dev, struct device_attribute *attr
 }
 static DEVICE_ATTR_RW(link_lanes);
 
+static ssize_t trigger_automated_test_irq_store(struct device *dev, struct device_attribute *attr,
+						const char *buf, size_t size)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	mutex_lock(&dp->typec_notification_lock);
+	sysfs_triggered_irq = DP_AUTOMATED_TEST_REQUEST;
+	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
+	mutex_unlock(&dp->typec_notification_lock);
+	return size;
+}
+static DEVICE_ATTR_WO(trigger_automated_test_irq);
+
+static ssize_t trigger_sink_specific_irq_store(struct device *dev, struct device_attribute *attr,
+					       const char *buf, size_t size)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	mutex_lock(&dp->typec_notification_lock);
+	sysfs_triggered_irq = DP_SINK_SPECIFIC_IRQ;
+	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
+	mutex_unlock(&dp->typec_notification_lock);
+	return size;
+}
+static DEVICE_ATTR_WO(trigger_sink_specific_irq);
+
 static struct attribute *dp_attrs[] = {
 	&dev_attr_orientation.attr,
 	&dev_attr_pin_assignment.attr,
@@ -2082,6 +2155,8 @@ static struct attribute *dp_attrs[] = {
 	&dev_attr_irq_hpd.attr,
 	&dev_attr_link_rate.attr,
 	&dev_attr_link_lanes.attr,
+	&dev_attr_trigger_automated_test_irq.attr,
+	&dev_attr_trigger_sink_specific_irq.attr,
 	NULL
 };
 

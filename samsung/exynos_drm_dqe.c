@@ -92,16 +92,16 @@ static void histogram_chan_collect_bins_locked(struct exynos_dqe *dqe,
 static const char *str_run_state(enum histogram_run_state state)
 {
 	switch (state) {
-		case HSTATE_DISABLED:
-			return "disabled";
-		case HSTATE_HIBERNATION:
-			return "hibernation";
-		case HSTATE_PENDING_FRAMEDONE:
-			return "pending_framedone";
-		case HSTATE_IDLE:
-			return "idle";
-		default:
-			return "";
+	case HSTATE_DISABLED:
+		return "disabled";
+	case HSTATE_HIBERNATION:
+		return "hibernation";
+	case HSTATE_PENDING_FRAMEDONE:
+		return "pending_framedone";
+	case HSTATE_IDLE:
+		return "idle";
+	default:
+		return "";
 	}
 }
 
@@ -195,7 +195,7 @@ int histogram_request_ioctl(struct drm_device *dev, void *data, struct drm_file 
 	} else if (hist_chan->run_state == HSTATE_IDLE) {
 		if (dqe->verbose_hist)
 			pr_info("histogram: idle, query now\n");
-#ifdef CONFIG_SOC_ZUMA
+#if IS_ENABLED(CONFIG_SOC_ZUMA)
 		/* need to collect into cached bins: smc requires physical memory */
 		histogram_chan_collect_bins_locked(dqe, hist_id, &hist_chan->bins);
 		memcpy(&e->event.bins, &hist_chan->bins, sizeof(e->event.bins));

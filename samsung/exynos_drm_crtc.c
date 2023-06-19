@@ -180,9 +180,15 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	if (dqe && (dqe->force_disabled || !new_exynos_state->dqe.enabled) &&
 			(decon->config.out_bpc == 8)) {
 		new_exynos_state->in_bpc = 8;
+	} else if (decon->config.out_type & DECON_OUT_DP) {
+		/*
+		 * Now, it is force to configure 8 BPC output for DP Path.
+		 * To support 10 BPC input stream, DECON Input BPC needs to be set as 10 BPC.
+		 */
+		new_exynos_state->in_bpc = 10;	// Force 10 BPC Input
 	} else if (new_exynos_state->force_bpc == EXYNOS_BPC_MODE_UNSPECIFIED) {
 		/*
-		 * When DQE is enabled but force_bpc is not specified,
+		 * When force_bpc is not specified,
 		 * CRTC's input BPC should be binded as output BPC or Plane's format.
 		 */
 		if (decon->config.out_bpc == 10) {
