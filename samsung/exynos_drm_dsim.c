@@ -66,6 +66,8 @@
 #include "exynos_drm_decon.h"
 #include "exynos_drm_dsim.h"
 
+EXPORT_TRACEPOINT_SYMBOL(dsi_label_scope);
+
 struct dsim_device *dsim_drvdata[MAX_DSI_CNT];
 
 /*
