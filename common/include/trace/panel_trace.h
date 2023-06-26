@@ -74,6 +74,22 @@ TRACE_EVENT(msleep,
 	TP_printk("delay=%d", __entry->delay_ms)
 );
 
+TRACE_EVENT(dsi_label_scope,
+	TP_PROTO(const char *name, bool begin),
+	TP_ARGS(name, begin),
+	TP_STRUCT__entry(
+			__string(name, name)
+			__field(bool, begin)
+		),
+	TP_fast_assign(
+			__assign_str(name, name);
+			__entry->begin = begin;
+		),
+	TP_printk("%s %s", __get_str(name), __entry->begin ? "begin" : "end")
+);
+#define PANEL_SEQ_LABEL_BEGIN(name) trace_dsi_label_scope(name, true)
+#define PANEL_SEQ_LABEL_END(name) trace_dsi_label_scope(name, false)
+
 #endif /* _PANEL_TRACE_H_ */
 
 #undef TRACE_INCLUDE_PATH
