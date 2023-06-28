@@ -1629,21 +1629,42 @@ static ssize_t available_osc2_clk_khz_show(struct device *dev, struct device_att
 	return len;
 }
 
+static int exynos_panel_set_op_hz(struct exynos_panel *ctx, unsigned int hz)
+{
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	int ret = 0;
+
+	if (!is_panel_initialized(ctx))
+		return -EAGAIN;
+
+	if (!funcs || !funcs->set_op_hz)
+		return -EINVAL;
+
+	mutex_lock(&ctx->mode_lock);
+	if (ctx->op_hz != hz) {
+		ret = funcs->set_op_hz(ctx, hz);
+		if (ret)
+			dev_err(ctx->dev, "failed to set op rate: %u Hz\n", hz);
+		else
+			sysfs_notify(&ctx->dev->kobj, NULL, "op_hz");
+	} else {
+		dev_dbg(ctx->dev, "%s: skip the same op rate: %u Hz\n", __func__, hz);
+	}
+	mutex_unlock(&ctx->mode_lock);
+
+	return ret;
+}
+
 static ssize_t op_hz_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
 {
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
-	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	ssize_t ret;
 	u32 hz;
 
-	if (!is_panel_initialized(ctx))
-		return -EAGAIN;
-
-	/* sysfs is not accessible for the panel not supporting op_hz */
-	if (!count || !funcs || !funcs->set_op_hz)
+	if (!count)
 		return -EINVAL;
 
 	ret = kstrtou32(buf, 0, &hz);
@@ -1652,20 +1673,9 @@ static ssize_t op_hz_store(struct device *dev,
 		return ret;
 	}
 
-	if (ctx->op_hz == hz) {
-		dev_dbg(ctx->dev, "%s: skip the same op rate: %u Hz\n", __func__, hz);
-		return count;
-	}
-
-	mutex_lock(&ctx->mode_lock);
-	ret = funcs->set_op_hz(ctx, hz);
-	mutex_unlock(&ctx->mode_lock);
-	if (ret) {
-		dev_err(ctx->dev, "failed to set op rate: %u Hz\n", hz);
+	ret = exynos_panel_set_op_hz(ctx, hz);
+	if (ret)
 		return ret;
-	}
-
-	sysfs_notify(&ctx->dev->kobj, NULL, "op_hz");
 
 	return count;
 }
@@ -1907,6 +1917,9 @@ static int exynos_panel_connector_get_property(
 	} else if (property == p->dimming_on) {
 		*val = exynos_state->dimming_on;
 		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__, *val ? "true" : "false");
+	} else if (property == p->operation_rate) {
+		*val = exynos_state->operation_rate;
+		dev_dbg(ctx->dev, "%s: operation_rate(%llu)\n", __func__, *val);
 	} else if (property == p->lp_mode) {
 		return exynos_panel_get_lp_mode(exynos_connector, exynos_state, val);
 	} else if (property == p->mipi_sync) {
@@ -1947,6 +1960,10 @@ static int exynos_panel_connector_set_property(
 		exynos_state->dimming_on = val;
 		dev_dbg(ctx->dev, "%s: dimming_on(%s)\n", __func__,
 			 exynos_state->dimming_on ? "true" : "false");
+	} else if (property == p->operation_rate) {
+		exynos_state->pending_update_flags |= HBM_FLAG_OP_RATE_UPDATE;
+		exynos_state->operation_rate = val;
+		dev_dbg(ctx->dev, "%s: operation_rate(%u)\n", __func__, exynos_state->operation_rate);
 	} else if (property == p->mipi_sync) {
 		exynos_state->mipi_sync = val;
 		dev_dbg(ctx->dev, "%s: mipi_sync(0x%lx)\n", __func__, exynos_state->mipi_sync);
@@ -2062,6 +2079,15 @@ static void exynos_panel_pre_commit_properties(
 		DPU_ATRACE_BEGIN("set_dimming");
 		exynos_panel_set_dimming(ctx, conn_state->dimming_on);
 		DPU_ATRACE_END("set_dimming");
+	}
+
+	if ((conn_state->pending_update_flags & HBM_FLAG_OP_RATE_UPDATE) && exynos_panel_func &&
+	    exynos_panel_func->set_op_hz) {
+		DPU_ATRACE_BEGIN("set_op_hz");
+		dev_info(ctx->dev, "%s: set op_hz to %d\n", __func__,
+			 conn_state->operation_rate);
+		exynos_panel_set_op_hz(ctx, conn_state->operation_rate);
+		DPU_ATRACE_END("set_op_hz");
 	}
 
 	if (mipi_sync)
@@ -3359,6 +3385,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->panel_idle_support, desc->is_panel_idle_supported);
 	drm_object_attach_property(obj, p->panel_orientation, ctx->orientation);
 	drm_object_attach_property(obj, p->vrr_switch_duration, desc->vrr_switch_duration);
+	drm_object_attach_property(obj, p->operation_rate, 0);
 
 	if (desc->brt_capability) {
 		ret = exynos_panel_attach_brightness_capability(&ctx->exynos_connector,

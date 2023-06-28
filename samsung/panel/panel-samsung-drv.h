@@ -82,6 +82,7 @@
 #define HBM_FLAG_BL_UPDATE      BIT(1)
 #define HBM_FLAG_LHBM_UPDATE    BIT(2)
 #define HBM_FLAG_DIMMING_UPDATE BIT(3)
+#define HBM_FLAG_OP_RATE_UPDATE BIT(4)
 
 #define IS_HBM_ON(mode)	((mode) >= HBM_ON_IRC_ON && (mode) < HBM_STATE_MAX)
 #define IS_HBM_ON_IRC_OFF(mode)	(((mode) == HBM_ON_IRC_OFF))
