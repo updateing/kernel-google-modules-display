@@ -731,6 +731,7 @@ err:
 static int dp_link_up(struct dp_device *dp)
 {
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE];
 	u8 val = 0;
 	unsigned int addr;
 	u32 interval, interval_us;
@@ -760,6 +761,19 @@ static int dp_link_up(struct dp_device *dp)
 
 	// Power DP Sink device Up
 	dp_sink_power_up(dp, true);
+
+	// Check DSC & FEC support
+	if (drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE) ==
+			DP_DSC_RECEIVER_CAP_SIZE)
+		dp_info(dp, "DP Sink: DSC support: %02x revision: %02x\n",
+			dsc_dpcd[0], dsc_dpcd[1]);
+	else
+		dp_err(dp, "DP Sink: failed to read DSC support register\n");
+
+	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CAPABILITY, &val) == 1)
+		dp_info(dp, "DP Sink: FEC support: %02x\n", val);
+	else
+		dp_err(dp, "DP Sink: failed to read FEC support register\n");
 
 	// Pick link parameters
 	dp->link.link_rate = dp_get_max_link_rate(dp);
