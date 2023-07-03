@@ -167,7 +167,7 @@ static struct drm_crtc *drm_encoder_get_old_crtc(struct drm_encoder *encoder,
 static void dsim_dump(struct dsim_device *dsim)
 {
 	struct dsim_regs regs;
-	struct drm_printer p = console_set_on_cmdline ?
+	struct drm_printer p = is_console_enabled() ?
 		drm_debug_printer("[drm]") : drm_info_printer(dsim->dev);
 
 	drm_printf(&p, "%s[%d]: === DSIM SFR DUMP ===\n",

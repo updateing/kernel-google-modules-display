@@ -1799,22 +1799,19 @@ static void decon_reg_set_dither_path(u32 id, bool en)
 
 static void decon_reg_set_urgent(u32 id, struct decon_config *config)
 {
-	// Only set urgent for DECON0 now
-	if (id == 0) {
-		decon_reg_set_rd_urgent_enable(id, config->urgent.rd_en);
-		decon_reg_set_rd_urgent_threshold(id,
-						  config->urgent.rd_hi_thres,
-						  config->urgent.rd_lo_thres);
-		decon_reg_set_rd_wait_cycle(id, config->urgent.rd_wait_cycle);
-		decon_reg_set_wr_urgent_enable(id, config->urgent.wr_en);
-		decon_reg_set_wr_urgent_threshold(id,
-						  config->urgent.wr_hi_thres,
-						  config->urgent.wr_lo_thres);
-		decon_reg_set_dta_enable(id, config->urgent.dta_en);
-		decon_reg_set_dta_threshold(id,
-					    config->urgent.dta_hi_thres,
-					    config->urgent.dta_lo_thres);
-	}
+	decon_reg_set_rd_urgent_enable(id, config->urgent.rd_en);
+	decon_reg_set_rd_urgent_threshold(id,
+					  config->urgent.rd_hi_thres,
+					  config->urgent.rd_lo_thres);
+	decon_reg_set_rd_wait_cycle(id, config->urgent.rd_wait_cycle);
+	decon_reg_set_wr_urgent_enable(id, config->urgent.wr_en);
+	decon_reg_set_wr_urgent_threshold(id,
+					  config->urgent.wr_hi_thres,
+					  config->urgent.wr_lo_thres);
+	decon_reg_set_dta_enable(id, config->urgent.dta_en);
+	decon_reg_set_dta_threshold(id,
+				    config->urgent.dta_hi_thres,
+				    config->urgent.dta_lo_thres);
 }
 
 /******************** EXPORTED DECON CAL APIs ********************/

@@ -26,6 +26,7 @@
 #include <trace/dpu_trace.h>
 
 #include <cal_config.h>
+#include <soc/google/exynos_tty.h>
 
 #if IS_ENABLED(CONFIG_ARM_EXYNOS_DEVFREQ)
 #include <soc/google/exynos-devfreq.h>
@@ -1583,9 +1584,14 @@ static const struct file_operations recovery_fops = {
 	.release = seq_release,
 };
 
+bool is_console_enabled(void)
+{
+	return exynos_uart_console_enabled();
+}
+
 static void buf_dump_all(const struct decon_device *decon)
 {
-	struct drm_printer p = console_set_on_cmdline ?
+	struct drm_printer p = is_console_enabled() ?
 		drm_debug_printer("[drm]") : drm_info_printer(decon->dev);
 	int i;
 
@@ -2057,7 +2063,7 @@ void decon_dump_all(struct decon_device *decon,
 void decon_dump_event_condition(const struct decon_device *decon,
 		enum dpu_event_condition condition)
 {
-	struct drm_printer p = console_set_on_cmdline ?
+	struct drm_printer p = is_console_enabled() ?
 		drm_debug_printer("[drm]") : drm_info_printer(decon->dev);
 	u32 print_log_size;
 
