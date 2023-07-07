@@ -780,7 +780,6 @@ int exynos_panel_disable(struct drm_panel *panel)
 	const struct exynos_panel_funcs *exynos_panel_func;
 
 	ctx->enabled = false;
-	ctx->hbm_mode = HBM_OFF;
 	ctx->dimming_on = false;
 	ctx->self_refresh_active = false;
 	ctx->panel_idle_vrefresh = 0;
@@ -789,22 +788,24 @@ int exynos_panel_disable(struct drm_panel *panel)
 
 	mutex_lock(&ctx->mode_lock);
 	exynos_panel_func = ctx->desc->exynos_panel_func;
-	if (exynos_panel_func) {
-		if (exynos_panel_func->set_local_hbm_mode) {
-			bool is_forced_off = false;
+	if (exynos_panel_func && exynos_panel_func->set_local_hbm_mode) {
+		bool is_forced_off = false;
 
-			ctx->hbm.local_hbm.requested_state = LOCAL_HBM_DISABLED;
-			if (!is_local_hbm_disabled(ctx)) {
-				is_forced_off = true;
-				dev_dbg(ctx->dev, "%s: force disabling lhbm\n", __func__);
-			}
-			panel_update_local_hbm_locked(ctx);
-
-			/* restore the state while enabling panel if needed */
-			if (is_forced_off)
-				ctx->hbm.local_hbm.requested_state = LOCAL_HBM_ENABLED;
+		ctx->hbm.local_hbm.requested_state = LOCAL_HBM_DISABLED;
+		if (!is_local_hbm_disabled(ctx)) {
+			is_forced_off = true;
+			dev_dbg(ctx->dev, "%s: force disabling lhbm\n", __func__);
 		}
+		panel_update_local_hbm_locked(ctx);
+
+		/* restore the state while enabling panel if needed */
+		if (is_forced_off)
+			ctx->hbm.local_hbm.requested_state = LOCAL_HBM_ENABLED;
 	}
+	if (exynos_panel_func && exynos_panel_func->set_hbm_mode)
+		exynos_panel_func->set_hbm_mode(ctx, HBM_OFF);
+	else
+		ctx->hbm_mode = HBM_OFF;
 	exynos_panel_send_cmd_set(ctx, ctx->desc->off_cmd_set);
 	mutex_unlock(&ctx->mode_lock);
 	dev_dbg(ctx->dev, "%s\n", __func__);
