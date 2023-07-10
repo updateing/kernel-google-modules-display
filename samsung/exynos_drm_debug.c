@@ -1505,6 +1505,11 @@ static ssize_t hibernation_show(struct device *dev,
 	struct decon_device *decon = dev_get_drvdata(dev);
 	struct exynos_hibernation *hiber = decon->hibernation;
 
+	if (!decon || !hiber) {
+		pr_err("%s: invalid device\n", __func__);
+		return -ENODEV;
+	}
+
 	return scnprintf(buf, PAGE_SIZE,
 				"state: %s\n"
 				"block_count: %d\n",
@@ -1530,6 +1535,12 @@ static ssize_t hibernation_store(struct device *dev,
 	decon = dev_get_drvdata(dev);
 	hiber = decon->hibernation;
 
+	if (!decon || !hiber) {
+		pr_err("%s: invalid device\n", __func__);
+		return -ENODEV;
+	}
+
+	DPU_ATRACE_BEGIN(__func__);
 	if (!enable) {
 		/* if disabling, make sure it gets out of hibernation before disabling */
 		hibernation_block_exit(hiber);
@@ -1540,6 +1551,7 @@ static ssize_t hibernation_store(struct device *dev,
 		hibernation_block(hiber);
 	}
 	hibernation_unblock_enter(hiber);
+	DPU_ATRACE_END(__func__);
 
 	return len;
 }
