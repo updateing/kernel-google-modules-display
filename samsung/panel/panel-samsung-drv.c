@@ -2008,6 +2008,36 @@ static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mod
 	mutex_unlock(&ctx->mode_lock);
 }
 
+static void exynos_panel_lhbm_on_delay_frames(struct drm_crtc *crtc,
+						struct exynos_panel *ctx)
+{
+	u64 last_vblank_cnt = ctx->hbm.local_hbm.last_lp_vblank_cnt;
+
+	if (!ctx->desc->lhbm_on_delay_frames || !last_vblank_cnt)
+		return;
+
+	DPU_ATRACE_BEGIN("lhbm_on_delay_frames");
+	if (crtc && !drm_crtc_vblank_get(crtc)) {
+		int retry = ctx->desc->lhbm_on_delay_frames;
+
+		do {
+			u32 diff = 0;
+			u64 cur_vblank_cnt = drm_crtc_vblank_count(crtc);
+
+			if (cur_vblank_cnt > last_vblank_cnt)
+				diff = cur_vblank_cnt - last_vblank_cnt;
+
+			if (diff < ctx->desc->lhbm_on_delay_frames)
+				drm_crtc_wait_one_vblank(crtc);
+			else
+				break;
+		} while (--retry);
+		drm_crtc_vblank_put(crtc);
+	}
+	ctx->hbm.local_hbm.last_lp_vblank_cnt = 0;
+	DPU_ATRACE_END("lhbm_on_delay_frames");
+}
+
 static void exynos_panel_pre_commit_properties(
 				struct exynos_panel *ctx,
 				struct exynos_drm_connector_state *conn_state)
@@ -2035,8 +2065,12 @@ static void exynos_panel_pre_commit_properties(
 	if (mipi_sync) {
 		dev_info(ctx->dev, "%s: mipi_sync(0x%lx) pending_update_flags(0x%x)\n", __func__,
 			 conn_state->mipi_sync, conn_state->pending_update_flags);
+		if (conn_state->mipi_sync & MIPI_CMD_SYNC_LHBM)
+			exynos_panel_lhbm_on_delay_frames(conn_state->base.crtc, ctx);
+
 		exynos_panel_check_mipi_sync_timing(conn_state->base.crtc,
 						    ctx->current_mode, ctx);
+
 		exynos_dsi_dcs_write_buffer_force_batch_begin(dsi);
 	}
 
@@ -4150,6 +4184,13 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				need_update_backlight = true;
 				state_changed = true;
 				come_out_lp_mode = true;
+
+				if (ctx->desc->lhbm_on_delay_frames &&
+					(crtc && !drm_crtc_vblank_get(crtc))) {
+					ctx->hbm.local_hbm.last_lp_vblank_cnt =
+							drm_crtc_vblank_count(crtc);
+					drm_crtc_vblank_put(crtc);
+				}
 			}
 			ctx->current_binned_lp = NULL;
 		} else if (funcs->mode_set) {
