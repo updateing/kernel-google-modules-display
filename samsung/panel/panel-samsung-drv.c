@@ -3426,6 +3426,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->panel_orientation, ctx->orientation);
 	drm_object_attach_property(obj, p->vrr_switch_duration, desc->vrr_switch_duration);
 	drm_object_attach_property(obj, p->operation_rate, 0);
+	drm_object_attach_property(obj, p->refresh_on_lp, desc->refresh_on_lp);
 
 	if (desc->brt_capability) {
 		ret = exynos_panel_attach_brightness_capability(&ctx->exynos_connector,

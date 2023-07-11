@@ -576,6 +576,7 @@ struct exynos_panel_desc {
 	bool dbv_extra_frame;
 	bool is_partial;
 	bool is_panel_idle_supported;
+	bool refresh_on_lp;
 	/**
 	 * set true if the panel doesn't have lhbm common hw constraints, include
 	 * 1. only allow turn on lhbm at peak refresh rate
