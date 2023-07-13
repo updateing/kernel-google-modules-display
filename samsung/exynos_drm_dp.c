@@ -1465,16 +1465,60 @@ static u8 sysfs_triggered_irq = 0;
 static void dp_work_hpd_irq(struct work_struct *work)
 {
 	struct dp_device *dp = get_dp_drvdata();
-	u8 irq = 0;
+	u8 sink_count;
+	u8 irq = 0, irq2 = 0, irq3 = 0;
+	u8 link_status[DP_LINK_STATUS_SIZE];
 
 	if (sysfs_triggered_irq != 0) {
 		irq = sysfs_triggered_irq;
 		sysfs_triggered_irq = 0;
-	} else if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR, &irq) <= 0) {
-		dp_err(dp, "[HPD IRQ] cannot read DP_DEVICE_SERVICE_IRQ_VECTOR\n");
-		return;
+		goto process_irq;
 	}
 
+	if (dp->sink.revision < DP_DPCD_REV_12) {
+		sink_count = drm_dp_read_sink_count(&dp->dp_aux);
+		dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count);
+
+		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR, &irq) == 1)
+			dp_info(dp, "[HPD IRQ] device irq vector = %02x\n", irq);
+		else
+			dp_err(dp, "[HPD IRQ] cannot read DP_DEVICE_SERVICE_IRQ_VECTOR\n");
+
+		if (drm_dp_dpcd_read_link_status(&dp->dp_aux, link_status) == DP_LINK_STATUS_SIZE)
+			dp_info(dp, "[HPD IRQ] link status = %02x %02x %02x %02x\n",
+				link_status[0], link_status[1], link_status[2], link_status[3]);
+		else
+			dp_err(dp, "[HPD IRQ] cannot read link status\n");
+	} else {
+		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_SINK_COUNT_ESI, &sink_count) == 1)
+			dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count & 0x3f);
+		else
+			dp_err(dp, "[HPD IRQ] cannot read DP_SINK_COUNT_ESI\n");
+
+		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR_ESI0, &irq) == 1)
+			dp_info(dp, "[HPD IRQ] device irq vector esi0 = %02x\n", irq);
+		else
+			dp_err(dp, "[HPD IRQ] cannot read DP_DEVICE_SERVICE_IRQ_VECTOR_ESI0\n");
+
+		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR_ESI1, &irq2) == 1)
+			dp_info(dp, "[HPD IRQ] device irq vector esi1 = %02x\n", irq2);
+		else
+			dp_err(dp, "[HPD IRQ] cannot read DP_DEVICE_SERVICE_IRQ_VECTOR_ESI1\n");
+
+		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_LINK_SERVICE_IRQ_VECTOR_ESI0, &irq3) == 1)
+			dp_info(dp, "[HPD IRQ] link irq vector esi0 = %02x\n", irq3);
+		else
+			dp_err(dp, "[HPD IRQ] cannot read DP_LINK_SERVICE_IRQ_VECTOR_ESI0\n");
+
+		if (drm_dp_dpcd_read(&dp->dp_aux, DP_LANE0_1_STATUS_ESI, link_status,
+				     DP_LINK_STATUS_SIZE) == DP_LINK_STATUS_SIZE)
+			dp_info(dp, "[HPD IRQ] link status = %02x %02x %02x %02x\n",
+				link_status[0], link_status[1], link_status[2], link_status[3]);
+		else
+			dp_err(dp, "[HPD IRQ] cannot read link status\n");
+	}
+
+process_irq:
 	if (irq & DP_CP_IRQ) {
 		dp_info(dp, "[HPD IRQ] Content Protection\n");
 		hdcp_dplink_handle_irq();
