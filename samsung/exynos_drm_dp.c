@@ -1355,7 +1355,7 @@ static int dp_automated_test_irq_handler(struct dp_device *dp)
 	return 0;
 }
 
-static int dp_sink_specific_irq_handler(struct dp_device *dp)
+static int dp_link_down_event_handler(struct dp_device *dp)
 {
 	/*
 	 * When DP Sink catches some error situations, it can trigger Sink Specific IRQ.
@@ -1518,6 +1518,12 @@ static void dp_work_hpd_irq(struct work_struct *work)
 			dp_err(dp, "[HPD IRQ] cannot read link status\n");
 	}
 
+	if (!drm_dp_channel_eq_ok(link_status, dp->link.num_lanes)) {
+		dp_info(dp, "[HPD IRQ] DP link is down, re-establish the link\n");
+		dp_link_down_event_handler(dp);
+		return;
+	}
+
 process_irq:
 	if (irq & DP_CP_IRQ) {
 		dp_info(dp, "[HPD IRQ] Content Protection\n");
@@ -1527,7 +1533,7 @@ process_irq:
 		dp_automated_test_irq_handler(dp);
 	} else if (irq & DP_SINK_SPECIFIC_IRQ) {
 		dp_info(dp, "[HPD IRQ] Sink Specific\n");
-		dp_sink_specific_irq_handler(dp);
+		dp_link_down_event_handler(dp);
 	} else
 		dp_info(dp, "[HPD IRQ] unknown IRQ (0x%X)\n", irq);
 }
