@@ -669,6 +669,14 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 					"reducing link rate to %u during CR phase\n",
 					dp->link.link_rate);
 				continue;
+			} else if (dp->link.num_lanes > 1) {
+				dp->link.num_lanes >>= 1;
+				dp->link.link_rate = dp_get_max_link_rate(dp);
+
+				dp_info(dp,
+					"reducing lanes number to %u during CR phase\n",
+					dp->link.num_lanes);
+				continue;
 			}
 
 			dp_err(dp, "Link training failed during CR phase\n");
@@ -684,6 +692,14 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 				dp_info(dp,
 					"reducing link rate to %u during EQ phase\n",
 					dp->link.link_rate);
+				continue;
+			} else if (dp->link.num_lanes > 1) {
+				dp->link.num_lanes >>= 1;
+				dp->link.link_rate = dp_get_max_link_rate(dp);
+
+				dp_info(dp,
+					"reducing lanes number to %u during EQ phase\n",
+					dp->link.num_lanes);
 				continue;
 			}
 

@@ -31,6 +31,7 @@ enum exynos_mipi_sync_mode {
 	MIPI_CMD_SYNC_LHBM = BIT(2),
 	MIPI_CMD_SYNC_GHBM = BIT(3),
 	MIPI_CMD_SYNC_BL = BIT(4),
+	MIPI_CMD_SYNC_OP_RATE = BIT(5),
 };
 
 struct exynos_drm_connector;
@@ -67,6 +68,7 @@ struct exynos_drm_connector_properties {
 	struct drm_property *mipi_sync;
 	struct drm_property *panel_orientation;
 	struct drm_property *vrr_switch_duration;
+	struct drm_property *operation_rate;
 };
 
 struct exynos_display_dsc {
@@ -193,6 +195,9 @@ struct exynos_drm_connector_state {
 
 	/* @is_recovering: whether we're doing decon recovery */
 	bool is_recovering;
+
+	/* @operation_rate: panel operation rate */
+	unsigned int operation_rate;
 };
 
 #define to_exynos_connector_state(connector_state) \

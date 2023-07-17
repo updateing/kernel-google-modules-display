@@ -82,6 +82,7 @@
 #define HBM_FLAG_BL_UPDATE      BIT(1)
 #define HBM_FLAG_LHBM_UPDATE    BIT(2)
 #define HBM_FLAG_DIMMING_UPDATE BIT(3)
+#define HBM_FLAG_OP_RATE_UPDATE BIT(4)
 
 #define IS_HBM_ON(mode)	((mode) >= HBM_ON_IRC_ON && (mode) < HBM_STATE_MAX)
 #define IS_HBM_ON_IRC_OFF(mode)	(((mode) == HBM_ON_IRC_OFF))
@@ -150,6 +151,12 @@ struct exynos_panel_te2_timing {
 	u16 rising_edge;
 	/* @falling_edge: vertical end point */
 	u16 falling_edge;
+};
+
+enum exynos_acl_mode {
+	ACL_OFF = 0,
+	ACL_NORMAL,
+	ACL_ENHANCED,
 };
 
 /**
@@ -283,7 +290,7 @@ struct exynos_panel_funcs {
 	 * enablement. If this is not defined, it means that panel does not
 	 * support acl.
 	 */
-	void (*set_acl_mode)(struct exynos_panel *exynos_panel, bool on);
+	void (*set_acl_mode)(struct exynos_panel *exynos_panel, enum exynos_acl_mode mode);
 
 	/**
 	 * @set_power:
@@ -758,8 +765,8 @@ struct exynos_panel {
 	/* TE width before last rr command was sent */
 	u32 last_rr_te_usec;
 
-        /* Automatic Current Limiting(ACL) */
-	bool acl_mode;
+	/* Automatic Current Limiting(ACL) */
+	enum exynos_acl_mode acl_mode;
 
 	struct {
 		struct local_hbm {
