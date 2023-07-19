@@ -14,11 +14,7 @@
 #include <drm/drm_probe_helper.h>
 
 #include "exynos_drm_drv.h"
-#include "exynos_drm_connector.h"
-
-#define HDR_DOLBY_VISION	BIT(1)
-#define HDR_HDR10		BIT(2)
-#define HDR_HLG			BIT(3)
+#include "exynos_drm_format.h"
 
 static inline struct exynos_drm_connector_properties *
 dev_get_exynos_connector_properties(struct drm_device *dev)
@@ -244,16 +240,9 @@ static int exynos_drm_connector_create_brightness_properties(struct drm_device *
 
 static int exynos_drm_connector_create_hdr_formats_property(struct drm_device *dev)
 {
-	static const struct drm_prop_enum_list props[] = {
-		{ __builtin_ffs(HDR_DOLBY_VISION) - 1,	"Dolby Vision"	},
-		{ __builtin_ffs(HDR_HDR10) - 1,		"HDR10"		},
-		{ __builtin_ffs(HDR_HLG) - 1,		"HLG"		},
-	};
 	struct exynos_drm_connector_properties *p = dev_get_exynos_connector_properties(dev);
 
-	p->hdr_formats = drm_property_create_bitmask(dev, DRM_MODE_PROP_IMMUTABLE, "hdr_formats",
-						     props, ARRAY_SIZE(props),
-						     HDR_DOLBY_VISION | HDR_HDR10 | HDR_HLG);
+	p->hdr_formats = exynos_create_hdr_formats_drm_property(dev, DRM_MODE_PROP_IMMUTABLE);
 	if (!p->hdr_formats)
 		return -ENOMEM;
 

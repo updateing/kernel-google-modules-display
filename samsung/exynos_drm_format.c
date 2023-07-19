@@ -11,6 +11,7 @@
  */
 
 #include <drm/drm_print.h>
+#include <drm/drm_property.h>
 #include <uapi/drm/drm_fourcc.h>
 #include <drm/drm_fourcc_gs101.h>
 
@@ -287,4 +288,16 @@ const struct dpu_fmt *dpu_find_fmt_info(u32 fmt)
 			__func__, fmt);
 
 	return NULL;
+}
+
+struct drm_property *exynos_create_hdr_formats_drm_property(struct drm_device *dev, int prop_flags)
+{
+	static const struct drm_prop_enum_list props[] = {
+		{ __builtin_ffs(HDR_DOLBY_VISION) - 1, "Dolby Vision" },
+		{ __builtin_ffs(HDR_HDR10) - 1, "HDR10" },
+		{ __builtin_ffs(HDR_HLG) - 1, "HLG" },
+	};
+
+	return drm_property_create_bitmask(dev, prop_flags, "hdr_formats", props, ARRAY_SIZE(props),
+					   HDR_DOLBY_VISION | HDR_HDR10 | HDR_HLG);
 }

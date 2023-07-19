@@ -38,10 +38,6 @@
 #define FIXED_TE2_VREFRESH_NORMAL	120
 #define FIXED_TE2_VREFRESH_LP		30
 
-#define HDR_DOLBY_VISION	BIT(1)
-#define HDR_HDR10		BIT(2)
-#define HDR_HLG			BIT(3)
-
 #define BL_STATE_STANDBY	BL_CORE_FBBLANK
 #define BL_STATE_LP		BIT(30) /* backlight is in LP mode */
 
