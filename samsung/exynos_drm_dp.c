@@ -1034,10 +1034,10 @@ static void dp_parse_edid(struct dp_device *dp, struct edid *edid)
 
 	drm_edid_get_monitor_name(edid, dp->sink.sink_name, SINK_NAME_LEN);
 
-	dp_info(dp, "Sink Manufacturer: %s\n", dp->sink.edid_manufacturer);
-	dp_info(dp, "Sink Product: %x\n", dp->sink.edid_product);
-	dp_info(dp, "Sink Serial: %x\n", dp->sink.edid_serial);
-	dp_info(dp, "Sink Name: %s\n", dp->sink.sink_name);
+	dp_info(dp, "EDID: Sink Manufacturer: %s\n", dp->sink.edid_manufacturer);
+	dp_info(dp, "EDID: Sink Product: %x\n", dp->sink.edid_product);
+	dp_info(dp, "EDID: Sink Serial: %x\n", dp->sink.edid_serial);
+	dp_info(dp, "EDID: Sink Name: %s\n", dp->sink.sink_name);
 }
 
 static void dp_clean_drm_modes(struct dp_device *dp)
@@ -1079,10 +1079,7 @@ static bool dp_find_prefer_mode(struct dp_device *dp)
 
 	list_for_each_entry_safe (mode, t, &connector->probed_modes, head) {
 		if ((mode->type & DRM_MODE_TYPE_PREFERRED)) {
-			dp_info(dp,
-				"pref: %s@%d, type: %d, stat: %d, ratio: %d\n",
-				mode->name, drm_mode_vrefresh(mode), mode->type,
-				mode->status, mode->picture_aspect_ratio);
+			dp_info(dp, "EDID: pref mode: " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
 			drm_mode_copy(&dp->pref_mode, mode);
 			drm_mode_copy(&dp->cur_mode, mode);
 			found = true;
@@ -1091,70 +1088,109 @@ static bool dp_find_prefer_mode(struct dp_device *dp)
 	}
 
 	if (!found) {
-		dp_info(dp, "there are no valid mode, fail-safe\n");
+		dp_info(dp, "EDID: no preferred mode found, using fail-safe mode\n");
 		dp_mode_set_fail_safe(dp);
 	}
 
 	return found;
 }
 
-static void dp_sad_to_audio_info(struct dp_device *dp, struct cea_sad *sads, int num)
+static void dp_sad_to_audio_info(struct dp_device *dp, struct cea_sad *sads)
 {
 	int i;
 
+	dp->sink.has_pcm_audio = false;
+
 	/* enum hdmi_audio_coding_type & enum hdmi_audio_sample_frequency are defined in hdmi.h */
-	for (i = 0; i < num; i++) {
-		dp_info(dp, "audio format: %u, ch: %u, freq: %u, byte2: 0x%08X\n",
-			sads[i].format, sads[i].channels, sads[i].freq, sads[i].byte2);
+	for (i = 0; i < dp->num_sads; i++) {
+		dp_info(dp, "EDID: SAD %d: fmt: 0x%02x, ch: 0x%02x, freq: 0x%02x, byte2: 0x%02x\n",
+			i + 1, sads[i].format, sads[i].channels, sads[i].freq, sads[i].byte2);
 
 		if (sads[i].format == HDMI_AUDIO_CODING_TYPE_PCM) {
-			dp->sink.audio_ch_num |= 1 << sads[i].channels;
-			dp->sink.audio_sample_rates |= sads[i].freq;
-			dp->sink.audio_bit_rates |= sads[i].byte2;
+			dp->sink.has_pcm_audio = true;
+			dp->sink.audio_ch_num = sads[i].channels + 1;
+			dp->sink.audio_sample_rates = sads[i].freq;
+			dp->sink.audio_bit_rates = sads[i].byte2;
 		}
 	}
-	dp_info(dp, "HDMI Audio ch: %u, sample_rates: %u, bit_rates: %u bps\n",
-		dp->sink.audio_ch_num, dp->sink.audio_sample_rates, dp->sink.audio_bit_rates);
+
+	if (dp->sink.has_pcm_audio)
+		dp_info(dp, "EDID: PCM audio: ch: %u, sample_rates: 0x%02x, bit_rates: 0x%02x\n",
+			dp->sink.audio_ch_num, dp->sink.audio_sample_rates,
+			dp->sink.audio_bit_rates);
 }
+
+static const u8 dp_fake_edid[EDID_LENGTH] = {
+	/* header */
+	0x0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0,
+	/* vendor/product info */
+	0x1d, 0xef, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xff, 0x21,
+	/* EDID version */
+	0x1, 0x2,
+	/* basic display parameters */
+	0xa5, 0x46, 0x27, 0x78, 0x0,
+	/* color characteristics */
+	0xba, 0xc5, 0xa9, 0x53, 0x4e, 0xa6, 0x25, 0xe, 0x50, 0x54,
+	/* established timings: 640x480 @ 60 */
+	0x20, 0x0, 0x0,
+	/* standard timings: none */
+	0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1,
+	0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1,
+	/* detailed timings: none */
+	0x0, 0x0, 0x0, 0x10, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x10, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x10, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x10, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	/* extension flag + checksum */
+	0x0, 0x97,
+};
 
 static void dp_on_by_hpd_plug(struct dp_device *dp)
 {
 	struct drm_connector *connector = &dp->connector;
 	struct drm_device *dev = connector->dev;
+	struct edid *edid;
+	struct cea_sad *sads;
+
+	edid = drm_do_get_edid(connector, dp_get_edid_block, dp);
+	if (!edid) {
+		dp_err(dp, "EDID: failed to read EDID from sink, using fake EDID\n");
+		edid = kmemdup(dp_fake_edid, EDID_LENGTH, GFP_KERNEL);
+	} else if (!drm_edid_is_valid(edid)) {
+		dp_err(dp, "EDID: invalid EDID, using fake EDID\n");
+		kfree(edid);
+		edid = kmemdup(dp_fake_edid, EDID_LENGTH, GFP_KERNEL);
+	}
+
+	if (drm_connector_update_edid_property(connector, edid))
+		dp_err(dp, "EDID: drm_connector_update_edid_property() failed\n");
+
+	dp_parse_edid(dp, edid);
+	mutex_lock(&dev->mode_config.mutex);
+	dp_clean_drm_modes(dp);
+	dp->num_modes = drm_add_edid_modes(connector, edid);
+	dp->num_sads = drm_edid_to_sad(edid, &sads);
+	mutex_unlock(&dev->mode_config.mutex);
+	kfree(edid);
+
+	dp_sad_to_audio_info(dp, sads);
+	if (dp->num_sads > 0)
+		kfree(sads);
+
+	if (dp->num_modes > 0)
+		dp_find_prefer_mode(dp);
+
+	dp->state = DP_STATE_ON;
+	dp_info(dp, "%s: DP State changed to ON\n", __func__);
 
 	if (dp->bist_used) {
-		/* Parse EDID for BIST video/audio */
-		struct edid *edid =
-			drm_do_get_edid(connector, dp_get_edid_block, dp);
-		struct cea_sad *sads;
-		int num_modes, num_sad;
-
-		if (edid) {
-			dp_parse_edid(dp, edid);
-
-			mutex_lock(&dev->mode_config.mutex);
-			dp_clean_drm_modes(dp);
-			num_modes = drm_add_edid_modes(connector, edid);
-			num_sad = drm_edid_to_sad(edid, &sads);
-			mutex_unlock(&dev->mode_config.mutex);
-			kfree(edid);
-
-			if (num_modes)
-				dp_find_prefer_mode(dp);
-
-			if (num_sad > 0)
-				dp_sad_to_audio_info(dp, sads, num_sad);
-		}
-
-		dp->state = DP_STATE_ON;
-		dp_info(dp, "%s: DP State changed to ON\n", __func__);
-
 		/* Enable BIST video */
 		dp_enable(&dp->encoder);
 	} else {
-		dp->state = DP_STATE_ON;
-		dp_info(dp, "%s: DP State changed to ON\n", __func__);
-
 		hdcp_dplink_connect_state(DP_CONNECT);
 
 		if (dev) {
@@ -1769,28 +1805,14 @@ static int dp_detect(struct drm_connector *connector,
 static int dp_get_modes(struct drm_connector *connector)
 {
 	struct dp_device *dp = connector_to_dp(connector);
-	struct edid *edid;
-	int num_modes;
 
 	if (dp->state == DP_STATE_INIT) {
 		dp_warn(dp, "%s: DP is not ON\n", __func__);
 		return 0;
 	}
 
-	edid = drm_do_get_edid(connector, dp_get_edid_block, dp);
-	if (!edid) {
-		dp_err(dp, "failed to read EDID\n");
-		return 0;
-	}
-
-	dp_clean_drm_modes(dp);
-	drm_connector_update_edid_property(connector, edid);
-	num_modes = drm_add_edid_modes(connector, edid);
-	if (num_modes)
-		dp_find_prefer_mode(dp);
-	kfree(edid);
-
-	return num_modes;
+	dp_info(dp, "dp->num_modes = %d\n", dp->num_modes);
+	return dp->num_modes;
 }
 
 static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector, struct drm_display_mode *mode)
