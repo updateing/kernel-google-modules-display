@@ -103,6 +103,7 @@ retry:
 
 	if (!crtc_state->enable) {
 		pr_debug("%s: skipping due to crtc disabled\n", __func__);
+		ret = -ENOTCONN;
 		goto out;
 	}
 
@@ -355,7 +356,7 @@ int exynos_hibernation_suspend(struct exynos_hibernation *hiber)
 
 	if (atomic_read(&hiber->block_cnt) > 0)
 		ret = -EBUSY;
-	else if (hiber->decon->state == DECON_STATE_ON)
+	else
 		ret = _exynos_hibernation_run(hiber, false);
 
 	return ret;

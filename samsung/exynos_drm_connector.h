@@ -69,6 +69,7 @@ struct exynos_drm_connector_properties {
 	struct drm_property *panel_orientation;
 	struct drm_property *vrr_switch_duration;
 	struct drm_property *operation_rate;
+	struct drm_property *refresh_on_lp;
 };
 
 struct exynos_display_dsc {

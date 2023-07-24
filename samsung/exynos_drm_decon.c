@@ -2401,14 +2401,17 @@ static int decon_suspend(struct device *dev)
 	struct decon_device *decon = dev_get_drvdata(dev);
 	int ret;
 
-	if (!decon_is_effectively_active(decon))
-		return 0;
-
 	decon_debug(decon, "%s\n", __func__);
+
+	if (!decon->hibernation)
+		return 0;
 
 	ret = exynos_hibernation_suspend(decon->hibernation);
 
-	DPU_EVENT_LOG(DPU_EVT_DECON_SUSPEND, decon->id, NULL);
+	if (ret == -ENOTCONN)
+		ret = 0;
+	else
+		DPU_EVENT_LOG(DPU_EVT_DECON_SUSPEND, decon->id, NULL);
 
 	return ret;
 }
