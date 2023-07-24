@@ -912,7 +912,7 @@ static void s6e3hc3_commit_done(struct exynos_panel *ctx)
 	const struct s6e3hc3_mode_data *mdata;
 	const struct s6e3hc3_panel *spanel = to_spanel(ctx);
 
-	if (!ctx->enabled || !ctx->current_mode)
+	if (!ctx->enabled || ctx->current_mode->exynos_mode.is_lp_mode)
 		return;
 
 	mdata = ctx->current_mode->priv_data;

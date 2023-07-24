@@ -980,7 +980,7 @@ static bool s6e3hc4_update_idle_state(struct exynos_panel *ctx)
 /* TODO: move update te2 to common display driver for other panel drivers */
 static void s6e3hc4_commit_done(struct exynos_panel *ctx)
 {
-	if (!ctx->current_mode)
+	if (ctx->current_mode->exynos_mode.is_lp_mode)
 		return;
 
 	if (s6e3hc4_update_idle_state(ctx))

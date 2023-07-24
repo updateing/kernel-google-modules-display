@@ -838,7 +838,7 @@ static void nt37290_commit_done(struct exynos_panel *ctx)
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 	bool updated = false;
 
-	if (!is_panel_active(ctx) || !pmode)
+	if (!is_panel_active(ctx) || pmode->exynos_mode.is_lp_mode)
 		return;
 
 	if (spanel->rrs_in_progress) {
