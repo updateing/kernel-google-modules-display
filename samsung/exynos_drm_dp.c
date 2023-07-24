@@ -1200,8 +1200,10 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 			drm_kms_helper_hotplug_event(dev);
 		}
 
-		dp_info(dp, "call DP audio notifier (connected)\n");
-		blocking_notifier_call_chain(&dp_ado_notifier_head, (unsigned long)1, NULL);
+		if (dp->sink.has_pcm_audio) {
+			dp_info(dp, "call DP audio notifier (connected)\n");
+			blocking_notifier_call_chain(&dp_ado_notifier_head, 1UL, NULL);
+		}
 	}
 }
 
@@ -1270,8 +1272,10 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 				drm_kms_helper_hotplug_event(dev);
 			}
 
-			dp_info(dp, "call DP audio notifier (disconnected)\n");
-			blocking_notifier_call_chain(&dp_ado_notifier_head, (unsigned long)-1, NULL);
+			if (dp->sink.has_pcm_audio) {
+				dp_info(dp, "call DP audio notifier (disconnected)\n");
+				blocking_notifier_call_chain(&dp_ado_notifier_head, -1UL, NULL);
+			}
 
 			/* Wait Audio is stopped if Audio is working. */
 			if (dp_get_audio_state(dp) != DP_AUDIO_DISABLE) {
