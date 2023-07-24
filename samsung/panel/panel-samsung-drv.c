@@ -773,11 +773,34 @@ int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connec
 }
 EXPORT_SYMBOL(exynos_panel_get_modes);
 
+static void _exynos_panel_disable_normal_feat_locked(struct exynos_panel *ctx)
+{
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+	bool is_lhbm_enabled = !is_local_hbm_disabled(ctx);
+	bool is_hbm_enabled = IS_HBM_ON(ctx->hbm_mode);
+
+	if (is_lhbm_enabled && funcs && funcs->set_local_hbm_mode) {
+		ctx->hbm.local_hbm.requested_state = LOCAL_HBM_DISABLED;
+		panel_update_local_hbm_locked(ctx);
+		/* restore the state while calling restore function */
+		ctx->hbm.local_hbm.requested_state = LOCAL_HBM_ENABLED;
+	}
+	/* TODO: restore hbm if needed */
+	if (is_hbm_enabled && funcs && funcs->set_hbm_mode)
+		funcs->set_hbm_mode(ctx, HBM_OFF);
+
+	if (!is_lhbm_enabled && !is_hbm_enabled)
+		return;
+
+	dev_warn(ctx->dev,
+		"%s: unexpected lhbm(%d) or hbm(%d) @ %s, force off to avoid unpredictable issue\n",
+		__func__, is_lhbm_enabled, is_hbm_enabled, (!ctx->enabled) ? "OFF" : "ON or LP");
+}
+
 int exynos_panel_disable(struct drm_panel *panel)
 {
 	struct exynos_panel *ctx =
 		container_of(panel, struct exynos_panel, panel);
-	const struct exynos_panel_funcs *exynos_panel_func;
 
 	ctx->enabled = false;
 	ctx->dimming_on = false;
@@ -787,25 +810,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->cabc_mode = CABC_OFF;
 
 	mutex_lock(&ctx->mode_lock);
-	exynos_panel_func = ctx->desc->exynos_panel_func;
-	if (exynos_panel_func && exynos_panel_func->set_local_hbm_mode) {
-		bool is_forced_off = false;
-
-		ctx->hbm.local_hbm.requested_state = LOCAL_HBM_DISABLED;
-		if (!is_local_hbm_disabled(ctx)) {
-			is_forced_off = true;
-			dev_dbg(ctx->dev, "%s: force disabling lhbm\n", __func__);
-		}
-		panel_update_local_hbm_locked(ctx);
-
-		/* restore the state while enabling panel if needed */
-		if (is_forced_off)
-			ctx->hbm.local_hbm.requested_state = LOCAL_HBM_ENABLED;
-	}
-	if (exynos_panel_func && exynos_panel_func->set_hbm_mode)
-		exynos_panel_func->set_hbm_mode(ctx, HBM_OFF);
-	else
-		ctx->hbm_mode = HBM_OFF;
+	_exynos_panel_disable_normal_feat_locked(ctx);
 	exynos_panel_send_cmd_set(ctx, ctx->desc->off_cmd_set);
 	mutex_unlock(&ctx->mode_lock);
 	dev_dbg(ctx->dev, "%s\n", __func__);
@@ -2008,6 +2013,36 @@ static void exynos_panel_set_cabc(struct exynos_panel *ctx, enum exynos_cabc_mod
 	mutex_unlock(&ctx->mode_lock);
 }
 
+static void exynos_panel_lhbm_on_delay_frames(struct drm_crtc *crtc,
+						struct exynos_panel *ctx)
+{
+	u64 last_vblank_cnt = ctx->hbm.local_hbm.last_lp_vblank_cnt;
+
+	if (!ctx->desc->lhbm_on_delay_frames || !last_vblank_cnt)
+		return;
+
+	DPU_ATRACE_BEGIN("lhbm_on_delay_frames");
+	if (crtc && !drm_crtc_vblank_get(crtc)) {
+		int retry = ctx->desc->lhbm_on_delay_frames;
+
+		do {
+			u32 diff = 0;
+			u64 cur_vblank_cnt = drm_crtc_vblank_count(crtc);
+
+			if (cur_vblank_cnt > last_vblank_cnt)
+				diff = cur_vblank_cnt - last_vblank_cnt;
+
+			if (diff < ctx->desc->lhbm_on_delay_frames)
+				drm_crtc_wait_one_vblank(crtc);
+			else
+				break;
+		} while (--retry);
+		drm_crtc_vblank_put(crtc);
+	}
+	ctx->hbm.local_hbm.last_lp_vblank_cnt = 0;
+	DPU_ATRACE_END("lhbm_on_delay_frames");
+}
+
 static void exynos_panel_pre_commit_properties(
 				struct exynos_panel *ctx,
 				struct exynos_drm_connector_state *conn_state)
@@ -2016,6 +2051,7 @@ static void exynos_panel_pre_commit_properties(
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 	bool mipi_sync;
 	bool ghbm_updated = false;
+	const unsigned int normal_feat_flags = HBM_FLAG_GHBM_UPDATE | HBM_FLAG_LHBM_UPDATE;
 
 	if (!conn_state->pending_update_flags)
 		return;
@@ -2024,19 +2060,23 @@ static void exynos_panel_pre_commit_properties(
 	mipi_sync = conn_state->mipi_sync &
 		(MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM | MIPI_CMD_SYNC_BL);
 
-	if ((conn_state->mipi_sync & (MIPI_CMD_SYNC_LHBM | MIPI_CMD_SYNC_GHBM)) &&
+	if ((conn_state->pending_update_flags & normal_feat_flags) &&
 		ctx->current_mode->exynos_mode.is_lp_mode) {
 		dev_warn(ctx->dev,
 			 "%s: skip LHBM/GHBM updates during lp mode, pending_update_flags(0x%x)\n",
 			 __func__, conn_state->pending_update_flags);
-		conn_state->pending_update_flags &= ~(HBM_FLAG_LHBM_UPDATE | HBM_FLAG_GHBM_UPDATE);
+		conn_state->pending_update_flags &= ~normal_feat_flags;
 	}
 
 	if (mipi_sync) {
 		dev_info(ctx->dev, "%s: mipi_sync(0x%lx) pending_update_flags(0x%x)\n", __func__,
 			 conn_state->mipi_sync, conn_state->pending_update_flags);
+		if (conn_state->mipi_sync & MIPI_CMD_SYNC_LHBM)
+			exynos_panel_lhbm_on_delay_frames(conn_state->base.crtc, ctx);
+
 		exynos_panel_check_mipi_sync_timing(conn_state->base.crtc,
 						    ctx->current_mode, ctx);
+
 		exynos_dsi_dcs_write_buffer_force_batch_begin(dsi);
 	}
 
@@ -3386,6 +3426,7 @@ static int exynos_panel_attach_properties(struct exynos_panel *ctx)
 	drm_object_attach_property(obj, p->panel_orientation, ctx->orientation);
 	drm_object_attach_property(obj, p->vrr_switch_duration, desc->vrr_switch_duration);
 	drm_object_attach_property(obj, p->operation_rate, 0);
+	drm_object_attach_property(obj, p->refresh_on_lp, desc->refresh_on_lp);
 
 	if (desc->brt_capability) {
 		ret = exynos_panel_attach_brightness_capability(&ctx->exynos_connector,
@@ -4130,13 +4171,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 
 		if (is_lp_mode && funcs->set_lp_mode) {
 			if (is_active) {
-				if (!is_local_hbm_disabled(ctx) && funcs->set_local_hbm_mode) {
-					dev_warn(ctx->dev,
-						"LHBM is on when switching to LP mode(%s), turn off LHBM first\n",
-						pmode->mode.name);
-					ctx->hbm.local_hbm.requested_state = LOCAL_HBM_DISABLED;
-					panel_update_local_hbm_locked(ctx);
-				}
+				_exynos_panel_disable_normal_feat_locked(ctx);
 				funcs->set_lp_mode(ctx, pmode);
 				ctx->panel_state = PANEL_STATE_LP;
 				need_update_backlight = true;
@@ -4150,6 +4185,13 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				need_update_backlight = true;
 				state_changed = true;
 				come_out_lp_mode = true;
+
+				if (ctx->desc->lhbm_on_delay_frames &&
+					(crtc && !drm_crtc_vblank_get(crtc))) {
+					ctx->hbm.local_hbm.last_lp_vblank_cnt =
+							drm_crtc_vblank_count(crtc);
+					drm_crtc_vblank_put(crtc);
+				}
 			}
 			ctx->current_binned_lp = NULL;
 		} else if (funcs->mode_set) {

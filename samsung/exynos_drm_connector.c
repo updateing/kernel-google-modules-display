@@ -326,6 +326,10 @@ int exynos_drm_connector_create_properties(struct drm_device *dev)
 	if (IS_ERR(p->vrr_switch_duration))
 		return PTR_ERR(p->vrr_switch_duration);
 
+	p->refresh_on_lp = drm_property_create_bool(dev, DRM_MODE_PROP_IMMUTABLE, "refresh_on_lp");
+	if (IS_ERR(p->refresh_on_lp))
+		return PTR_ERR(p->refresh_on_lp);
+
 	ret = exynos_drm_connector_create_luminance_properties(dev);
 	if (ret)
 		return ret;

@@ -576,6 +576,7 @@ struct exynos_panel_desc {
 	bool dbv_extra_frame;
 	bool is_partial;
 	bool is_panel_idle_supported;
+	bool refresh_on_lp;
 	/**
 	 * set true if the panel doesn't have lhbm common hw constraints, include
 	 * 1. only allow turn on lhbm at peak refresh rate
@@ -589,6 +590,11 @@ struct exynos_panel_desc {
 	bool no_lhbm_rr_constraints;
 	const u32 lhbm_post_cmd_delay_frames;
 	const u32 lhbm_effective_delay_frames;
+	/**
+	 * Indicate how many frames are needed at least before sending lhbm on commands
+	 * while exiting from AoD mode. Default 0 means no such constraint.
+	 */
+	const u32 lhbm_on_delay_frames;
 	const unsigned int delay_dsc_reg_init_us;
 	const struct brightness_capability *brt_capability;
 	const u32 *bl_range;
@@ -789,6 +795,7 @@ struct exynos_panel {
 			u32 frame_index;
 			ktime_t last_vblank_ts;
 			bool post_work_disabled;
+			u64 last_lp_vblank_cnt;
 		} local_hbm;
 
 		struct workqueue_struct *wq;
