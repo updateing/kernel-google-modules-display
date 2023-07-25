@@ -1445,6 +1445,7 @@ static void _decon_disable_locked(struct decon_device *decon, bool reset)
 {
 	decon_disable_irqs(decon);
 	atomic_set(&decon->frames_pending, 0);
+	atomic_set(&decon->frame_transfer_pending, 0);
 	_decon_stop_locked(decon, reset, _decon_get_current_fps(decon));
 }
 
@@ -1557,6 +1558,7 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 				    fps, recovering, atomic_read(&decon->frames_pending));
 
 			atomic_set(&decon->frames_pending, 0);
+			atomic_set(&decon->frame_transfer_pending, 0);
 			if (!recovering)
 				decon_dump_all(decon, DPU_EVT_CONDITION_DEFAULT, false);
 
@@ -1745,6 +1747,7 @@ static irqreturn_t decon_irq_handler(int irq, void *dev_data)
 
 	if (irq_sts_reg & DPU_FRAME_DONE_INT_PEND) {
 		DPU_ATRACE_INT_PID("frame_transfer", 0, decon->thread->pid);
+		atomic_set(&decon->frame_transfer_pending, 0);
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMEDONE, decon->id, decon);
 		exynos_dqe_save_lpd_data(decon->dqe);
 		atomic_dec_if_positive(&decon->frames_pending);
@@ -1797,6 +1800,7 @@ static bool decon_check_fs_pending_locked(struct decon_device *decon)
 
 	if (pending_irq & DPU_FRAME_START_INT_PEND) {
 		DPU_ATRACE_INT_PID("frame_transfer", 1, decon->thread->pid);
+		atomic_set(&decon->frame_transfer_pending, 1);
 		DPU_EVENT_LOG(DPU_EVT_DECON_FRAMESTART, decon->id, decon);
 		decon_send_vblank_event_locked(decon);
 		if (decon->config.mode.op_mode == DECON_VIDEO_MODE)
