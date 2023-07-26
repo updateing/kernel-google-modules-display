@@ -743,7 +743,7 @@ void exynos_dqe_hibernation_enter(struct exynos_dqe *dqe)
 		histogram_chan_collect_bins_locked(dqe, hist_id, &hist_chan->bins);
 		histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_HIBERNATION);
 	} else if (hist_chan->run_state == HSTATE_PENDING_FRAMEDONE) {
-		WARN(1, "pending histogram during hibernation\n");
+		pr_debug("pending histogram during hibernation\n");
 		histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_DISABLED);
 	}
 	spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
