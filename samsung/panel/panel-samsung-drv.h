@@ -809,6 +809,8 @@ struct exynos_panel {
 
 	/* current type of mode switch */
 	enum mode_progress_type mode_in_progress;
+	/* indicates BTS raise due to op_hz switch */
+	bool boosted_for_op_hz;
 };
 
 /**

@@ -3616,8 +3616,11 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 		dev_warn(ctx->dev, "%s: failed to get current mode, skip mode check\n", __func__);
 	} else {
 		struct drm_display_mode *target_mode = &new_crtc_state->adjusted_mode;
+		struct exynos_drm_connector_state *exynos_conn_state =
+						to_exynos_connector_state(conn_state);
 		int current_vrefresh = drm_mode_vrefresh(current_mode);
 		int target_vrefresh = drm_mode_vrefresh(target_mode);
+		int clock;
 
 		if (current_mode->hdisplay != target_mode->hdisplay &&
 		    current_mode->vdisplay != target_mode->vdisplay) {
@@ -3630,14 +3633,15 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 				 * the current BTS (higher one) for a few frames to avoid the problem.
 				 */
 				if (current_vrefresh > target_vrefresh) {
-					target_mode->clock =
+					target_mode->clock = DIV_ROUND_UP(
 						target_mode->htotal * target_mode->vtotal *
-						current_vrefresh / 1000;
+						current_vrefresh, 1000);
 					if (target_mode->clock != new_crtc_state->mode.clock) {
 						new_crtc_state->mode_changed = true;
 						dev_dbg(ctx->dev, "%s: keep mode (%s) clock %dhz on rrs\n",
 							__func__, target_mode->name, current_vrefresh);
 					}
+					clock = target_mode->clock;
 				}
 
 				ctx->mode_in_progress = MODE_RES_AND_RR_IN_PROGRESS;
@@ -3649,6 +3653,7 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 			    new_crtc_state->adjusted_mode.clock != new_crtc_state->mode.clock) {
 				new_crtc_state->mode_changed = true;
 				new_crtc_state->adjusted_mode.clock = new_crtc_state->mode.clock;
+				clock = new_crtc_state->mode.clock;
 				dev_dbg(ctx->dev, "%s: restore mode (%s) clock after rrs\n",
 					__func__, new_crtc_state->mode.name);
 			}
@@ -3666,6 +3671,41 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 				current_mode->hdisplay, current_mode->vdisplay, current_vrefresh,
 				target_mode->hdisplay, target_mode->vdisplay, target_vrefresh,
 				ctx->mode_in_progress);
+
+		/*
+		 * We may transfer the frame for the first TE after switching to higher
+		 * op_hz. In this case, the DDIC read speed will become higher while the
+		 * the DPU write speed will remain the same, so underruns would happen.
+		 * Use higher BTS can avoid the issue. Also consider the clock from RRS
+		 * and select the higher one.
+		 */
+		if ((exynos_conn_state->pending_update_flags & HBM_FLAG_OP_RATE_UPDATE) &&
+		    exynos_conn_state->operation_rate > ctx->op_hz) {
+			target_mode->clock = DIV_ROUND_UP(target_mode->htotal *
+					target_mode->vtotal * ctx->peak_vrefresh, 1000);
+			/* use the higher clock to avoid underruns */
+			if (target_mode->clock < clock)
+				target_mode->clock = clock;
+
+			if (target_mode->clock != new_crtc_state->mode.clock) {
+				new_crtc_state->mode_changed = true;
+				ctx->boosted_for_op_hz = true;
+				dev_dbg(ctx->dev, "%s: raise mode clock %dhz on op_hz %d\n",
+					__func__, ctx->peak_vrefresh,
+					exynos_conn_state->operation_rate);
+			}
+		} else if (ctx->boosted_for_op_hz &&
+			   new_crtc_state->adjusted_mode.clock != new_crtc_state->mode.clock) {
+			new_crtc_state->mode_changed = true;
+			ctx->boosted_for_op_hz = false;
+			/* use the higher clock to avoid underruns */
+			if (new_crtc_state->mode.clock < clock)
+				new_crtc_state->adjusted_mode.clock = clock;
+			else
+				new_crtc_state->adjusted_mode.clock = new_crtc_state->mode.clock;
+
+			dev_dbg(ctx->dev, "%s: restore mode clock after op_hz\n", __func__);
+		}
 	}
 
 	if (funcs && funcs->atomic_check) {
