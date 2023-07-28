@@ -730,27 +730,30 @@ err:
 
 static int dp_link_up(struct dp_device *dp)
 {
-	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+	u8 dpcd[DP_RECEIVER_CAP_SIZE + 1];
 	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE];
 	u8 val = 0;
-	unsigned int addr;
 	u32 interval, interval_us;
 	int ret;
 
 	mutex_lock(&dp->training_lock);
 
 	// Read DP Sink device's Capabilities
-	drm_dp_dpcd_readb(&dp->dp_aux, DP_TRAINING_AUX_RD_INTERVAL, &val);
-	if (val & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT)
-		addr = DP_DP13_DPCD_REV;
-	else
-		addr = DP_DPCD_REV;
-
-	ret = drm_dp_dpcd_read(&dp->dp_aux, addr, dpcd, DP_RECEIVER_CAP_SIZE);
+	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
 	if (ret < 0) {
 		dp_err(dp, "failed to read DP Sink device capabilities\n");
 		mutex_unlock(&dp->training_lock);
 		return ret;
+	}
+
+	if (dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT) {
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DP13_DPCD_REV, dpcd,
+				       DP_RECEIVER_CAP_SIZE + 1);
+		if (ret < 0) {
+			dp_err(dp, "failed to read DP Sink device capabilities\n");
+			mutex_unlock(&dp->training_lock);
+			return ret;
+		}
 	}
 
 	// Fill Sink Capabilities
