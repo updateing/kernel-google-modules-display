@@ -1073,6 +1073,8 @@ ssize_t exynos_panel_get_te2_edges(struct exynos_panel *ctx,
 				   char *buf, bool lp_mode);
 int exynos_panel_get_current_mode_te2(struct exynos_panel *ctx,
 				      struct exynos_panel_te2_timing *timing);
+const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
+				const struct drm_display_mode *mode);
 int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connector);
 int exynos_panel_disable(struct drm_panel *panel);
 int exynos_panel_unprepare(struct drm_panel *panel);

@@ -55,8 +55,6 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 static ssize_t exynos_panel_parse_byte_buf(char *input_str, size_t input_len,
 					   const char **out_buf);
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len);
-static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
-							     const struct drm_display_mode *mode);
 static void panel_update_local_hbm_locked(struct exynos_panel *ctx);
 static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 					 const struct exynos_panel_mode *current_mode,
@@ -730,6 +728,32 @@ static void exynos_panel_mode_set_name(struct drm_display_mode *mode)
 	scnprintf(mode->name, DRM_DISPLAY_MODE_LEN, "%dx%dx%d",
 		  mode->hdisplay, mode->vdisplay, drm_mode_vrefresh(mode));
 }
+
+const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
+							     const struct drm_display_mode *mode)
+{
+	const struct exynos_panel_mode *pmode;
+	int i;
+
+	for (i = 0; i < ctx->desc->num_modes; i++) {
+		pmode = &ctx->desc->modes[i];
+
+		if (drm_mode_equal(&pmode->mode, mode))
+			return pmode;
+	}
+
+	pmode = ctx->desc->lp_mode;
+	if (pmode) {
+		const size_t count = ctx->desc->lp_mode_count ? : 1;
+
+		for (i = 0; i < count; i++, pmode++)
+			if (drm_mode_equal(&pmode->mode, mode))
+				return pmode;
+	}
+
+	return NULL;
+}
+EXPORT_SYMBOL(exynos_panel_get_mode);
 
 int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connector)
 {
@@ -2228,30 +2252,6 @@ static int exynos_drm_connector_modes(struct drm_connector *connector)
 	return ret;
 }
 
-static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
-							     const struct drm_display_mode *mode)
-{
-	const struct exynos_panel_mode *pmode;
-	int i;
-
-	for (i = 0; i < ctx->desc->num_modes; i++) {
-		pmode = &ctx->desc->modes[i];
-
-		if (drm_mode_equal(&pmode->mode, mode))
-			return pmode;
-	}
-
-	pmode = ctx->desc->lp_mode;
-	if (pmode) {
-		const size_t count = ctx->desc->lp_mode_count ? : 1;
-
-		for (i = 0; i < count; i++, pmode++)
-			if (drm_mode_equal(&pmode->mode, mode))
-				return pmode;
-	}
-
-	return NULL;
-}
 
 static void exynos_drm_connector_attach_touch(struct exynos_panel *ctx,
 					      const struct drm_connector_state *connector_state)
