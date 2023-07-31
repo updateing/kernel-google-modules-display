@@ -94,9 +94,10 @@ struct dp_sink {
 	u32  edid_product;
 	u32  edid_serial;
 
-	u32 audio_ch_num;
-	u32 audio_sample_rates;
-	u32 audio_bit_rates;
+	bool has_pcm_audio;
+	u8 audio_ch_num;
+	u8 audio_sample_rates;
+	u8 audio_bit_rates;
 };
 
 struct dp_resources {
@@ -166,6 +167,8 @@ struct dp_device {
 	struct drm_display_mode cur_mode;
 	struct drm_display_mode pref_mode;
 	bool fail_safe;
+	int num_modes;
+	int num_sads;
 
 	/* DP Capabilities */
 	struct dp_link link;
