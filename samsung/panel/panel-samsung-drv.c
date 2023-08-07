@@ -55,8 +55,6 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 static ssize_t exynos_panel_parse_byte_buf(char *input_str, size_t input_len,
 					   const char **out_buf);
 static int parse_u32_buf(char *src, size_t src_len, u32 *out, size_t out_len);
-static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
-							     const struct drm_display_mode *mode);
 static void panel_update_local_hbm_locked(struct exynos_panel *ctx);
 static void exynos_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
 					 const struct exynos_panel_mode *current_mode,
@@ -730,6 +728,32 @@ static void exynos_panel_mode_set_name(struct drm_display_mode *mode)
 	scnprintf(mode->name, DRM_DISPLAY_MODE_LEN, "%dx%dx%d",
 		  mode->hdisplay, mode->vdisplay, drm_mode_vrefresh(mode));
 }
+
+const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
+							     const struct drm_display_mode *mode)
+{
+	const struct exynos_panel_mode *pmode;
+	int i;
+
+	for (i = 0; i < ctx->desc->num_modes; i++) {
+		pmode = &ctx->desc->modes[i];
+
+		if (drm_mode_equal(&pmode->mode, mode))
+			return pmode;
+	}
+
+	pmode = ctx->desc->lp_mode;
+	if (pmode) {
+		const size_t count = ctx->desc->lp_mode_count ? : 1;
+
+		for (i = 0; i < count; i++, pmode++)
+			if (drm_mode_equal(&pmode->mode, mode))
+				return pmode;
+	}
+
+	return NULL;
+}
+EXPORT_SYMBOL(exynos_panel_get_mode);
 
 int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connector)
 {
@@ -2228,30 +2252,6 @@ static int exynos_drm_connector_modes(struct drm_connector *connector)
 	return ret;
 }
 
-static const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
-							     const struct drm_display_mode *mode)
-{
-	const struct exynos_panel_mode *pmode;
-	int i;
-
-	for (i = 0; i < ctx->desc->num_modes; i++) {
-		pmode = &ctx->desc->modes[i];
-
-		if (drm_mode_equal(&pmode->mode, mode))
-			return pmode;
-	}
-
-	pmode = ctx->desc->lp_mode;
-	if (pmode) {
-		const size_t count = ctx->desc->lp_mode_count ? : 1;
-
-		for (i = 0; i < count; i++, pmode++)
-			if (drm_mode_equal(&pmode->mode, mode))
-				return pmode;
-	}
-
-	return NULL;
-}
 
 static void exynos_drm_connector_attach_touch(struct exynos_panel *ctx,
 					      const struct drm_connector_state *connector_state)
@@ -3616,8 +3616,11 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 		dev_warn(ctx->dev, "%s: failed to get current mode, skip mode check\n", __func__);
 	} else {
 		struct drm_display_mode *target_mode = &new_crtc_state->adjusted_mode;
+		struct exynos_drm_connector_state *exynos_conn_state =
+						to_exynos_connector_state(conn_state);
 		int current_vrefresh = drm_mode_vrefresh(current_mode);
 		int target_vrefresh = drm_mode_vrefresh(target_mode);
+		int clock;
 
 		if (current_mode->hdisplay != target_mode->hdisplay &&
 		    current_mode->vdisplay != target_mode->vdisplay) {
@@ -3630,14 +3633,15 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 				 * the current BTS (higher one) for a few frames to avoid the problem.
 				 */
 				if (current_vrefresh > target_vrefresh) {
-					target_mode->clock =
+					target_mode->clock = DIV_ROUND_UP(
 						target_mode->htotal * target_mode->vtotal *
-						current_vrefresh / 1000;
+						current_vrefresh, 1000);
 					if (target_mode->clock != new_crtc_state->mode.clock) {
 						new_crtc_state->mode_changed = true;
 						dev_dbg(ctx->dev, "%s: keep mode (%s) clock %dhz on rrs\n",
 							__func__, target_mode->name, current_vrefresh);
 					}
+					clock = target_mode->clock;
 				}
 
 				ctx->mode_in_progress = MODE_RES_AND_RR_IN_PROGRESS;
@@ -3649,6 +3653,7 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 			    new_crtc_state->adjusted_mode.clock != new_crtc_state->mode.clock) {
 				new_crtc_state->mode_changed = true;
 				new_crtc_state->adjusted_mode.clock = new_crtc_state->mode.clock;
+				clock = new_crtc_state->mode.clock;
 				dev_dbg(ctx->dev, "%s: restore mode (%s) clock after rrs\n",
 					__func__, new_crtc_state->mode.name);
 			}
@@ -3666,6 +3671,41 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 				current_mode->hdisplay, current_mode->vdisplay, current_vrefresh,
 				target_mode->hdisplay, target_mode->vdisplay, target_vrefresh,
 				ctx->mode_in_progress);
+
+		/*
+		 * We may transfer the frame for the first TE after switching to higher
+		 * op_hz. In this case, the DDIC read speed will become higher while the
+		 * the DPU write speed will remain the same, so underruns would happen.
+		 * Use higher BTS can avoid the issue. Also consider the clock from RRS
+		 * and select the higher one.
+		 */
+		if ((exynos_conn_state->pending_update_flags & HBM_FLAG_OP_RATE_UPDATE) &&
+		    exynos_conn_state->operation_rate > ctx->op_hz) {
+			target_mode->clock = DIV_ROUND_UP(target_mode->htotal *
+					target_mode->vtotal * ctx->peak_vrefresh, 1000);
+			/* use the higher clock to avoid underruns */
+			if (target_mode->clock < clock)
+				target_mode->clock = clock;
+
+			if (target_mode->clock != new_crtc_state->mode.clock) {
+				new_crtc_state->mode_changed = true;
+				ctx->boosted_for_op_hz = true;
+				dev_dbg(ctx->dev, "%s: raise mode clock %dhz on op_hz %d\n",
+					__func__, ctx->peak_vrefresh,
+					exynos_conn_state->operation_rate);
+			}
+		} else if (ctx->boosted_for_op_hz &&
+			   new_crtc_state->adjusted_mode.clock != new_crtc_state->mode.clock) {
+			new_crtc_state->mode_changed = true;
+			ctx->boosted_for_op_hz = false;
+			/* use the higher clock to avoid underruns */
+			if (new_crtc_state->mode.clock < clock)
+				new_crtc_state->adjusted_mode.clock = clock;
+			else
+				new_crtc_state->adjusted_mode.clock = new_crtc_state->mode.clock;
+
+			dev_dbg(ctx->dev, "%s: restore mode clock after op_hz\n", __func__);
+		}
 	}
 
 	if (funcs && funcs->atomic_check) {

@@ -809,6 +809,8 @@ struct exynos_panel {
 
 	/* current type of mode switch */
 	enum mode_progress_type mode_in_progress;
+	/* indicates BTS raise due to op_hz switch */
+	bool boosted_for_op_hz;
 };
 
 /**
@@ -1073,6 +1075,8 @@ ssize_t exynos_panel_get_te2_edges(struct exynos_panel *ctx,
 				   char *buf, bool lp_mode);
 int exynos_panel_get_current_mode_te2(struct exynos_panel *ctx,
 				      struct exynos_panel_te2_timing *timing);
+const struct exynos_panel_mode *exynos_panel_get_mode(struct exynos_panel *ctx,
+				const struct drm_display_mode *mode);
 int exynos_panel_get_modes(struct drm_panel *panel, struct drm_connector *connector);
 int exynos_panel_disable(struct drm_panel *panel);
 int exynos_panel_unprepare(struct drm_panel *panel);
