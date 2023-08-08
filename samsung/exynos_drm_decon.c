@@ -1628,8 +1628,10 @@ static ssize_t early_wakeup_store(struct device *dev,
 	if (!trigger)
 		return len;
 
+	DPU_ATRACE_BEGIN(__func__);
 	decon = dev_get_drvdata(dev);
 	exynos_hibernation_async_exit(decon->hibernation);
+	DPU_ATRACE_END(__func__);
 
 	return len;
 }
