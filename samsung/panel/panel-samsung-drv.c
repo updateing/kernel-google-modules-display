@@ -3529,10 +3529,14 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 				       struct drm_bridge_state *old_bridge_state)
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
+	struct dsim_device *dsim = host_to_dsi(to_mipi_dsi_device(ctx->dev)->host);
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	bool need_update_backlight = false;
 	bool is_active;
 	const bool is_lp_mode = ctx->current_mode &&
 				ctx->current_mode->exynos_mode.is_lp_mode;
+
+	DPU_ATRACE_BEGIN(__func__);
 
 	if (ctx->exynos_connector.base.state) {
 		mutex_lock(&ctx->crtc_lock);
@@ -3562,6 +3566,12 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	}
 	ctx->panel_state = is_lp_mode ? PANEL_STATE_LP : PANEL_STATE_NORMAL;
 
+	if (funcs && funcs->update_ffc &&
+	    (!ctx->self_refresh_active || dsim->clk_param.hs_clk_changed)) {
+		funcs->update_ffc(ctx, dsim->clk_param.hs_clk);
+		dsim->clk_param.hs_clk_changed = false;
+	}
+
 	if (ctx->self_refresh_active) {
 		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
 
@@ -3576,8 +3586,6 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 	}
 
 	if (is_lp_mode) {
-		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
-
 		if (funcs && funcs->set_post_lp_mode)
 			funcs->set_post_lp_mode(ctx);
 	}
@@ -3592,6 +3600,8 @@ static void exynos_panel_bridge_enable(struct drm_bridge *bridge,
 		schedule_delayed_work(&ctx->normal_mode_work,
 				      msecs_to_jiffies(ctx->normal_mode_work_delay_ms));
 	}
+
+	DPU_ATRACE_END(__func__);
 }
 
 /*
@@ -3753,12 +3763,21 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 	struct drm_crtc_state *crtc_state = !conn_state->crtc ? NULL : conn_state->crtc->state;
 	const bool self_refresh_active = crtc_state && crtc_state->self_refresh_active;
 
+	DPU_ATRACE_BEGIN(__func__);
+
 	if (self_refresh_active && !exynos_conn_state->blanked_mode) {
+		struct dsim_device *dsim = host_to_dsi(to_mipi_dsi_device(ctx->dev)->host);
+		const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
 		mutex_lock(&ctx->mode_lock);
 		dev_dbg(ctx->dev, "self refresh state : %s\n", __func__);
 
 		ctx->self_refresh_active = true;
 		panel_update_idle_mode_locked(ctx);
+
+		if (funcs && funcs->pre_update_ffc &&
+		    (dsim->clk_param.hs_clk_changed || dsim->clk_param.pending_hs_clk))
+			funcs->pre_update_ffc(ctx);
 		mutex_unlock(&ctx->mode_lock);
 	} else {
 		if (exynos_conn_state->blanked_mode) {
@@ -3794,6 +3813,8 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 		ctx->crtc = NULL;
 		mutex_unlock(&ctx->crtc_lock);
 	}
+
+	DPU_ATRACE_END(__func__);
 }
 
 static void exynos_panel_bridge_post_disable(struct drm_bridge *bridge,
@@ -4710,6 +4731,9 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 		ctx->normal_mode_work_delay_ms = ctx->desc->normal_mode_work_delay_ms;
 		INIT_DELAYED_WORK(&ctx->normal_mode_work, exynos_panel_normal_mode_work);
 	}
+
+	if (ctx->desc->default_dsi_hs_clk)
+		ctx->dsi_hs_clk = ctx->desc->default_dsi_hs_clk;
 
 	mutex_init(&ctx->mode_lock);
 	mutex_init(&ctx->crtc_lock);
