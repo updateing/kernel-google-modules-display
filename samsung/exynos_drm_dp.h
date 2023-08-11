@@ -64,6 +64,7 @@ struct dp_link {
 struct dp_host {
 	u32  link_rate;
 	u8   num_lanes;
+	u8   max_bpc;
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;

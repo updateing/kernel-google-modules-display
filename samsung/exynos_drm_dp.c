@@ -144,6 +144,10 @@ static unsigned long dp_lanes = 4;    /* 4 lanes is the default */
 module_param(dp_lanes, ulong, 0664);
 MODULE_PARM_DESC(dp_lanes, "use specific number of DP lanes by setting dp_lanes=x");
 
+static unsigned long dp_bpc = 8;    /* 8 bpc is the default */
+module_param(dp_bpc, ulong, 0664);
+MODULE_PARM_DESC(dp_bpc, "use specific BPC by setting dp_bpc=x");
+
 static void dp_fill_host_caps(struct dp_device *dp)
 {
 	switch (dp_rate) {
@@ -172,6 +176,19 @@ static void dp_fill_host_caps(struct dp_device *dp)
 	case 4:
 	default:
 		dp->host.num_lanes = 4;
+		break;
+	}
+
+	switch (dp_bpc) {
+	case 10:
+		dp->host.max_bpc = 10;
+		break;
+	case 8:
+		dp->host.max_bpc = 8;
+		break;
+	case 6:
+	default:
+		dp->host.max_bpc = 6;
 		break;
 	}
 
@@ -815,13 +832,22 @@ static enum bit_depth dp_get_bpc(struct dp_device *dp)
 	struct drm_connector *connector = &dp->connector;
 	struct drm_display_info *display_info = &connector->display_info;
 
-	dp_info(dp, "display_info->bpc = %u\n", display_info->bpc);
-
 	/*
-	 * For now, force DP to use bpc = 8.
-	 * TODO: Revisit this later for DP HDR support.
+	 * drm_atomic_connector_check() has been called.
+	 * We can use connector->state->max_bpc directly.
 	 */
-	return BPC_8;
+	u8 bpc = connector->state->max_bpc;
+
+	dp_info(dp, "display_info->bpc = %u, bpc = %u\n", display_info->bpc, bpc);
+
+	switch (bpc) {
+	case 10:
+		return BPC_10;
+	case 8:
+		return BPC_8;
+	default:
+		return BPC_6;
+	}
 }
 
 static void dp_set_video_timing(struct dp_device *dp)
@@ -1789,9 +1815,21 @@ static const struct drm_encoder_funcs dp_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
 
+static void dp_connector_reset(struct drm_connector *connector)
+{
+	/* Need to preserve max BPC settings over reset */
+	u8 max_bpc = connector->state->max_bpc;
+	u8 max_req_bpc = connector->state->max_requested_bpc;
+
+	drm_atomic_helper_connector_reset(connector);
+
+	connector->state->max_bpc = max_bpc;
+	connector->state->max_requested_bpc = max_req_bpc;
+}
+
 /* DP DRM Connector Functions */
 static const struct drm_connector_funcs dp_connector_funcs = {
-	.reset = drm_atomic_helper_connector_reset,
+	.reset = dp_connector_reset,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.destroy = drm_connector_cleanup,
 	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
@@ -1825,6 +1863,15 @@ static int dp_get_modes(struct drm_connector *connector)
 static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector, struct drm_display_mode *mode)
 {
 	struct dp_device *dp = connector_to_dp(connector);
+	struct drm_display_info *display_info = &connector->display_info;
+
+	/*
+	 * drm_atomic_connector_check() hasn't been called yet.
+	 * We can't use connector->state->max_bpc directly.
+	 * Need to do the same math here.
+	 */
+	u8 dbpc = display_info->bpc ? display_info->bpc : 8;
+	u8 bpc = min(dbpc, connector->state->max_requested_bpc);
 
 	/*
 	 * DP link max data rate in Kbps
@@ -1835,8 +1882,8 @@ static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector, 
 	 */
 	u32 link_data_rate = dp->link.link_rate * dp->link.num_lanes * 8;
 
-	/* DRM display mode data rate (@ 8 bpc) in Kbps */
-	u32 mode_data_rate = mode->clock * 24;
+	/* DRM display mode data rate in Kbps */
+	u32 mode_data_rate = mode->clock * 3 * bpc;
 
 	if (link_data_rate < mode_data_rate) {
 		dp_info(dp, "DROP: " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
@@ -1919,6 +1966,10 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 	}
 
 	dp_fill_host_caps(dp);
+
+	drm_atomic_helper_connector_reset(&dp->connector);
+	drm_connector_attach_max_bpc_property(&dp->connector, 6, dp->host.max_bpc);
+
 	dp_info(dp, "DP Driver has been binded\n");
 
 	return ret;
