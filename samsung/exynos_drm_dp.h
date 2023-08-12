@@ -164,6 +164,7 @@ struct dp_device {
 	/* HPD State */
 	enum hotplug_state hpd_current_state;
 	struct mutex hpd_state_lock;
+	int dp_hotplug_error_code;
 
 	/* DP Driver State */
 	enum dp_state state;

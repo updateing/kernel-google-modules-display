@@ -1588,6 +1588,12 @@ HPD_FAIL:
 	// Use cached error so LINK_TRAINING_FAILURE doesn't retrigger hpd immediately.
 	dp_update_link_status(dp, link_status);
 
+	// TODO: We need to define more error codes, but for now use just 1 for generic error code
+	dp->dp_hotplug_error_code = 1;
+	dp_info(dp, "HPD_FAIL, call drm_kms_helper_hotplug_event(dp_hotplug_error_code=%d)\n",
+		dp->dp_hotplug_error_code);
+	drm_kms_helper_hotplug_event(dp->connector.dev);
+
 	mutex_unlock(&dp->hpd_lock);
 }
 
@@ -2404,6 +2410,30 @@ static ssize_t hpd_show(struct device *dev, struct device_attribute *attr, char 
 }
 static DEVICE_ATTR_RW(hpd);
 
+static ssize_t dp_hotplug_error_code_show(struct device *dev, struct device_attribute *attr,
+					  char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->dp_hotplug_error_code);
+}
+
+static ssize_t dp_hotplug_error_code_store(struct device *dev, struct device_attribute *attr,
+					   const char *buf, size_t size)
+{
+	struct dp_device *dp = get_dp_drvdata();
+	int new_value = 0;
+
+	if (kstrtoint(buf, 0, &new_value) < 0) {
+		dp_warn(dp, "%s: parse error, buf=%s\n", __func__, buf);
+		return -EINVAL;
+	}
+	dp->dp_hotplug_error_code = new_value;
+	return size;
+}
+
+static DEVICE_ATTR_RW(dp_hotplug_error_code);
+
 static ssize_t link_status_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct dp_device *dp = dev_get_drvdata(dev);
@@ -2424,14 +2454,13 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_WO(irq_hpd);
 
-static struct attribute *dp_attrs[] = {
-	&dev_attr_orientation.attr,
-	&dev_attr_pin_assignment.attr,
-	&dev_attr_hpd.attr,
-	&dev_attr_link_status.attr,
-	&dev_attr_irq_hpd.attr,
-	NULL
-};
+static struct attribute *dp_attrs[] = { &dev_attr_orientation.attr,
+					&dev_attr_pin_assignment.attr,
+					&dev_attr_hpd.attr,
+					&dev_attr_dp_hotplug_error_code.attr,
+					&dev_attr_link_status.attr,
+					&dev_attr_irq_hpd.attr,
+					NULL };
 
 static const struct attribute_group dp_group = {
 	.name = "drm-displayport",
