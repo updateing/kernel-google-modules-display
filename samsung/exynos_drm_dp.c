@@ -2227,96 +2227,12 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_WO(irq_hpd);
 
-static const char *const link_rate_opts[] = {
-	[DP_LINK_RATE_RBR] = "RBR",
-	[DP_LINK_RATE_HBR] = "HBR",
-	[DP_LINK_RATE_HBR2] = "HBR2",
-	[DP_LINK_RATE_HBR3] = "HBR3",
-};
-
-static ssize_t link_rate_store(struct device *dev, struct device_attribute *attr,
-				const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-	int link_rate = sysfs_match_string(link_rate_opts, buf);
-
-	if (link_rate < 0)
-		return -EINVAL;
-
-	dp_rate = link_rate;
-	dp_fill_host_caps(dp);
-
-	return size;
-}
-
-static ssize_t link_rate_show(struct device *dev, struct device_attribute *attr,
-				char *buf)
-{
-	return sysfs_emit(buf, "%s\n", link_rate_opts[dp_rate]);
-}
-static DEVICE_ATTR_RW(link_rate);
-
-static ssize_t link_lanes_store(struct device *dev, struct device_attribute *attr,
-				const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-	unsigned long link_lanes;
-
-	if (kstrtoul(buf, 10, &link_lanes) != 0)
-		return -EINVAL;
-
-	if (link_lanes != 1 && link_lanes != 2 && link_lanes != 4)
-		return -EINVAL;
-
-	dp_lanes = link_lanes;
-	dp_fill_host_caps(dp);
-
-	return size;
-}
-
-static ssize_t link_lanes_show(struct device *dev, struct device_attribute *attr,
-				char *buf)
-{
-	return sysfs_emit(buf, "%lu\n", dp_lanes);
-}
-static DEVICE_ATTR_RW(link_lanes);
-
-static ssize_t trigger_automated_test_irq_store(struct device *dev, struct device_attribute *attr,
-						const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-
-	mutex_lock(&dp->typec_notification_lock);
-	sysfs_triggered_irq = DP_AUTOMATED_TEST_REQUEST;
-	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
-	mutex_unlock(&dp->typec_notification_lock);
-	return size;
-}
-static DEVICE_ATTR_WO(trigger_automated_test_irq);
-
-static ssize_t trigger_sink_specific_irq_store(struct device *dev, struct device_attribute *attr,
-					       const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-
-	mutex_lock(&dp->typec_notification_lock);
-	sysfs_triggered_irq = DP_SINK_SPECIFIC_IRQ;
-	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
-	mutex_unlock(&dp->typec_notification_lock);
-	return size;
-}
-static DEVICE_ATTR_WO(trigger_sink_specific_irq);
-
 static struct attribute *dp_attrs[] = {
 	&dev_attr_orientation.attr,
 	&dev_attr_pin_assignment.attr,
 	&dev_attr_hpd.attr,
 	&dev_attr_link_status.attr,
 	&dev_attr_irq_hpd.attr,
-	&dev_attr_link_rate.attr,
-	&dev_attr_link_lanes.attr,
-	&dev_attr_trigger_automated_test_irq.attr,
-	&dev_attr_trigger_sink_specific_irq.attr,
 	NULL
 };
 
