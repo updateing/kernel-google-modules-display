@@ -755,6 +755,14 @@ static int dp_link_up(struct dp_device *dp)
 
 	mutex_lock(&dp->training_lock);
 
+	/* Fill host capabilities again, as they can be modified via sysfs */
+	dp_fill_host_caps(dp);
+
+	/* Update max BPC settings */
+	dp->connector.max_bpc_property->values[1] = dp->host.max_bpc;
+	dp->connector.state->max_bpc = dp->host.max_bpc;
+	dp->connector.state->max_requested_bpc = dp->host.max_bpc;
+
 	// Read DP Sink device's Capabilities
 	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
 	if (ret < 0) {
