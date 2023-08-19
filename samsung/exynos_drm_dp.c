@@ -525,6 +525,18 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 					  &max_swing_reached, lanes_data,
 					  link_status);
 
+		if (cr_done) {
+			dp_info(dp, "CR Done. Move to Training_EQ.\n");
+			return true;
+		}
+
+		fail_counter_long++;
+
+		/*
+		 * Per DP spec, if the sink requests adjustment to
+		 * max voltage swing or max pre-emphasis value, it
+		 * will be retried only once.
+		 */
 		if (max_swing_reached) {
 			if (!try_max_swing) {
 				dp_info(dp, "adjust to max swing level\n");
@@ -536,13 +548,11 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 			}
 		}
 
-		if (cr_done) {
-			dp_info(dp, "CR Done. Move to Training_EQ.\n");
-			return true;
-		}
-
-		fail_counter_long++;
-
+		/*
+		 * Per DP spec, if the sink requests the exact same
+		 * voltage swing and pre-emphasis levels again, it
+		 * will be retried only max 5 times.
+		 */
 		if (same_before_adjust) {
 			dp_info(dp, "requested same level. Retry...\n");
 			fail_counter_short++;
@@ -592,7 +602,7 @@ static bool dp_do_link_training_eq(struct dp_device *dp, u32 interval_us,
 	u8 lanes_data[MAX_LANE_CNT]; // before_cr
 	u8 link_status[DP_LINK_STATUS_SIZE]; // after_cr
 	bool cr_done;
-	bool same_before_adjust, max_swing_reached, try_max_swing = false;
+	bool same_before_adjust, max_swing_reached = false;
 	u8 fail_counter = 0;
 	int i;
 
@@ -626,28 +636,18 @@ static bool dp_do_link_training_eq(struct dp_device *dp, u32 interval_us,
 					  &max_swing_reached, lanes_data,
 					  link_status);
 
-		if (max_swing_reached) {
-			if (!try_max_swing) {
-				dp_info(dp, "adjust to max swing level\n");
-				try_max_swing = true;
-				continue;
-			} else {
-				dp_err(dp, "reached max swing level\n");
-				goto err;
-			}
-		}
-
 		if (cr_done) {
-			if (drm_dp_channel_eq_ok(link_status,
-						 dp->link.num_lanes)) {
-				dp_info(dp,
-					"EQ Done. Move to Training_Done.\n");
+			if (drm_dp_channel_eq_ok(link_status, dp->link.num_lanes)) {
+				dp_info(dp, "EQ Done. Move to Training_Done.\n");
 				return true;
 			}
+		} else {
+			dp_err(dp, "CR failed during EQ phase\n");
+			goto err;
 		}
 
 		fail_counter++;
-	} while (fail_counter < 5);
+	} while (fail_counter < 6);
 
 err:
 	dp_err(dp, "failed Link Training EQ phase with BW(%u) and Lanes(%u)\n",
