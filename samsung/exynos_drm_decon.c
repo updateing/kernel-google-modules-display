@@ -1317,11 +1317,10 @@ static void decon_enable(struct exynos_drm_crtc *exynos_crtc, struct drm_crtc_st
 					   drm_conn_state->max_bpc);
 
 				/*
-				 * For now, force DP decon out_bpc = 8.
-				 * TODO: Revisit this later for DP HDR support.
+				 * drm_atomic_connector_check() has been called.
+				 * drm_conn_state->max_bpc has the right value for out_bpc.
 				 */
-				decon->config.out_bpc = 8;
-				decon_info(decon, "out_bpc = %u\n", decon->config.out_bpc);
+				decon->config.out_bpc = drm_conn_state->max_bpc;
 			}
 		}
 
@@ -1628,8 +1627,10 @@ static ssize_t early_wakeup_store(struct device *dev,
 	if (!trigger)
 		return len;
 
+	DPU_ATRACE_BEGIN(__func__);
 	decon = dev_get_drvdata(dev);
 	exynos_hibernation_async_exit(decon->hibernation);
+	DPU_ATRACE_END(__func__);
 
 	return len;
 }

@@ -136,13 +136,17 @@ static bool dp_get_fast_training(struct dp_device *dp)
 #define DP_LINK_RATE_HBR2 2
 #define DP_LINK_RATE_HBR3 3
 
-static unsigned long dp_rate = DP_LINK_RATE_HBR2;    /* HBR2 is the default */
+static unsigned long dp_rate = DP_LINK_RATE_RBR;    /* RBR is the default */
 module_param(dp_rate, ulong, 0664);
 MODULE_PARM_DESC(dp_rate, "use specific DP link rate by setting dp_rate=x");
 
 static unsigned long dp_lanes = 4;    /* 4 lanes is the default */
 module_param(dp_lanes, ulong, 0664);
 MODULE_PARM_DESC(dp_lanes, "use specific number of DP lanes by setting dp_lanes=x");
+
+static unsigned long dp_bpc = 8;    /* 8 bpc is the default */
+module_param(dp_bpc, ulong, 0664);
+MODULE_PARM_DESC(dp_bpc, "use specific BPC by setting dp_bpc=x");
 
 static void dp_fill_host_caps(struct dp_device *dp)
 {
@@ -172,6 +176,19 @@ static void dp_fill_host_caps(struct dp_device *dp)
 	case 4:
 	default:
 		dp->host.num_lanes = 4;
+		break;
+	}
+
+	switch (dp_bpc) {
+	case 10:
+		dp->host.max_bpc = 10;
+		break;
+	case 8:
+		dp->host.max_bpc = 8;
+		break;
+	case 6:
+	default:
+		dp->host.max_bpc = 6;
 		break;
 	}
 
@@ -730,27 +747,38 @@ err:
 
 static int dp_link_up(struct dp_device *dp)
 {
-	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+	u8 dpcd[DP_RECEIVER_CAP_SIZE + 1];
 	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE];
 	u8 val = 0;
-	unsigned int addr;
 	u32 interval, interval_us;
 	int ret;
 
 	mutex_lock(&dp->training_lock);
 
-	// Read DP Sink device's Capabilities
-	drm_dp_dpcd_readb(&dp->dp_aux, DP_TRAINING_AUX_RD_INTERVAL, &val);
-	if (val & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT)
-		addr = DP_DP13_DPCD_REV;
-	else
-		addr = DP_DPCD_REV;
+	/* Fill host capabilities again, as they can be modified via sysfs */
+	dp_fill_host_caps(dp);
 
-	ret = drm_dp_dpcd_read(&dp->dp_aux, addr, dpcd, DP_RECEIVER_CAP_SIZE);
+	/* Update max BPC settings */
+	dp->connector.max_bpc_property->values[1] = dp->host.max_bpc;
+	dp->connector.state->max_bpc = dp->host.max_bpc;
+	dp->connector.state->max_requested_bpc = dp->host.max_bpc;
+
+	// Read DP Sink device's Capabilities
+	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
 	if (ret < 0) {
 		dp_err(dp, "failed to read DP Sink device capabilities\n");
 		mutex_unlock(&dp->training_lock);
 		return ret;
+	}
+
+	if (dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT) {
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DP13_DPCD_REV, dpcd,
+				       DP_RECEIVER_CAP_SIZE + 1);
+		if (ret < 0) {
+			dp_err(dp, "failed to read DP Sink device capabilities\n");
+			mutex_unlock(&dp->training_lock);
+			return ret;
+		}
 	}
 
 	// Fill Sink Capabilities
@@ -812,13 +840,22 @@ static enum bit_depth dp_get_bpc(struct dp_device *dp)
 	struct drm_connector *connector = &dp->connector;
 	struct drm_display_info *display_info = &connector->display_info;
 
-	dp_info(dp, "display_info->bpc = %u\n", display_info->bpc);
-
 	/*
-	 * For now, force DP to use bpc = 8.
-	 * TODO: Revisit this later for DP HDR support.
+	 * drm_atomic_connector_check() has been called.
+	 * We can use connector->state->max_bpc directly.
 	 */
-	return BPC_8;
+	u8 bpc = connector->state->max_bpc;
+
+	dp_info(dp, "display_info->bpc = %u, bpc = %u\n", display_info->bpc, bpc);
+
+	switch (bpc) {
+	case 10:
+		return BPC_10;
+	case 8:
+		return BPC_8;
+	default:
+		return BPC_6;
+	}
 }
 
 static void dp_set_video_timing(struct dp_device *dp)
@@ -1786,9 +1823,21 @@ static const struct drm_encoder_funcs dp_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
 
+static void dp_connector_reset(struct drm_connector *connector)
+{
+	/* Need to preserve max BPC settings over reset */
+	u8 max_bpc = connector->state->max_bpc;
+	u8 max_req_bpc = connector->state->max_requested_bpc;
+
+	drm_atomic_helper_connector_reset(connector);
+
+	connector->state->max_bpc = max_bpc;
+	connector->state->max_requested_bpc = max_req_bpc;
+}
+
 /* DP DRM Connector Functions */
 static const struct drm_connector_funcs dp_connector_funcs = {
-	.reset = drm_atomic_helper_connector_reset,
+	.reset = dp_connector_reset,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.destroy = drm_connector_cleanup,
 	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
@@ -1822,6 +1871,15 @@ static int dp_get_modes(struct drm_connector *connector)
 static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector, struct drm_display_mode *mode)
 {
 	struct dp_device *dp = connector_to_dp(connector);
+	struct drm_display_info *display_info = &connector->display_info;
+
+	/*
+	 * drm_atomic_connector_check() hasn't been called yet.
+	 * We can't use connector->state->max_bpc directly.
+	 * Need to do the same math here.
+	 */
+	u8 dbpc = display_info->bpc ? display_info->bpc : 8;
+	u8 bpc = min(dbpc, connector->state->max_requested_bpc);
 
 	/*
 	 * DP link max data rate in Kbps
@@ -1832,8 +1890,8 @@ static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector, 
 	 */
 	u32 link_data_rate = dp->link.link_rate * dp->link.num_lanes * 8;
 
-	/* DRM display mode data rate (@ 8 bpc) in Kbps */
-	u32 mode_data_rate = mode->clock * 24;
+	/* DRM display mode data rate in Kbps */
+	u32 mode_data_rate = mode->clock * 3 * bpc;
 
 	if (link_data_rate < mode_data_rate) {
 		dp_info(dp, "DROP: " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
@@ -1916,6 +1974,10 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 	}
 
 	dp_fill_host_caps(dp);
+
+	drm_atomic_helper_connector_reset(&dp->connector);
+	drm_connector_attach_max_bpc_property(&dp->connector, 6, dp->host.max_bpc);
+
 	dp_info(dp, "DP Driver has been binded\n");
 
 	return ret;
@@ -2173,96 +2235,12 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_WO(irq_hpd);
 
-static const char *const link_rate_opts[] = {
-	[DP_LINK_RATE_RBR] = "RBR",
-	[DP_LINK_RATE_HBR] = "HBR",
-	[DP_LINK_RATE_HBR2] = "HBR2",
-	[DP_LINK_RATE_HBR3] = "HBR3",
-};
-
-static ssize_t link_rate_store(struct device *dev, struct device_attribute *attr,
-				const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-	int link_rate = sysfs_match_string(link_rate_opts, buf);
-
-	if (link_rate < 0)
-		return -EINVAL;
-
-	dp_rate = link_rate;
-	dp_fill_host_caps(dp);
-
-	return size;
-}
-
-static ssize_t link_rate_show(struct device *dev, struct device_attribute *attr,
-				char *buf)
-{
-	return sysfs_emit(buf, "%s\n", link_rate_opts[dp_rate]);
-}
-static DEVICE_ATTR_RW(link_rate);
-
-static ssize_t link_lanes_store(struct device *dev, struct device_attribute *attr,
-				const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-	unsigned long link_lanes;
-
-	if (kstrtoul(buf, 10, &link_lanes) != 0)
-		return -EINVAL;
-
-	if (link_lanes != 1 && link_lanes != 2 && link_lanes != 4)
-		return -EINVAL;
-
-	dp_lanes = link_lanes;
-	dp_fill_host_caps(dp);
-
-	return size;
-}
-
-static ssize_t link_lanes_show(struct device *dev, struct device_attribute *attr,
-				char *buf)
-{
-	return sysfs_emit(buf, "%lu\n", dp_lanes);
-}
-static DEVICE_ATTR_RW(link_lanes);
-
-static ssize_t trigger_automated_test_irq_store(struct device *dev, struct device_attribute *attr,
-						const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-
-	mutex_lock(&dp->typec_notification_lock);
-	sysfs_triggered_irq = DP_AUTOMATED_TEST_REQUEST;
-	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
-	mutex_unlock(&dp->typec_notification_lock);
-	return size;
-}
-static DEVICE_ATTR_WO(trigger_automated_test_irq);
-
-static ssize_t trigger_sink_specific_irq_store(struct device *dev, struct device_attribute *attr,
-					       const char *buf, size_t size)
-{
-	struct dp_device *dp = dev_get_drvdata(dev);
-
-	mutex_lock(&dp->typec_notification_lock);
-	sysfs_triggered_irq = DP_SINK_SPECIFIC_IRQ;
-	usb_typec_dp_notification_locked(dp, EXYNOS_HPD_IRQ);
-	mutex_unlock(&dp->typec_notification_lock);
-	return size;
-}
-static DEVICE_ATTR_WO(trigger_sink_specific_irq);
-
 static struct attribute *dp_attrs[] = {
 	&dev_attr_orientation.attr,
 	&dev_attr_pin_assignment.attr,
 	&dev_attr_hpd.attr,
 	&dev_attr_link_status.attr,
 	&dev_attr_irq_hpd.attr,
-	&dev_attr_link_rate.attr,
-	&dev_attr_link_lanes.attr,
-	&dev_attr_trigger_automated_test_irq.attr,
-	&dev_attr_trigger_sink_specific_irq.attr,
 	NULL
 };
 

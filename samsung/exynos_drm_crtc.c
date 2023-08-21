@@ -15,6 +15,7 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_bridge.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_color_mgmt.h>
 #include <drm/drm_crtc_helper.h>
@@ -1109,5 +1110,87 @@ void exynos_crtc_wait_for_flip_done(struct drm_atomic_state *old_state)
 		if (exynos_crtc->ops->wait_for_flip_done)
 			exynos_crtc->ops->wait_for_flip_done(exynos_crtc,
 							old_crtc_state, new_crtc_state);
+	}
+}
+
+bool exynos_crtc_needs_disable(struct drm_crtc_state *old_state,
+			struct drm_crtc_state *new_state)
+{
+	/*
+	 * No new_state means the CRTC is off, so the only criteria is whether
+	 * it's currently active or in self refresh mode.
+	 */
+	if (!new_state)
+		return drm_atomic_crtc_effectively_active(old_state);
+
+	/*
+	 * We need to run through the crtc_funcs->disable() function if the CRTC
+	 * is currently on, if it's transitioning to self refresh mode, or if
+	 * it's in self refresh mode and needs to be fully disabled.
+	 */
+	return old_state->active ||
+			(old_state->self_refresh_active && !new_state->enable) ||
+			new_state->self_refresh_active;
+}
+
+void exynos_crtc_set_mode(struct drm_device *dev,
+			struct drm_atomic_state *old_state)
+{
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *new_crtc_state;
+	struct drm_connector *connector;
+	struct drm_connector_state *new_conn_state;
+	int i;
+
+	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
+		const struct drm_crtc_helper_funcs *funcs;
+
+		if (!new_crtc_state->mode_changed)
+			continue;
+
+		funcs = crtc->helper_private;
+
+		if (new_crtc_state->enable && funcs->mode_set_nofb) {
+			DRM_DEBUG_ATOMIC("modeset on [CRTC:%u:%s]\n",
+					crtc->base.id, crtc->name);
+
+			funcs->mode_set_nofb(crtc);
+		}
+	}
+
+	for_each_new_connector_in_state(old_state, connector, new_conn_state, i) {
+		const struct drm_encoder_helper_funcs *funcs;
+		struct drm_encoder *encoder;
+		struct drm_display_mode *mode, *adjusted_mode;
+		struct drm_bridge *bridge;
+
+		if (!new_conn_state->best_encoder)
+			continue;
+
+		encoder = new_conn_state->best_encoder;
+		funcs = encoder->helper_private;
+		new_crtc_state = new_conn_state->crtc->state;
+		mode = &new_crtc_state->mode;
+		adjusted_mode = &new_crtc_state->adjusted_mode;
+
+		if (!new_crtc_state->mode_changed)
+			continue;
+
+		DRM_DEBUG_ATOMIC("modeset on [ENCODER:%u:%s]\n",
+				encoder->base.id, encoder->name);
+
+		/*
+		 * Each encoder has at most one connector (since we always steal
+		 * it away), so we won't call mode_set hooks twice.
+		 */
+		if (funcs && funcs->atomic_mode_set) {
+			funcs->atomic_mode_set(encoder, new_crtc_state,
+							new_conn_state);
+		} else if (funcs && funcs->mode_set) {
+			funcs->mode_set(encoder, mode, adjusted_mode);
+		}
+
+		bridge = drm_bridge_chain_get_first_bridge(encoder);
+		drm_bridge_chain_mode_set(bridge, mode, adjusted_mode);
 	}
 }
