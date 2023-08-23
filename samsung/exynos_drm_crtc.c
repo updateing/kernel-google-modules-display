@@ -684,11 +684,17 @@ static int exynos_drm_crtc_get_property(struct drm_crtc *crtc,
 	} else if (property == exynos_crtc->props.histogram_threshold) {
 		*val = exynos_crtc_state->dqe.histogram_threshold;
 	} else if (!strncmp(property->name, "histogram_", 10)) {
+		/*
+		 * value 0: channel is free
+		 * value 1: channel is occupied
+		 */
 		int i;
 		for (i = 0; i < HISTOGRAM_MAX; i++) {
 			if (property == exynos_crtc->props.histogram[i]) {
-				*val = (exynos_crtc_state->histogram[i]) ?
-					exynos_crtc_state->histogram[i]->base.id : 0;
+				struct exynos_dqe *dqe = decon->dqe;
+				struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[i];
+
+				*val = (exynos_crtc_state->histogram[i] || hist_chan->cb) ? 1 : 0;
 				return 0;
 			}
 		}
