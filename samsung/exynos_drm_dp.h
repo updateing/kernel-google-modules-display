@@ -171,8 +171,6 @@ struct dp_device {
 	/* DRM Mode */
 	int cur_mode_vic; /* VIC number of cur_mode */
 	struct drm_display_mode cur_mode;
-	struct drm_display_mode pref_mode;
-	bool fail_safe;
 	int num_modes;
 	int num_sads;
 
