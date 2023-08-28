@@ -487,6 +487,14 @@ struct exynos_panel_funcs {
 				    const struct exynos_panel_mode *pmode);
 
 	/**
+	 * @rr_need_te_high
+	 *
+	 * check if a panel needs send rr cmds at TE high window.
+	 */
+	bool (*rr_need_te_high)(struct exynos_panel *exynos_panel,
+				    const struct exynos_panel_mode *pmode);
+
+	/**
 	 * @run_normal_mode_work
 	 *
 	 * This callback is used to run the periodic work for each panel in
