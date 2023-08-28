@@ -496,6 +496,7 @@ struct decon_device {
 #endif
 
 	atomic_t frames_pending;
+	atomic_t frame_transfer_pending;
 	wait_queue_head_t framedone_wait;
 
 	bool keep_unmask;
