@@ -1462,7 +1462,10 @@ static void decon_reg_configure_lcd(u32 id, struct decon_config *config)
 
 	decon_reg_set_data_path(id, config);
 
-	if (!config->dsc.enabled) {
+	if (config->dsc.enabled) {
+		/* call decon_reg_config_data_path_size () inside */
+		decon_dsc_reg_init(id, config, overlap_w, 0);
+	} else {
 		decon_reg_config_data_path_size(id, config->image_width,
 				config->image_height, overlap_w, NULL,
 				&config->dsc);
