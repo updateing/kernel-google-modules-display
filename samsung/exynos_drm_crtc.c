@@ -236,6 +236,10 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	} else if (old_crtc_state->self_refresh_active && !crtc_state->color_mgmt_changed &&
 		!new_exynos_state->planes_updated) {
 		new_exynos_state->skip_update = true;
+	} else if (drm_atomic_crtc_effectively_active(old_crtc_state) &&
+		   (crtc_state->plane_mask & (~exynos_crtc->rcd_plane_mask)) == 0) {
+		DRM_WARN("%s: plane-less update is detected, mask=0x%08X\n", __func__,
+			 crtc_state->plane_mask);
 	}
 
 	if (decon->rcd) {
