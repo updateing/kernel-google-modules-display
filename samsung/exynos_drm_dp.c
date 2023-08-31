@@ -267,22 +267,6 @@ static int dp_get_edid_block(void *data, u8 *edid, unsigned int block,
 
 //------------------------------------------------------------------------------
 //
-static int dp_check_dp_sink(struct dp_device *dp)
-{
-	int sink_count = drm_dp_read_sink_count(&dp->dp_aux);
-
-	if (sink_count < 0) {
-		dp_err(dp, "failed to read DP Sink count\n");
-		return sink_count;
-	} else if (sink_count > 2) {
-		// Now, only 1 DP Sink should be supported.
-		dp_err(dp, "DP sink count is %d\n", sink_count);
-		return -EPERM;
-	}
-
-	return 0;
-}
-
 static int dp_sink_power_up(struct dp_device *dp, bool up)
 {
 	u8 val = 0;
@@ -749,6 +733,7 @@ static int dp_link_up(struct dp_device *dp)
 {
 	u8 dpcd[DP_RECEIVER_CAP_SIZE + 1];
 	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE];
+	u8 dfp_info[DP_MAX_DOWNSTREAM_PORTS];
 	u8 val = 0;
 	u32 interval, interval_us;
 	int ret;
@@ -763,12 +748,12 @@ static int dp_link_up(struct dp_device *dp)
 	dp->connector.state->max_bpc = dp->host.max_bpc;
 	dp->connector.state->max_requested_bpc = dp->host.max_bpc;
 
-	// Read DP Sink device's Capabilities
+	/* Read DP Sink device's Capabilities */
 	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
 	if (ret < 0) {
 		dp_err(dp, "failed to read DP Sink device capabilities\n");
 		mutex_unlock(&dp->training_lock);
-		return ret;
+		return -EIO;
 	}
 
 	if (dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT) {
@@ -777,33 +762,72 @@ static int dp_link_up(struct dp_device *dp)
 		if (ret < 0) {
 			dp_err(dp, "failed to read DP Sink device capabilities\n");
 			mutex_unlock(&dp->training_lock);
-			return ret;
+			return -EIO;
 		}
 	}
 
-	// Fill Sink Capabilities
+	/* Fill Sink Capabilities */
 	dp_fill_sink_caps(dp, dpcd);
 	dp_info(dp, "DP Sink: DPCD_Rev_%X, Rate(%u Mbps), Lanes(%u)\n",
 		dp->sink.revision, dp->sink.link_rate / 100,
 		dp->sink.num_lanes);
 
-	// Power DP Sink device Up
+	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
 
-	// Check DSC & FEC support
-	if (drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE) ==
-			DP_DSC_RECEIVER_CAP_SIZE)
+	/* Check DSC & FEC support */
+	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE);
+	if (ret < 0)
+		dp_warn(dp, "DP Sink: failed to read DSC support register\n");
+	else
 		dp_info(dp, "DP Sink: DSC support: %02x revision: %02x\n",
 			dsc_dpcd[0], dsc_dpcd[1]);
-	else
-		dp_err(dp, "DP Sink: failed to read DSC support register\n");
 
-	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CAPABILITY, &val) == 1)
+	ret = drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CAPABILITY, &val);
+	if (ret < 0)
+		dp_warn(dp, "DP Sink: failed to read FEC support register\n");
+	else
 		dp_info(dp, "DP Sink: FEC support: %02x\n", val);
-	else
-		dp_err(dp, "DP Sink: failed to read FEC support register\n");
 
-	// Pick link parameters
+	/* Get sink count */
+	dp->sink_count = drm_dp_read_sink_count(&dp->dp_aux);
+	if (dp->sink_count < 0) {
+		dp_err(dp, "DP Sink: failed to read sink count\n");
+		mutex_unlock(&dp->training_lock);
+		return -EIO;
+	}
+
+	/* Get DFP count */
+	if (dpcd[DP_DOWNSTREAMPORT_PRESENT] & DP_DWN_STRM_PORT_PRESENT) {
+		dp->dfp_count = dpcd[DP_DOWN_STREAM_PORT_COUNT] & DP_PORT_COUNT_MASK;
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DOWNSTREAM_PORT_0, dfp_info,
+				       DP_MAX_DOWNSTREAM_PORTS);
+		if (ret < 0) {
+			dp_err(dp, "DP Branch Device: failed to read DP Downstream Port info\n");
+			mutex_unlock(&dp->training_lock);
+			return -EIO;
+		}
+
+		dp_info(dp, "DP Branch Device: DFP count = %d, sink count = %d\n",
+			dp->dfp_count, dp->sink_count);
+	} else {
+		dp->dfp_count = 0;
+		dp_info(dp, "DP Sink: sink count = %d\n", dp->sink_count);
+	}
+
+	if (dp->sink_count == 0) {
+		if (dp->dfp_count > 0) {
+			dp_info(dp, "DP Link: training defer: DP Branch Device, sink count = 0\n");
+			mutex_unlock(&dp->training_lock);
+			return 0;
+		} else {
+			dp_err(dp, "DP Sink: invalid sink count = 0\n");
+			mutex_unlock(&dp->training_lock);
+			return -EINVAL;
+		}
+	}
+
+	/* Pick link parameters */
 	dp->link.link_rate = dp_get_max_link_rate(dp);
 	dp->link.num_lanes = dp_get_max_num_lanes(dp);
 	dp->link.enhanced_frame = dp_get_enhanced_mode(dp);
@@ -813,13 +837,13 @@ static int dp_link_up(struct dp_device *dp)
 	dp_info(dp, "DP Link: training start: Rate(%u Mbps) and Lanes(%u)\n",
 		dp->link.link_rate / 100, dp->link.num_lanes);
 
-	// Link Training
+	/* Link Training */
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
 	interval_us = dp_get_training_interval_us(dp, interval);
 	if (!interval_us || dp_do_full_link_training(dp, interval_us)) {
 		dp_err(dp, "failed to train DP Link\n");
 		mutex_unlock(&dp->training_lock);
-		return -EIO;
+		return -ENOLINK;
 	}
 
 	mutex_unlock(&dp->training_lock);
@@ -1430,24 +1454,56 @@ static void dp_update_link_status(struct dp_device *dp, enum link_training_statu
 
 static int dp_link_down_event_handler(struct dp_device *dp)
 {
-	/*
-	 * When DP Sink catches some error situations, it can trigger Sink Specific IRQ.
-	 * DP Source will handle DP Link Re-negotiation while keeping DP connection.
-	 */
+	int ret;
 
 	/* Step_1. DP Off */
 	dp_off_by_hpd_plug(dp);
 
 	/* Step_2. DP Link Up again */
-	if (dp_link_up(dp)) {
+	ret = dp_link_up(dp);
+	if (ret < 0) {
+		if (ret == -ENOLINK)
+			dp_update_link_status(dp, LINK_TRAINING_FAILURE);
+		else
+			dp_update_link_status(dp, LINK_TRAINING_FAILURE_SINK);
 		dp_err(dp, "failed to DP Link Up during re-negotiation\n");
-		dp_update_link_status(dp, LINK_TRAINING_FAILURE);
-		return -ENOLINK;
+		return ret;
 	}
-	dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
 
 	/* Step_3. DP On */
+	dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
 	dp_on_by_hpd_plug(dp);
+
+	return 0;
+}
+
+static int dp_downstream_port_event_handler(struct dp_device *dp, int new_sink_count)
+{
+	int ret;
+
+	if (dp->sink_count == 0 && new_sink_count > 0) {
+		/* establish DP link */
+		dp->sink_count = new_sink_count;
+		ret = dp_link_up(dp);
+		if (ret < 0) {
+			if (ret == -ENOLINK)
+				dp_update_link_status(dp, LINK_TRAINING_FAILURE);
+			else
+				dp_update_link_status(dp, LINK_TRAINING_FAILURE_SINK);
+			dp_err(dp, "failed to DP Link Up during DFP event\n");
+			return ret;
+		}
+
+		dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
+		dp_on_by_hpd_plug(dp);
+	} else if (dp->sink_count > 0 && new_sink_count == 0) {
+		/* tear down DP link */
+		dp->sink_count = new_sink_count;
+		dp_off_by_hpd_plug(dp);
+		dp_link_down(dp);
+	} else {
+		dp->sink_count = new_sink_count;
+	}
 
 	return 0;
 }
@@ -1457,6 +1513,7 @@ static void dp_work_hpd(struct work_struct *work)
 {
 	struct dp_device *dp = get_dp_drvdata();
 	enum link_training_status link_status = LINK_TRAINING_UNKNOWN;
+	int ret;
 
 	mutex_lock(&dp->hpd_lock);
 
@@ -1472,23 +1529,25 @@ static void dp_work_hpd(struct work_struct *work)
 		dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
 		usleep_range(10000, 11000);
 
-		if (dp_check_dp_sink(dp) < 0) {
-			dp_err(dp, "failed to check DP Sink status\n");
-			link_status = LINK_TRAINING_FAILURE_SINK;
-			goto HPD_FAIL;
-		}
-
-		if (dp_link_up(dp)) {
+		ret = dp_link_up(dp);
+		if (ret < 0) {
+			if (ret == -ENOLINK)
+				link_status = LINK_TRAINING_FAILURE;
+			else
+				link_status = LINK_TRAINING_FAILURE_SINK;
 			dp_err(dp, "failed to DP Link Up\n");
-			link_status = LINK_TRAINING_FAILURE;
 			goto HPD_FAIL;
 		}
-		dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
 
-		dp_on_by_hpd_plug(dp);
+		if (dp->sink_count > 0) {
+			dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
+			dp_on_by_hpd_plug(dp);
+		}
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
-		dp_off_by_hpd_plug(dp);
-		dp_link_down(dp);
+		if (dp->sink_count > 0) {
+			dp_off_by_hpd_plug(dp);
+			dp_link_down(dp);
+		}
 
 		/* PHY power off */
 		dp_hw_deinit(&dp->hw_config);
@@ -1586,6 +1645,18 @@ static void dp_work_hpd_irq(struct work_struct *work)
 				link_status[0], link_status[1], link_status[2], link_status[3]);
 		else
 			dp_err(dp, "[HPD IRQ] cannot read link status\n");
+	}
+
+	if (dp->dfp_count > 0) {
+		if ((link_status[2] & DP_DOWNSTREAM_PORT_STATUS_CHANGED) ||
+		    (dp->sink_count != sink_count)) {
+			dp_info(dp, "[HPD IRQ] DP downstream port status change\n");
+			dp_downstream_port_event_handler(dp, sink_count);
+			return;
+		}
+
+		if (sink_count == 0)
+			return;
 	}
 
 	if (!drm_dp_channel_eq_ok(link_status, dp->link.num_lanes)) {

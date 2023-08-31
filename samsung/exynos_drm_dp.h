@@ -179,6 +179,10 @@ struct dp_device {
 	struct dp_host host;
 	struct dp_sink sink;
 
+	/* DP Branch Device support */
+	int sink_count;
+	int dfp_count;
+
 	/* BIST */
 	bool bist_used;
 
