@@ -276,7 +276,7 @@ static int exynos_drm_connector_create_luminance_properties(struct drm_device *d
 
 	p->min_luminance = drm_property_create_range(dev, DRM_MODE_PROP_IMMUTABLE,
 						     "min_luminance", 0, UINT_MAX);
-	if (!p)
+	if (!p->min_luminance)
 		return -ENOMEM;
 
 	return 0;
