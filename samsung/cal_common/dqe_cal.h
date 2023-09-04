@@ -69,7 +69,7 @@ enum exynos_histogram_id {
 	HISTOGRAM_MAX,
 };
 
-#define HISTOGRAM_CHAN_LHBM HISTOGRAM_1
+#define HISTOGRAM_CHAN_LHBM HISTOGRAM_3
 #else
 enum exynos_histogram_id {
 	HISTOGRAM_0,
@@ -216,10 +216,13 @@ enum dqe_dither_type {
 	DISP_DITHER = 1,
 };
 
+/**
+ * enum histogram_state - defines histrogram channel state
+ */
 enum histogram_state {
 	HISTOGRAM_OFF,
-	HISTOGRAM_FULL,
-	HISTOGRAM_ROI,
+	HISTOGRAM_FULL, /* ON, ROI is disabled, full screen */
+	HISTOGRAM_ROI /* ON, ROI is enabled */
 };
 
 struct exynos_atc {
@@ -267,18 +270,17 @@ struct exynos_atc {
 
 #if defined(CONFIG_SOC_GS201)
 void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
-					enum exynos_prog_pos pos);
+					enum histogram_prog_pos pos);
 #elif defined(CONFIG_SOC_ZUMA)
 void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
-					enum exynos_prog_pos pos);
-void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p);
+					enum histogram_prog_pos pos);
 void dqe_reg_set_atc_he(u32 dqe_id, const struct exynos_atc *atc);
 void dqe_reg_print_atc_he(u32 dqe_id, struct drm_printer *p);
 #else
 /* Stubs for non-gs201 SoCs */
 static inline void dqe_reg_set_rcd_en_internal(u32 id, bool en) {}
 static inline void dqe_reg_set_histogram_pos_internal(u32 id, enum exynos_histogram_id hist_id,
-						      enum exynos_prog_pos pos)
+						      enum histogram_prog_pos pos)
 {
 	return;
 }
@@ -318,7 +320,13 @@ void dqe_reg_print_dither(u32 dqe_id, enum dqe_dither_type dither,
 void dqe_reg_print_degamma_lut(u32 dqe_id, struct drm_printer *p);
 void dqe_reg_print_cgc_lut(u32 dqe_id, u32 count, struct drm_printer *p);
 void dqe_reg_print_regamma_lut(u32 dqe_id, struct drm_printer *p);
-void dqe_reg_print_hist(u32 dqe_id, struct drm_printer *p);
+void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p);
+static inline void dqe_reg_print_hist(u32 dqe_id, struct drm_printer *p) {
+	int i;
+
+	for (i = 0; i < HISTOGRAM_MAX; i++)
+		dqe_reg_print_hist_ch(dqe_id, i, p);
+}
 void dqe_reg_print_gamma_matrix(u32 dqe_id, struct drm_printer *p);
 void dqe_reg_print_linear_matrix(u32 dqe_id, struct drm_printer *p);
 void dqe_reg_print_atc(u32 dqe_id, struct drm_printer *p);
@@ -335,7 +343,7 @@ void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id,
 void dqe_reg_get_histogram_bins(struct device *dev, u32 dqe_id, enum exynos_histogram_id hist_id,
 				struct histogram_bins *bins);
 static inline void dqe_reg_set_histogram_pos(u32 dqe_id, enum exynos_histogram_id hist_id,
-					     enum exynos_prog_pos pos)
+					     enum histogram_prog_pos pos)
 {
 	dqe_reg_set_histogram_pos_internal(dqe_id, hist_id, pos);
 }

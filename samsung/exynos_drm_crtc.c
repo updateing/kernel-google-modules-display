@@ -93,6 +93,7 @@ static void exynos_crtc_update_lut(struct drm_crtc *crtc,
 	struct decon_device *decon = exynos_crtc->ctx;
 	struct exynos_drm_crtc_state *exynos_state;
 	struct exynos_dqe_state *dqe_state;
+	int i;
 
 	if (!decon->dqe)
 		return;
@@ -117,10 +118,12 @@ static void exynos_crtc_update_lut(struct drm_crtc *crtc,
 	else
 		dqe_state->cgc_dither_config = NULL;
 
-	dqe_state->roi = exynos_state->histogram_roi ?
-		exynos_state->histogram_roi->data : NULL;
-	dqe_state->weights = exynos_state->histogram_weights ?
-		exynos_state->histogram_weights->data : NULL;
+	for (i = 0; i < HISTOGRAM_MAX; i++) {
+		if (exynos_state->histogram[i])
+			dqe_state->hist_chan[i].config = exynos_state->histogram[i]->data;
+		else
+			dqe_state->hist_chan[i].config = NULL;
+	}
 
 	if (exynos_state->linear_matrix)
 		dqe_state->linear_matrix = exynos_state->linear_matrix->data;
@@ -163,7 +166,6 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 	struct drm_plane *plane;
 	const struct drm_plane_state *plane_state;
 	const struct decon_device *decon = exynos_crtc->ctx;
-	const struct decon_config *cfg = &decon->config;
 	const struct exynos_dqe *dqe = decon->dqe;
 	uint32_t max_bpc;
 
@@ -239,12 +241,9 @@ static int exynos_crtc_atomic_check(struct drm_crtc *crtc,
 		!new_exynos_state->planes_updated) {
 		new_exynos_state->skip_update = true;
 	} else if (drm_atomic_crtc_effectively_active(old_crtc_state) &&
-		(crtc_state->plane_mask & (~exynos_crtc->rcd_plane_mask)) == 0 &&
-		cfg->mode.op_mode != DECON_VIDEO_MODE) {
-		/* skip plane-less updates unless it's first commit after enabling */
-		new_exynos_state->skip_update = true;
-		DRM_WARN("%s: skip plane-less update, mask=0x%08X\n",
-			__func__, crtc_state->plane_mask);
+		   (crtc_state->plane_mask & (~exynos_crtc->rcd_plane_mask)) == 0) {
+		DRM_WARN("%s: plane-less update is detected, mask=0x%08X\n", __func__,
+			 crtc_state->plane_mask);
 	}
 
 	if (decon->rcd) {
@@ -391,6 +390,7 @@ static void exynos_drm_crtc_destroy_state(struct drm_crtc *crtc,
 					struct drm_crtc_state *state)
 {
 	struct exynos_drm_crtc_state *exynos_crtc_state;
+	int i;
 
 	exynos_crtc_state = to_exynos_crtc_state(state);
 	drm_property_blob_put(exynos_crtc_state->cgc_lut);
@@ -401,6 +401,9 @@ static void exynos_drm_crtc_destroy_state(struct drm_crtc *crtc,
 	drm_property_blob_put(exynos_crtc_state->histogram_roi);
 	drm_property_blob_put(exynos_crtc_state->histogram_weights);
 	drm_property_blob_put(exynos_crtc_state->partial);
+	for (i = 0; i < HISTOGRAM_MAX; i++)
+		drm_property_blob_put(exynos_crtc_state->histogram[i]);
+
 	if (exynos_crtc_state->cgc_gem)
 		drm_gem_object_put(exynos_crtc_state->cgc_gem);
 	__drm_atomic_helper_crtc_destroy_state(state);
@@ -430,6 +433,7 @@ exynos_drm_crtc_duplicate_state(struct drm_crtc *crtc)
 {
 	struct exynos_drm_crtc_state *exynos_crtc_state;
 	struct exynos_drm_crtc_state *copy;
+	int i;
 
 	exynos_crtc_state = to_exynos_crtc_state(crtc->state);
 	copy = kzalloc(sizeof(*copy), GFP_KERNEL);
@@ -458,6 +462,11 @@ exynos_drm_crtc_duplicate_state(struct drm_crtc *crtc)
 
 	if (copy->histogram_weights)
 		drm_property_blob_get(copy->histogram_weights);
+
+	for (i = 0; i < HISTOGRAM_MAX; i++) {
+		if (copy->histogram[i])
+			drm_property_blob_get(copy->histogram[i]);
+	}
 
 	if (copy->partial)
 		drm_property_blob_get(copy->partial);
@@ -538,11 +547,6 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 			exynos_crtc_state->dqe.enabled = val;
 			replaced = true;
 		}
-	} else if (property == exynos_crtc->props.histogram_threshold) {
-		if (val != exynos_crtc_state->dqe.histogram_threshold) {
-			exynos_crtc_state->dqe.histogram_threshold = val;
-			replaced = true;
-		}
 	} else if (property == exynos_crtc->props.cgc_lut) {
 		ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
 				&exynos_crtc_state->cgc_lut, val,
@@ -564,21 +568,38 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 				&exynos_crtc_state->gamma_matrix, val,
 				sizeof(struct exynos_matrix), -1, &replaced);
 	} else if (property == exynos_crtc->props.histogram_roi) {
+		pr_warn_once("legacy property(%s): ignored\n", property->name);
 		ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
 				&exynos_crtc_state->histogram_roi, val,
 				sizeof(struct histogram_roi), -1, &replaced);
 	} else if (property == exynos_crtc->props.histogram_weights) {
+		pr_warn_once("legacy property(%s): ignored\n", property->name);
 		ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
 				&exynos_crtc_state->histogram_weights, val,
 				sizeof(struct histogram_weights), -1, &replaced);
 	} else if (property == exynos_crtc->props.histogram_pos) {
+		pr_warn_once("legacy property(%s): ignored\n", property->name);
 		if (val != exynos_crtc_state->dqe.histogram_pos) {
 			exynos_crtc_state->dqe.histogram_pos = val;
 			replaced = true;
 		}
-	} else if (property == exynos_crtc->props.histogram_id) {
-		if (val != exynos_crtc_state->dqe.histogram_id) {
-			exynos_crtc_state->dqe.histogram_id = val;
+	} else if (property == exynos_crtc->props.histogram_threshold) {
+		pr_warn_once("legacy property(%s): ignored\n", property->name);
+		if (val != exynos_crtc_state->dqe.histogram_threshold) {
+			exynos_crtc_state->dqe.histogram_threshold = val;
+			replaced = true;
+		}
+	} else if (!strncmp(property->name, "histogram_", 10)) {
+		int i;
+
+		ret = -EINVAL; /* assume an error by default */
+		for (i = 0; i < HISTOGRAM_MAX; i++) {
+			if (property == exynos_crtc->props.histogram[i]) {
+				ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
+					&exynos_crtc_state->histogram[i], val,
+					sizeof(struct histogram_channel_config), -1, &replaced);
+				break;
+			}
 		}
 	} else if (property == exynos_crtc->props.partial) {
 		ret = exynos_drm_replace_property_blob_from_id(state->crtc->dev,
@@ -613,55 +634,71 @@ static int exynos_drm_crtc_get_property(struct drm_crtc *crtc,
 	exynos_crtc_state =
 		to_exynos_crtc_state((struct drm_crtc_state *)state);
 
-	if (property == exynos_crtc->props.color_mode)
+	if (property == exynos_crtc->props.color_mode) {
 		*val = exynos_crtc_state->color_mode;
-	else if (property == exynos_crtc->props.ppc)
+	} else if (property == exynos_crtc->props.ppc) {
 		*val = decon->bts.ppc;
-	else if (property == exynos_crtc->props.max_disp_freq)
+	} else if (property == exynos_crtc->props.max_disp_freq) {
 		*val = decon->bts.dvfs_max_disp_freq;
-	else if (property == exynos_crtc->props.force_bpc)
+	} else if (property == exynos_crtc->props.force_bpc) {
 		*val = exynos_crtc_state->force_bpc;
-	else if (property == exynos_crtc->props.dqe_enabled)
+	} else if (property == exynos_crtc->props.dqe_enabled) {
 		*val = exynos_crtc_state->dqe.enabled;
-	else if (property == exynos_crtc->props.histogram_threshold)
-		*val = exynos_crtc_state->dqe.histogram_threshold;
-	else if (property == exynos_crtc->props.cgc_lut)
+	} else if (property == exynos_crtc->props.cgc_lut) {
 		*val = (exynos_crtc_state->cgc_lut) ?
 			exynos_crtc_state->cgc_lut->base.id : 0;
-	else if (property == exynos_crtc->props.disp_dither)
+	} else if (property == exynos_crtc->props.disp_dither) {
 		*val = (exynos_crtc_state->disp_dither) ?
 			exynos_crtc_state->disp_dither->base.id : 0;
-	else if (property == exynos_crtc->props.cgc_dither)
+	} else if (property == exynos_crtc->props.cgc_dither) {
 		*val = (exynos_crtc_state->cgc_dither) ?
 			exynos_crtc_state->cgc_dither->base.id : 0;
-	else if (property == exynos_crtc->props.linear_matrix)
+	} else if (property == exynos_crtc->props.linear_matrix) {
 		*val = (exynos_crtc_state->linear_matrix) ?
 			exynos_crtc_state->linear_matrix->base.id : 0;
-	else if (property == exynos_crtc->props.gamma_matrix)
+	} else if (property == exynos_crtc->props.gamma_matrix) {
 		*val = (exynos_crtc_state->gamma_matrix) ?
 			exynos_crtc_state->gamma_matrix->base.id : 0;
-	else if (property == exynos_crtc->props.histogram_roi)
-		*val = (exynos_crtc_state->histogram_roi) ?
-			exynos_crtc_state->histogram_roi->base.id : 0;
-	else if (property == exynos_crtc->props.histogram_weights)
-		*val = (exynos_crtc_state->histogram_weights) ?
-			exynos_crtc_state->histogram_weights->base.id : 0;
-	else if (property == exynos_crtc->props.histogram_pos)
-		*val = exynos_crtc_state->dqe.histogram_pos;
-	else if (property == exynos_crtc->props.histogram_id)
-		*val = exynos_crtc_state->dqe.histogram_id;
-	else if (property == exynos_crtc->props.partial)
+	} else if (property == exynos_crtc->props.partial) {
 		*val = (exynos_crtc_state->partial) ?
 			exynos_crtc_state->partial->base.id : 0;
-	else if (property == exynos_crtc->props.cgc_lut_fd)
+	} else if (property == exynos_crtc->props.cgc_lut_fd) {
 		*val =  (exynos_crtc_state->cgc_gem) ?
 			dma_buf_fd(exynos_crtc_state->cgc_gem->dma_buf, 0) : 0;
-	else if (property == exynos_crtc->props.expected_present_time)
+	} else if (property == exynos_crtc->props.expected_present_time) {
 		*val = exynos_crtc_state->expected_present_time;
-	else if (property == exynos_crtc->props.rcd_plane_id)
+	} else if (property == exynos_crtc->props.rcd_plane_id) {
 		*val = decon->rcd->plane.base.base.id;
-	else
+	} else if (property == exynos_crtc->props.histogram_roi) {
+		*val = (exynos_crtc_state->histogram_roi) ?
+			exynos_crtc_state->histogram_roi->base.id : 0;
+	} else if (property == exynos_crtc->props.histogram_weights) {
+		*val = (exynos_crtc_state->histogram_weights) ?
+			exynos_crtc_state->histogram_weights->base.id : 0;
+	} else if (property == exynos_crtc->props.histogram_pos) {
+		*val = exynos_crtc_state->dqe.histogram_pos;
+	} else if (property == exynos_crtc->props.histogram_threshold) {
+		*val = exynos_crtc_state->dqe.histogram_threshold;
+	} else if (!strncmp(property->name, "histogram_", 10)) {
+		/*
+		 * value 0: channel is free
+		 * value 1: channel is occupied
+		 */
+		int i;
+		for (i = 0; i < HISTOGRAM_MAX; i++) {
+			if (property == exynos_crtc->props.histogram[i]) {
+				struct exynos_dqe *dqe = decon->dqe;
+				struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[i];
+
+				*val = (exynos_crtc_state->histogram[i] || hist_chan->cb) ? 1 : 0;
+				return 0;
+			}
+		}
+
 		return -EINVAL;
+	} else {
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -870,27 +907,28 @@ static int exynos_drm_crtc_histogram_pos_property(struct exynos_drm_crtc *exynos
 	return 0;
 }
 
-static int exynos_drm_crtc_histogram_id_property(struct exynos_drm_crtc *exynos_crtc)
+static int exynos_drm_crtc_histogram_channels_property(struct exynos_drm_crtc *exynos_crtc)
 {
 	struct drm_crtc *crtc = &exynos_crtc->base;
 	struct drm_property *prop;
-	static const struct drm_prop_enum_list histogram_id_list[] = {
-		{ HISTOGRAM_0, "HISTOGRAM 0" },
+	static const struct drm_prop_enum_list histogram_list[] = {
+		{HISTOGRAM_0, "histogram_0"},
 #ifdef CONFIG_SOC_ZUMA
-		{ HISTOGRAM_1, "HISTOGRAM 1" },
-		{ HISTOGRAM_2, "HISTOGRAM 2" },
-		{ HISTOGRAM_3, "HISTOGRAM 3" },
+		{HISTOGRAM_1, "histogram_1"},
+		{HISTOGRAM_2, "histogram_2"},
+		{HISTOGRAM_3, "histogram_3"},
 #endif
 	};
-	u32 flags = 0;
+	u32 bitmask = BIT(HISTOGRAM_MAX) - 1;
 
-	prop = drm_property_create_enum(crtc->dev, flags, "histogram_id",
-				histogram_id_list, ARRAY_SIZE(histogram_id_list));
+	prop = drm_property_create_bitmask(crtc->dev, DRM_MODE_PROP_IMMUTABLE,
+					   "histogram_channels",
+					   histogram_list, ARRAY_SIZE(histogram_list), bitmask);
 	if (!prop)
 		return -ENOMEM;
 
-	drm_object_attach_property(&crtc->base, prop, HISTOGRAM_0);
-	exynos_crtc->props.histogram_id = prop;
+	drm_object_attach_property(&crtc->base, prop, HISTOGRAM_MAX);
+	exynos_crtc->props.histogram_channels = prop;
 
 	return 0;
 }
@@ -900,7 +938,9 @@ static int exynos_drm_crtc_create_histogram_properties(
 {
 	struct drm_crtc *crtc = &exynos_crtc->base;
 	int ret;
+	int i;
 
+	/* legacy properties */
 	ret = exynos_drm_crtc_create_blob(crtc, "histogram_roi",
 				&exynos_crtc->props.histogram_roi);
 	if (ret)
@@ -921,11 +961,23 @@ static int exynos_drm_crtc_create_histogram_properties(
 	if (ret)
 		return ret;
 
-	ret = exynos_drm_crtc_histogram_id_property(exynos_crtc);
+	/* multi-channel support */
+	ret = exynos_drm_crtc_histogram_channels_property(exynos_crtc);
 	if (ret)
 		return ret;
 
-	return 0;
+	for (i = 0; i < HISTOGRAM_MAX; i++) {
+		char name[32];
+
+		snprintf(name, sizeof(name), "histogram_%d", i);
+		ret = exynos_drm_crtc_create_blob(crtc, name, &exynos_crtc->props.histogram[i]);
+		if (ret) {
+			pr_err("%s: create properties(%s): ret %d\n", __func__, name, ret);
+			return ret;
+		}
+	}
+
+	return ret;
 }
 
 static int

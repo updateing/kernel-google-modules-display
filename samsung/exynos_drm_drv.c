@@ -26,6 +26,7 @@
 #include <drm/drm_vblank.h>
 
 #include <drm/exynos_drm.h>
+#include <drm/samsung_drm.h>
 
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_connector.h"
@@ -57,7 +58,7 @@ int exynos_drm_drv_set_lhbm_hist(struct exynos_drm_connector *connector, int x, 
 	struct drm_crtc *crtc = NULL;
 	struct exynos_drm_crtc *exynos_crtc;
 	struct decon_device *decon;
-	struct histogram_chan_config *cfg;
+	struct histogram_channel_config *cfg;
 
 	if (connector->base.state)
 		crtc = connector->base.state->crtc;
@@ -85,8 +86,7 @@ int exynos_drm_drv_set_lhbm_hist(struct exynos_drm_connector *connector, int x, 
 	cfg->roi.vsize = h;
 	cfg->threshold = 1;
 	cfg->pos = POST_DQE;
-	pr_debug("%s: set lhbm histogram config (x=%d, y=%d, w=%d, h=%d)\n", crtc->name, x, y, w,
-		 h);
+	pr_debug("%s: set lhbm histogram config (x=%d, y=%d, w=%d, h=%d)\n", crtc->name, x, y, w, h);
 
 	return 0;
 }
@@ -902,6 +902,8 @@ static void exynos_drm_postclose(struct drm_device *dev, struct drm_file *file)
 static const struct drm_ioctl_desc exynos_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(EXYNOS_HISTOGRAM_REQUEST, histogram_request_ioctl, 0),
 	DRM_IOCTL_DEF_DRV(EXYNOS_HISTOGRAM_CANCEL, histogram_cancel_ioctl, 0),
+	DRM_IOCTL_DEF_DRV(EXYNOS_HISTOGRAM_CHANNEL_REQUEST, histogram_channel_request_ioctl, 0),
+	DRM_IOCTL_DEF_DRV(EXYNOS_HISTOGRAM_CHANNEL_CANCEL, histogram_channel_cancel_ioctl, 0),
 };
 
 static const struct file_operations exynos_drm_driver_fops = {

@@ -29,6 +29,7 @@
 
 #include "exynos_drm_connector.h"
 #include "exynos_drm_dqe.h"
+#include "cal_common/dqe_cal.h"
 
 #define MAX_CRTC	3
 #define MAX_PLANE	MAX_WIN_PER_DECON
@@ -255,8 +256,12 @@ struct exynos_drm_crtc_state {
 	struct drm_property_blob *cgc_dither;
 	struct drm_property_blob *linear_matrix;
 	struct drm_property_blob *gamma_matrix;
+	/* legacy histogram properties */
 	struct drm_property_blob *histogram_roi;
 	struct drm_property_blob *histogram_weights;
+	/* multi-channel support */
+	struct drm_property_blob *histogram[HISTOGRAM_MAX];
+
 	struct drm_gem_object *cgc_gem;
 	enum exynos_drm_writeback_type wb_type;
 	u8 seamless_mode_changed : 1;
@@ -325,15 +330,18 @@ struct exynos_drm_crtc {
 		struct drm_property *linear_matrix;
 		struct drm_property *gamma_matrix;
 		struct drm_property *dqe_enabled;
-		struct drm_property *histogram_roi;
-		struct drm_property *histogram_weights;
-		struct drm_property *histogram_threshold;
-		struct drm_property *histogram_pos;
-		struct drm_property *histogram_id;
 		struct drm_property *partial;
 		struct drm_property *cgc_lut_fd;
 		struct drm_property *expected_present_time;
 		struct drm_property *rcd_plane_id;
+		/* legacy histogram properties */
+		struct drm_property *histogram_roi;
+		struct drm_property *histogram_weights;
+		struct drm_property *histogram_threshold;
+		struct drm_property *histogram_pos;
+		/* multichannel support */
+		struct drm_property *histogram_channels;
+		struct drm_property *histogram[HISTOGRAM_MAX];
 	} props;
 	u8 active_state;
 	u32 rcd_plane_mask;
@@ -345,7 +353,7 @@ struct drm_exynos_file_private {
 
 struct exynos_drm_pending_histogram_event {
 	struct drm_pending_event base;
-	struct exynos_drm_histogram_event event;
+	struct exynos_drm_histogram_channel_event event;
 };
 
 struct exynos_drm_priv_state {

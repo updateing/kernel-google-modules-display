@@ -207,10 +207,13 @@ static void dqe_reg_print_lut(u32 dqe_id, u32 start, u32 count, const u32 offset
 		cal_drm_printf(pr, 0, "%s\n", buf);
 }
 
-void dqe_reg_print_hist(u32 dqe_id, struct drm_printer *p)
+void dqe_reg_print_hist_ch(u32 dqe_id, u32 hist_id, struct drm_printer *p)
 {
 	u32 val;
 	const u32 offset = hist_offset(regs_dqe[dqe_id].version);
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
 
 	val = hist_read(dqe_id, DQE_HIST);
 	cal_drm_printf(p, 0, "DQE: histogram EN(%d) ROI_ON(%d) LUMA_SEL(%d)\n",

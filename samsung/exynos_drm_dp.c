@@ -1058,6 +1058,9 @@ static void dp_parse_edid(struct dp_device *dp, struct edid *edid)
 	u8 *edid_vendor = dp->sink.edid_manufacturer;
 	u32 edid_prod_id = 0;
 
+	if (edid == NULL)
+		return;
+
 	edid_vendor[0] = ((edid->mfg_id[0] & 0x7c) >> 2) + '@';
 	edid_vendor[1] = (((edid->mfg_id[0] & 0x3) << 3) |
 			  ((edid->mfg_id[1] & 0xe0) >> 5)) +
@@ -1083,7 +1086,6 @@ static void dp_clean_drm_modes(struct dp_device *dp)
 	struct drm_connector *connector = &dp->connector;
 
 	memset(&dp->cur_mode, 0, sizeof(struct drm_display_mode));
-	memset(&dp->pref_mode, 0, sizeof(struct drm_display_mode));
 
 	list_for_each_entry_safe (mode, t, &connector->probed_modes, head) {
 		list_del(&mode->head);
@@ -1091,7 +1093,7 @@ static void dp_clean_drm_modes(struct dp_device *dp)
 	}
 }
 
-static const struct drm_display_mode mode_vga[1] = {
+static const struct drm_display_mode failsafe_mode[1] = {
 	/* 1 - 640x480@60Hz 4:3 */
 	{
 		DRM_MODE("640x480", DRM_MODE_TYPE_DRIVER, 25175, 640, 656, 752,
@@ -1100,37 +1102,6 @@ static const struct drm_display_mode mode_vga[1] = {
 		.picture_aspect_ratio = HDMI_PICTURE_ASPECT_4_3,
 	}
 };
-
-static void dp_mode_set_fail_safe(struct dp_device *dp)
-{
-	dp->hw_config.bpc = BPC_6;
-	drm_mode_copy(&dp->cur_mode, mode_vga);
-	dp->fail_safe = true;
-}
-
-static bool dp_find_prefer_mode(struct dp_device *dp)
-{
-	struct drm_display_mode *mode, *t;
-	struct drm_connector *connector = &dp->connector;
-	bool found = false;
-
-	list_for_each_entry_safe (mode, t, &connector->probed_modes, head) {
-		if ((mode->type & DRM_MODE_TYPE_PREFERRED)) {
-			dp_info(dp, "EDID: pref mode: " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
-			drm_mode_copy(&dp->pref_mode, mode);
-			drm_mode_copy(&dp->cur_mode, mode);
-			found = true;
-			break;
-		}
-	}
-
-	if (!found) {
-		dp_info(dp, "EDID: no preferred mode found, using fail-safe mode\n");
-		dp_mode_set_fail_safe(dp);
-	}
-
-	return found;
-}
 
 static void dp_sad_to_audio_info(struct dp_device *dp, struct cea_sad *sads)
 {
@@ -1192,6 +1163,7 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 	struct drm_device *dev = connector->dev;
 	struct edid *edid;
 	struct cea_sad *sads;
+	struct drm_display_mode *fs_mode;
 
 	edid = drm_do_get_edid(connector, dp_get_edid_block, dp);
 	if (!edid) {
@@ -1210,16 +1182,18 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 	mutex_lock(&dev->mode_config.mutex);
 	dp_clean_drm_modes(dp);
 	dp->num_modes = drm_add_edid_modes(connector, edid);
-	dp->num_sads = drm_edid_to_sad(edid, &sads);
+	fs_mode = drm_mode_duplicate(connector->dev, failsafe_mode);
+	if (fs_mode) {
+		drm_mode_probed_add(connector, fs_mode);
+		dp->num_modes++;
+	}
 	mutex_unlock(&dev->mode_config.mutex);
-	kfree(edid);
 
+	dp->num_sads = drm_edid_to_sad(edid, &sads);
 	dp_sad_to_audio_info(dp, sads);
 	if (dp->num_sads > 0)
 		kfree(sads);
-
-	if (dp->num_modes > 0)
-		dp_find_prefer_mode(dp);
+	kfree(edid);
 
 	dp->state = DP_STATE_ON;
 	dp_info(dp, "%s: DP State changed to ON\n", __func__);
