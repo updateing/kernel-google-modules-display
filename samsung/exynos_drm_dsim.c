@@ -2609,6 +2609,7 @@ static ssize_t hs_clock_store(struct device *dev,
 			      const char *buf, size_t len)
 {
 	struct dsim_device *dsim = dev_get_drvdata(dev);
+	struct dsim_pll_param *pll_param;
 	int rc;
 	unsigned int hs_clock;
 	bool apply_now = true;
@@ -2618,6 +2619,14 @@ static ssize_t hs_clock_store(struct device *dev,
 	char *apply_now_str;
 	char *p = params;
 
+	mutex_lock(&dsim->state_lock);
+	pll_param = dsim->current_pll_param;
+	if (unlikely(!pll_param)) {
+		dsim_warn(dsim, "%s: unable to get pll param\n", __func__);
+		rc = -EAGAIN;
+		goto out;
+	}
+
 	strlcpy(params, buf, sizeof(params));
 	hs_clk_str = strsep(&p, " ");
 	apply_now_str = strsep(&p, " ");
@@ -2625,33 +2634,32 @@ static ssize_t hs_clock_store(struct device *dev,
 	if (apply_now_str) {
 		rc = kstrtobool(apply_now_str, &apply_now);
 		if (rc < 0)
-		    return rc;
+			goto out;
 	}
 
 	rc = kstrtouint(hs_clk_str, 0, &hs_clock);
 	if (rc < 0)
-		return rc;
+		goto out;
 
 	/* ddr hs_clock unit: MHz */
 	dsim_info(dsim, "%s: hs clock %u, apply now: %u\n", __func__, hs_clock, apply_now);
 
-	mutex_lock(&dsim->state_lock);
 	if (dsim->state != DSIM_STATE_HSCLKEN) {
-		if (dsim->current_pll_param->pll_freq == hs_clock) {
+		if (pll_param->pll_freq == hs_clock) {
 			dsim_debug(dsim, "set the same hs_clock=%u while idle\n", hs_clock);
 			dsim->clk_param.pending_hs_clk = 0;
 		} else {
 			dsim_info(dsim, "not in HS state, set pending_hs_clk=%u\n", hs_clock);
 			dsim->clk_param.pending_hs_clk = hs_clock;
 		}
-		mutex_unlock(&dsim->state_lock);
-		return len;
+		rc = len;
+		goto out;
 	} else {
 		dsim->clk_param.pending_hs_clk = 0;
-		if (dsim->current_pll_param->pll_freq == hs_clock) {
+		if (pll_param->pll_freq == hs_clock) {
 			dsim_debug(dsim, "set the same hs_clock=%u while active\n", hs_clock);
-			mutex_unlock(&dsim->state_lock);
-			return len;
+			rc = len;
+			goto out;
 		}
 	}
 	mutex_unlock(&dsim->state_lock);
@@ -2661,6 +2669,10 @@ static ssize_t hs_clock_store(struct device *dev,
 		return rc;
 
 	return len;
+
+out:
+	mutex_unlock(&dsim->state_lock);
+	return rc;
 }
 static DEVICE_ATTR_RW(hs_clock);
 
