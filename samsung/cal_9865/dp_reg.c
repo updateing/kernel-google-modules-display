@@ -611,13 +611,11 @@ static void dpphy_reg_set_config13_tx_disable(enum lane_usage lane)
 	dp_phy_write_mask(SST1, DP_CONFIG13, val, DP_TX_DISABLE_MASK);
 }
 
-static void dpphy_reg_set_config17_dcc_byp_ac_cap(u32 dcc_byp_ac_cap,
-						  enum lane_usage lane)
+static void dpphy_reg_set_config17_dcc_byp_ac_cap(u32 en, enum lane_usage lane)
 {
-	// Need to check this function
 	u32 val = 0;
 
-	if (lane == DP_USE_0_LANES)
+	if (!en || lane == DP_USE_0_LANES)
 		val = DP_TX_DCC_BYP_AC_CAP_SET_0LANES;
 	else if (lane == DP_USE_2_LANES)
 		val = DP_TX_DCC_BYP_AC_CAP_SET_2LANES;
@@ -758,8 +756,6 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 	u32 mpllb_ssc_up_spread = 0, mpllb_tx_clk_div = 0, mpllb_v2i = 0,
 	    mpllb_word_div2_en = 0;
 	u32 ref_clk_en = 1;
-	// CONFIG17
-	u32 dcc_byp_ac_cap = 0;
 
 	if (hw_config->use_ssc) {
 		mpllb_ssc_en = 1;
@@ -820,7 +816,6 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_multiplier = 0x130;
 		mpllb_tx_clk_div = 0x2;
 		mpllb_v2i = 0x2;
-		dcc_byp_ac_cap = 0x1;
 		if (mpllb_ssc_en) {
 			/* Max down-spread (-0.5%) for RBR SSC */
 			mpllb_ssc_peak = 0xD800;
@@ -856,7 +851,9 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 
 	// Configure Reference Clock for DP
 	dpphy_reg_set_config7_refclk_en(ref_clk_en);
-	dpphy_reg_set_config17_dcc_byp_ac_cap(dcc_byp_ac_cap, DP_USE_4_LANES);
+
+	/* Enable the bypassing AC Capacitor for all lanes */
+	dpphy_reg_set_config17_dcc_byp_ac_cap(1, DP_USE_4_LANES);
 }
 
 static enum lane_usage dp_get_and_inform_lanes(struct dp_hw_config *hw_config)
@@ -918,17 +915,26 @@ static void dpphy_reg_switch_to_dp(enum lane_usage num_lane)
 	dpphytca_reg_wait_mode_change(num_lane);
 }
 
-static void dpphy_reg_set_lanes(enum lane_usage num_lane)
+static void dpphy_reg_set_lanes(struct dp_hw_config *hw_config, enum lane_usage num_lane)
 {
 	dpphy_reg_set_config13_tx_enable(num_lane);
 	cal_log_debug(0, "enable %d lanes.\n", num_lane);
 
 	dpphy_reg_set_config12_tx_width(num_lane);
 	dpphy_reg_set_config12_tx_mpllb_en(num_lane);
-	cal_log_debug(0, "enable mpllb for %d lanes.\n", num_lane);
+	dpphy_reg_set_config11_tx_pstate(num_lane);
+	cal_log_debug(0, "enable mpllb/power for %d lanes.\n", num_lane);
 
 	dpphy_reg_set_config12_status_update(num_lane);
 	cal_log_debug(0, "status update for %d lanes.\n", num_lane);
+
+	if (hw_config->link_rate > LINK_RATE_RBR) {
+		/*
+		 * Disable the bypassing AC capacitor for HBRx mode only.
+		 * RBR mode is using the bypassing AC capacitor as default.
+		 */
+		dpphy_reg_set_config17_dcc_byp_ac_cap(0, num_lane);
+	}
 }
 
 static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
@@ -961,7 +967,7 @@ static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
 	cal_log_debug(0, "switch from USB to DP.\n");
 
 	/* Set DP TX lanes */
-	dpphy_reg_set_lanes(num_lane);
+	dpphy_reg_set_lanes(hw_config, num_lane);
 	cal_log_debug(0, "set DP TX lanes.\n");
 
 	/* De-assert DP Alt-mode Disable ACK */
