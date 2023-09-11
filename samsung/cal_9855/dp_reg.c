@@ -1914,3 +1914,18 @@ void dp_hw_set_audio_dma(u32 en)
 {
 	dp_reg_set_audio_dma_req_gen(en);
 }
+
+int dp_crc_set_enabled(u32 id, u32 en)
+{
+	return -EINVAL;
+}
+
+int dp_crc_get(u32 id, u32 crc_data[3])
+{
+	return -EINVAL;
+}
+
+int dp_crc_reset(u32 id)
+{
+	return -EINVAL;
+}

@@ -16,6 +16,8 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 
+#include <drm/drm_connector.h>
+
 #define DPU_UNDEF_BITS_DEPTH		0xabcd
 #define has_all_bits(bits, mask)	(((bits) & (mask)) == (bits))
 
@@ -109,5 +111,11 @@ static inline const char *dpu_get_fmt_name(const struct dpu_fmt *fmt)
 {
 	return (fmt && fmt->name) ? fmt->name : "Unknown";
 }
+
+#define HDR_DOLBY_VISION BIT(1)
+#define HDR_HDR10 BIT(2)
+#define HDR_HLG BIT(3)
+
+struct drm_property *exynos_create_hdr_formats_drm_property(struct drm_device *dev, int prop_flags);
 
 #endif /* __EXYNOS_FORMAT_H__ */

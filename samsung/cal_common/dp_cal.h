@@ -352,4 +352,8 @@ void dp_hw_set_hdcp13_encryption(u32 en);
 void dp_hw_set_hdcp22_function(u32 en);
 void dp_hw_set_hdcp22_encryption(u32 en);
 
+int dp_crc_set_enabled(u32 id, u32 en);
+int dp_crc_get(u32 id, u32 crc_data[3]);
+int dp_crc_reset(u32 id);
+
 #endif /* __SAMSUNG_DP_CAL_H__ */
