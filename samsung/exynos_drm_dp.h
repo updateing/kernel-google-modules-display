@@ -185,7 +185,7 @@ struct dp_device {
 	int dfp_count;
 
 	/* BIST */
-	bool bist_used;
+	int bist_mode;
 
 	/* Audio */
 	enum dp_audio_state audio_state;
