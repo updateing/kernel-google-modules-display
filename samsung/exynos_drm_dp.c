@@ -1627,9 +1627,10 @@ static void dp_work_hpd_irq(struct work_struct *work)
 		else
 			dp_err(dp, "[HPD IRQ] cannot read link status\n");
 	} else {
-		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_SINK_COUNT_ESI, &sink_count) == 1)
-			dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count & 0x3f);
-		else
+		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_SINK_COUNT_ESI, &sink_count) == 1) {
+			sink_count = DP_GET_SINK_COUNT(sink_count);
+			dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count);
+		} else
 			dp_err(dp, "[HPD IRQ] cannot read DP_SINK_COUNT_ESI\n");
 
 		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR_ESI0, &irq) == 1)
