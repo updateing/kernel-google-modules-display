@@ -584,19 +584,20 @@
 /*----------------------[HIST]-----------------------------------------------*/
 
 #define DQE_HIST(_i)			((0x3000) + ((_i) * 0x600))
+#define HIST_ROI_BLOCKING_EN		(0x1 << 4)
 #define HIST_POS_SEL_MASK		(0x1 << 3)
 #define HIST_POS_SEL(_v)		((_v) << 3)
 #define HIST_LUMA_SEL			(0x1 << 2)
 #define HIST_ROI_ON			(0x1 << 1)
 #define HIST_EN				(0x1 << 0)
 
-#define DQE_HIST_SIZE(_i)			(0x3004 + ((_i) * 0x600))
+#define DQE_HIST_SIZE(_i)		(0x3004 + ((_i) * 0x600))
 #define HIST_VSIZE(_v)			((_v) << 16)
 #define HIST_VSIZE_MASK			(0x3FFF << 16)
 #define HIST_HSIZE(_v)			((_v) << 0)
 #define HIST_HSIZE_MASK			(0x3FFF << 0)
 
-#define DQE_HIST_START(_i)			(0x3008 + ((_i) * 0x600))
+#define DQE_HIST_START(_i)		(0x3008 + ((_i) * 0x600))
 #define HIST_START_Y(_v)		((_v) << 16)
 #define HIST_START_Y_MASK		(0x3FFF << 16)
 #define HIST_START_X(_v)		((_v) << 0)
@@ -615,6 +616,18 @@
 #define DQE_HIST_THRESH(_i)		(0x3014 + ((_i) * 0x600))
 #define HIST_THRESHOLD(_v)		((_v) << 0)
 #define HIST_THRESHOLD_MASK		(0x3FF << 0)
+
+#define DQE_HIST_BLOCK_SIZE(_i)		(0x3018 + ((_i) * 0x600))
+#define HIST_BLOCK_VSIZE(_v)		HIST_VSIZE(_v)
+#define HIST_BLOCK_VSIZE_MASK		HIST_VSIZE_MASK
+#define HIST_BLOCK_HSIZE(_v)		HIST_HSIZE(_v)
+#define HIST_BLOCK_HSIZE_MASK		HIST_HSIZE_MASK
+
+#define DQE_HIST_BLOCK_START(_i)	(0x301C + ((_i) * 0x600))
+#define HIST_BLOCK_START_Y(_v)		HIST_START_Y(_v)
+#define HIST_BLOCK_START_Y_MASK		HIST_START_Y_MASK
+#define HIST_BLOCK_START_X(_v)		HIST_START_X(_v)
+#define HIST_BLOCK_START_X_MASK		HIST_START_X_MASK
 
 /*
  * HIST_BIN (0~127) : 0x3400 ~ 0x35FC

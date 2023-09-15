@@ -728,6 +728,21 @@ void dqe_reg_set_histogram_roi(u32 dqe_id, enum exynos_histogram_id hist_id,
 	hist_write(dqe_id, DQE_HIST_SIZE(hist_id), val);
 }
 
+void dqe_reg_set_histogram_block_roi(u32 dqe_id, enum exynos_histogram_id hist_id,
+				     struct histogram_roi *roi)
+{
+	u32 val;
+
+	if (hist_id >= HISTOGRAM_MAX)
+		return;
+
+	val = HIST_BLOCK_START_X(roi->start_x) | HIST_BLOCK_START_Y(roi->start_y);
+	hist_write(dqe_id, DQE_HIST_BLOCK_START(hist_id), val);
+
+	val = HIST_BLOCK_HSIZE(roi->hsize) | HIST_BLOCK_VSIZE(roi->vsize);
+	hist_write(dqe_id, DQE_HIST_BLOCK_SIZE(hist_id), val);
+}
+
 void dqe_reg_set_histogram_weights(u32 dqe_id, enum exynos_histogram_id hist_id,
 				   struct histogram_weights *weights)
 {
@@ -752,6 +767,7 @@ void dqe_reg_set_histogram_threshold(u32 dqe_id, enum exynos_histogram_id hist_i
 void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id, enum histogram_state state)
 {
 	u32 val = 0;
+	u32 mask = HIST_EN | HIST_ROI_ON | HIST_ROI_BLOCKING_EN;
 
 	if (hist_id >= HISTOGRAM_MAX)
 		return;
@@ -761,14 +777,22 @@ void dqe_reg_set_histogram(u32 dqe_id, enum exynos_histogram_id hist_id, enum hi
 		return;
 	}
 
-	if (state == HISTOGRAM_OFF)
-		val = 0;
-	else if (state == HISTOGRAM_FULL)
-		val = HIST_EN;
-	else if (state == HISTOGRAM_ROI)
-		val = HIST_EN | HIST_ROI_ON;
+	switch (state) {
+	case HISTOGRAM_BLOCKED_FULL:
+		val = HIST_ROI_BLOCKING_EN;
+	case HISTOGRAM_FULL:
+		val |= HIST_EN;
+		break;
+	case HISTOGRAM_BLOCKED_ROI:
+		val = HIST_ROI_BLOCKING_EN;
+	case HISTOGRAM_ROI:
+		val |= HIST_EN | HIST_ROI_ON;
+		break;
+	default:
+		break;
+	}
 
-	hist_write_mask(dqe_id, DQE_HIST(hist_id), val, HIST_EN | HIST_ROI_ON);
+	hist_write_mask(dqe_id, DQE_HIST(hist_id), val, mask);
 }
 
 void dqe_reg_get_histogram_bins(struct device *dev, u32 dqe_id, enum exynos_histogram_id hist_id,
