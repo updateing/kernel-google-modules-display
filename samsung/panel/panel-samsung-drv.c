@@ -32,6 +32,7 @@
 #include "../exynos_drm_connector.h"
 #include "../exynos_drm_decon.h"
 #include "../exynos_drm_dsim.h"
+#include "../exynos_drm_dqe.h"
 #include "panel-samsung-drv.h"
 
 #define PANEL_ID_REG		0xA1
@@ -2071,6 +2072,17 @@ static void exynos_panel_lhbm_on_delay_frames(struct drm_crtc *crtc,
 	DPU_ATRACE_END("lhbm_on_delay_frames");
 }
 
+static void exynos_panel_set_atc_config(struct exynos_panel *ctx,
+					const struct decon_device *decon,
+					struct exynos_drm_crtc_state *exynos_crtc_state,
+					bool enable)
+{
+	decon->dqe->force_atc_config.dirty = true;
+	decon->dqe->force_atc_config.en = enable;
+	dev_info(ctx->dev, "set atc config %d\n", enable);
+	exynos_atc_update(decon->dqe, &exynos_crtc_state->dqe);
+}
+
 static void exynos_panel_pre_commit_properties(
 				struct exynos_panel *ctx,
 				struct exynos_drm_connector_state *conn_state)
@@ -2151,6 +2163,24 @@ static void exynos_panel_pre_commit_properties(
 
 	if ((conn_state->pending_update_flags & HBM_FLAG_OP_RATE_UPDATE) && exynos_panel_func &&
 	    exynos_panel_func->set_op_hz) {
+		const struct decon_device *decon = to_exynos_crtc(conn_state->base.crtc)->ctx;
+		const struct drm_connector_state *drm_conn_state = &conn_state->base;
+		const struct drm_crtc_state *crtc_state =
+				drm_conn_state->crtc ? drm_conn_state->crtc->state : NULL;
+
+		/* disable atc before operation rate switch if it's enabled */
+		if (unlikely(!decon || !decon->dqe || !crtc_state)) {
+			dev_warn(ctx->dev, "unable to disable atc for op\n");
+			ctx->atc_need_enabled = false;
+		} else if (decon->dqe->force_atc_config.en != true) {
+			ctx->atc_need_enabled = false;
+		} else {
+			exynos_panel_set_atc_config(ctx, decon,
+						    to_exynos_crtc_state(crtc_state),
+						    false);
+			ctx->atc_need_enabled = true;
+		}
+
 		DPU_ATRACE_BEGIN("set_op_hz");
 		dev_info(ctx->dev, "%s: set op_hz to %d\n", __func__,
 			 conn_state->operation_rate);
@@ -3619,6 +3649,8 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 {
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_atomic_state *state = new_crtc_state->state;
+	struct exynos_drm_connector_state *exynos_conn_state =
+						to_exynos_connector_state(conn_state);
 	const struct drm_display_mode *current_mode = &ctx->current_mode->mode;
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
 	int ret;
@@ -3630,8 +3662,6 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 		dev_warn(ctx->dev, "%s: failed to get current mode, skip mode check\n", __func__);
 	} else {
 		struct drm_display_mode *target_mode = &new_crtc_state->adjusted_mode;
-		struct exynos_drm_connector_state *exynos_conn_state =
-						to_exynos_connector_state(conn_state);
 		int current_vrefresh = drm_mode_vrefresh(current_mode);
 		int target_vrefresh = drm_mode_vrefresh(target_mode);
 		int clock;
@@ -3719,6 +3749,22 @@ static int exynos_panel_bridge_atomic_check(struct drm_bridge *bridge,
 				new_crtc_state->adjusted_mode.clock = new_crtc_state->mode.clock;
 
 			dev_dbg(ctx->dev, "%s: restore mode clock after op_hz\n", __func__);
+		}
+
+		/* enable atc if it's disabled before */
+		if (ctx->atc_need_enabled) {
+			const struct decon_device *decon =
+					to_exynos_crtc(exynos_conn_state->base.crtc)->ctx;
+
+			if (unlikely(!decon || !decon->dqe))
+				dev_warn(ctx->dev, "unable to enable atc for op\n");
+			else if (decon->dqe->force_atc_config.en == false)
+				exynos_panel_set_atc_config(ctx, decon,
+							    to_exynos_crtc_state(new_crtc_state),
+							    true);
+
+			/* always clear the flag to avoid keeping retrying */
+			ctx->atc_need_enabled = false;
 		}
 	}
 

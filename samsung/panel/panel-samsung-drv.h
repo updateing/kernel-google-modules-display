@@ -834,6 +834,8 @@ struct exynos_panel {
 	enum mode_progress_type mode_in_progress;
 	/* indicates BTS raise due to op_hz switch */
 	bool boosted_for_op_hz;
+	/* indicated whether ATC needs to be enabled */
+	bool atc_need_enabled;
 	/* current MIPI DSI HS clock (frequency) */
 	u32 dsi_hs_clk;
 };
