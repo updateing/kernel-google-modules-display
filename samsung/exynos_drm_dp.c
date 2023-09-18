@@ -149,6 +149,8 @@ static unsigned long dp_bpc = 8;    /* 8 bpc is the default */
 module_param(dp_bpc, ulong, 0664);
 MODULE_PARM_DESC(dp_bpc, "use specific BPC by setting dp_bpc=x");
 
+static int dp_emulation_mode;
+
 static void dp_fill_host_caps(struct dp_device *dp)
 {
 	switch (dp_rate) {
@@ -206,23 +208,39 @@ static void dp_fill_host_caps(struct dp_device *dp)
 static void dp_fill_sink_caps(struct dp_device *dp,
 			      u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
-	dp->sink.revision = dpcd[0];
-	dp->sink.link_rate = drm_dp_max_link_rate(dpcd);
-	dp->sink.num_lanes = drm_dp_max_lane_count(dpcd);
-	dp->sink.enhanced_frame = drm_dp_enhanced_frame_cap(dpcd);
+	if (!dp_emulation_mode) {
+		dp->sink.revision = dpcd[0];
+		dp->sink.link_rate = drm_dp_max_link_rate(dpcd);
+		dp->sink.num_lanes = drm_dp_max_lane_count(dpcd);
+		dp->sink.enhanced_frame = drm_dp_enhanced_frame_cap(dpcd);
 
-	/* Set SSC support */
-	dp->sink.ssc = !!(dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
+		/* Set SSC support */
+		dp->sink.ssc = !!(dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
 
-	/* Set TPS support */
-	dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2);
-	if (drm_dp_tps3_supported(dpcd))
-		dp->sink.support_tps |= DP_SUPPORT_TPS(3);
-	if (drm_dp_tps4_supported(dpcd))
-		dp->sink.support_tps |= DP_SUPPORT_TPS(4);
+		/* Set TPS support */
+		dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2);
+		if (drm_dp_tps3_supported(dpcd))
+			dp->sink.support_tps |= DP_SUPPORT_TPS(3);
+		if (drm_dp_tps4_supported(dpcd))
+			dp->sink.support_tps |= DP_SUPPORT_TPS(4);
 
-	/* Set fast link support */
-	dp->sink.fast_training = drm_dp_fast_training_cap(dpcd);
+		/* Set fast link support */
+		dp->sink.fast_training = drm_dp_fast_training_cap(dpcd);
+	} else {
+		// dp_emulation_mode is enabled, use hard-coded sink params.
+		dp->sink.revision = DP_DPCD_REV_12;
+		dp->sink.link_rate = 5400 * 100;
+		dp->sink.num_lanes = 4;
+		dp->sink.enhanced_frame = false;
+
+		dp->sink.ssc = 0;
+
+		/* Set TPS support */
+		dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2) | DP_SUPPORT_TPS(3) |
+				       DP_SUPPORT_TPS(4);
+
+		dp->sink.fast_training = true;
+	}
 }
 
 // Callback function for DRM DP Helper
@@ -261,9 +279,47 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *dp_aux,
 static int dp_get_edid_block(void *data, u8 *edid, unsigned int block,
 			     size_t length)
 {
-	dp_hw_read_edid(block, length, edid);
+	// Hard-coded EDID for DP emulation mode
+	static const unsigned char emul_edid_block0[] = {
+		0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x1e, 0x6d, 0x01, 0x00, 0x01,
+		0x01, 0x01, 0x01, 0x01, 0x1b, 0x01, 0x03, 0x80, 0xa0, 0x5a, 0x78, 0x0a, 0xee,
+		0x91, 0xa3, 0x54, 0x4c, 0x99, 0x26, 0x0f, 0x50, 0x54, 0xa1, 0x08, 0x00, 0x31,
+		0x40, 0x45, 0x40, 0x61, 0x40, 0x71, 0x40, 0x81, 0x80, 0x01, 0x01, 0x01, 0x01,
+		0x01, 0x01, 0x08, 0xe8, 0x00, 0x30, 0xf2, 0x70, 0x5a, 0x80, 0xb0, 0x58, 0x8a,
+		0x00, 0x40, 0x84, 0x63, 0x00, 0x00, 0x1e, 0x02, 0x3a, 0x80, 0x18, 0x71, 0x38,
+		0x2d, 0x40, 0x58, 0x2c, 0x45, 0x00, 0x40, 0x84, 0x63, 0x00, 0x00, 0x1e, 0x00,
+		0x00, 0x00, 0xfd, 0x00, 0x3a, 0x79, 0x1e, 0x88, 0x3c, 0x00, 0x0a, 0x20, 0x20,
+		0x20, 0x20, 0x20, 0x20, 0x00, 0x00, 0x00, 0xfc, 0x00, 0x4c, 0x47, 0x20, 0x54,
+		0x56, 0x0a, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x01, 0x63
+	};
+	static const unsigned char emul_edid_block1[] = {
+		0x02, 0x03, 0x60, 0xf1, 0x5a, 0x61, 0x60, 0x10, 0x1f, 0x66, 0x65, 0x04, 0x13,
+		0x05, 0x14, 0x03, 0x02, 0x12, 0x20, 0x21, 0x22, 0x15, 0x01, 0x5d, 0x5e, 0x5f,
+		0x62, 0x63, 0x64, 0x3f, 0x40, 0x2f, 0x09, 0x57, 0x07, 0x15, 0x07, 0x50, 0x57,
+		0x07, 0x01, 0x3d, 0x06, 0xc0, 0x67, 0x04, 0x03, 0x6e, 0x03, 0x0c, 0x00, 0x30,
+		0x00, 0xb8, 0x3c, 0x20, 0x00, 0x80, 0x01, 0x02, 0x03, 0x04, 0x67, 0xd8, 0x5d,
+		0xc4, 0x01, 0x78, 0x80, 0x03, 0xe2, 0x00, 0xcf, 0xe3, 0x05, 0xc0, 0x00, 0xe3,
+		0x06, 0x0d, 0x01, 0xe2, 0x0f, 0x33, 0xeb, 0x01, 0x46, 0xd0, 0x00, 0x26, 0x0a,
+		0x09, 0x75, 0x80, 0x5b, 0x6c, 0x66, 0x21, 0x50, 0xb0, 0x51, 0x00, 0x1b, 0x30,
+		0x40, 0x70, 0x36, 0x00, 0x40, 0x84, 0x63, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe1
+	};
 
-	return 0;
+	if (!dp_emulation_mode) {
+		dp_hw_read_edid(block, length, edid);
+		return 0;
+	}
+
+	if (block <= 1) {
+		const unsigned char *blk = block ? emul_edid_block1 : emul_edid_block0;
+		size_t blk_size = block ? sizeof(emul_edid_block1) : sizeof(emul_edid_block0);
+
+		memcpy(edid, blk, min(length, blk_size));
+		return 0;
+	}
+
+	dp_warn(dp_drvdata, "%s: unknown edid block %d requested\n", __func__, block);
+	return -1;
 }
 
 //------------------------------------------------------------------------------
@@ -272,6 +328,11 @@ static int dp_sink_power_up(struct dp_device *dp, bool up)
 {
 	u8 val = 0;
 	int ret;
+
+	if (dp_emulation_mode) {
+		dp_debug(dp, "dp_emulation_mode=1, skipping %s\n", __func__);
+		return 0;
+	}
 
 	if (dp->sink.revision >= DP_DPCD_REV_11) {
 		ret = drm_dp_dpcd_readb(&dp->dp_aux, DP_SET_POWER, &val);
@@ -310,7 +371,7 @@ static u32 dp_get_training_interval_us(struct dp_device *dp, u32 interval)
 	else if (interval < 5)
 		return 4000 << (interval - 1);
 	else
-		dp_err(dp, "returned wrong trainig interval(%u)\n", interval);
+		dp_err(dp, "returned wrong training interval(%u)\n", interval);
 
 	return 0;
 }
@@ -750,22 +811,25 @@ static int dp_link_up(struct dp_device *dp)
 	dp->connector.state->max_requested_bpc = dp->host.max_bpc;
 
 	/* Read DP Sink device's Capabilities */
-	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
-	if (ret < 0) {
-		dp_err(dp, "failed to read DP Sink device capabilities\n");
-		mutex_unlock(&dp->training_lock);
-		return -EIO;
-	}
-
-	if (dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT) {
-		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DP13_DPCD_REV, dpcd,
-				       DP_RECEIVER_CAP_SIZE + 1);
+	if (!dp_emulation_mode) {
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
 		if (ret < 0) {
 			dp_err(dp, "failed to read DP Sink device capabilities\n");
 			mutex_unlock(&dp->training_lock);
 			return -EIO;
 		}
-	}
+
+		if (dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT) {
+			ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DP13_DPCD_REV, dpcd,
+					       DP_RECEIVER_CAP_SIZE + 1);
+			if (ret < 0) {
+				dp_err(dp, "failed to read DP Sink device capabilities\n");
+				mutex_unlock(&dp->training_lock);
+				return -EIO;
+			}
+		}
+	} else
+		dp_debug(dp, "dp_emulation_mode=1, skipped reading dcpd sink caps\n");
 
 	/* Fill Sink Capabilities */
 	dp_fill_sink_caps(dp, dpcd);
@@ -775,6 +839,19 @@ static int dp_link_up(struct dp_device *dp)
 
 	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
+
+	if (dp_emulation_mode) {
+		dp_debug(dp, "dp_emulation_mode=1, skipping link training\n");
+		dp->sink_count = 1;
+		dp->link.link_rate = dp_get_max_link_rate(dp);
+		dp->link.num_lanes = dp_get_max_num_lanes(dp);
+		dp->link.enhanced_frame = dp_get_enhanced_mode(dp);
+		dp->link.ssc = dp_get_ssc(dp);
+		dp->link.support_tps = dp_get_supported_pattern(dp);
+		dp->link.fast_training = dp_get_fast_training(dp);
+		mutex_unlock(&dp->training_lock);
+		return 0;
+	}
 
 	/* Check DSC & FEC support */
 	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE);
@@ -1588,6 +1665,12 @@ HPD_FAIL:
 	// Use cached error so LINK_TRAINING_FAILURE doesn't retrigger hpd immediately.
 	dp_update_link_status(dp, link_status);
 
+	// TODO: We need to define more error codes, but for now use just 1 for generic error code
+	dp->dp_hotplug_error_code = 1;
+	dp_info(dp, "HPD_FAIL, call drm_kms_helper_hotplug_event(dp_hotplug_error_code=%d)\n",
+		dp->dp_hotplug_error_code);
+	drm_kms_helper_hotplug_event(dp->connector.dev);
+
 	mutex_unlock(&dp->hpd_lock);
 }
 
@@ -1621,9 +1704,10 @@ static void dp_work_hpd_irq(struct work_struct *work)
 		else
 			dp_err(dp, "[HPD IRQ] cannot read link status\n");
 	} else {
-		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_SINK_COUNT_ESI, &sink_count) == 1)
-			dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count & 0x3f);
-		else
+		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_SINK_COUNT_ESI, &sink_count) == 1) {
+			sink_count = DP_GET_SINK_COUNT(sink_count);
+			dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count);
+		} else
 			dp_err(dp, "[HPD IRQ] cannot read DP_SINK_COUNT_ESI\n");
 
 		if (drm_dp_dpcd_readb(&dp->dp_aux, DP_DEVICE_SERVICE_IRQ_VECTOR_ESI0, &irq) == 1)
@@ -1699,6 +1783,42 @@ static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 static bool dp_enabled = false;
 module_param(dp_enabled, bool, 0664);
 MODULE_PARM_DESC(dp_enabled, "Enable/disable DP notification processing");
+
+static int param_dp_emulation_mode_get(char *buf, const struct kernel_param *kp)
+{
+	return sysfs_emit(buf, "%d\n", dp_emulation_mode);
+}
+
+static int param_dp_emulation_mode_set(const char *val, const struct kernel_param *kp)
+{
+	u32 new_value = 0;
+
+	if (kstrtou32(val, 10, &new_value)) {
+		dp_warn(dp_drvdata, "%s: dp_emulation_mode parse error\n", __func__);
+		return -EINVAL;
+	}
+
+	if (new_value != dp_emulation_mode) {
+		dp_info(dp_drvdata, "%s: dp_emulation_mode=%d\n", __func__, new_value);
+		dp_emulation_mode = new_value;
+		if (dp_emulation_mode) {
+			memset(&dp_drvdata->hw_config, 0, sizeof(struct dp_hw_config));
+			dp_drvdata->hw_config.orient_type = PLUG_NORMAL;
+			dp_drvdata->hw_config.num_lanes = 4;
+			dp_hpd_changed(dp_drvdata, EXYNOS_HPD_PLUG);
+		} else
+			dp_hpd_changed(dp_drvdata, EXYNOS_HPD_UNPLUG);
+	}
+	return 0;
+}
+
+static const struct kernel_param_ops param_ops_dp_emulation_mode = {
+	.get = param_dp_emulation_mode_get,
+	.set = param_dp_emulation_mode_set,
+};
+
+module_param_cb(dp_emulation_mode, &param_ops_dp_emulation_mode, NULL, 0664);
+MODULE_PARM_DESC(dp_emulation_mode, "Enable DisplayPort emulation mode");
 
 /*
  * Function should be called with typec_notification_lock held.
@@ -2404,6 +2524,30 @@ static ssize_t hpd_show(struct device *dev, struct device_attribute *attr, char 
 }
 static DEVICE_ATTR_RW(hpd);
 
+static ssize_t dp_hotplug_error_code_show(struct device *dev, struct device_attribute *attr,
+					  char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->dp_hotplug_error_code);
+}
+
+static ssize_t dp_hotplug_error_code_store(struct device *dev, struct device_attribute *attr,
+					   const char *buf, size_t size)
+{
+	struct dp_device *dp = get_dp_drvdata();
+	int new_value = 0;
+
+	if (kstrtoint(buf, 0, &new_value) < 0) {
+		dp_warn(dp, "%s: parse error, buf=%s\n", __func__, buf);
+		return -EINVAL;
+	}
+	dp->dp_hotplug_error_code = new_value;
+	return size;
+}
+
+static DEVICE_ATTR_RW(dp_hotplug_error_code);
+
 static ssize_t link_status_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct dp_device *dp = dev_get_drvdata(dev);
@@ -2424,14 +2568,13 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_WO(irq_hpd);
 
-static struct attribute *dp_attrs[] = {
-	&dev_attr_orientation.attr,
-	&dev_attr_pin_assignment.attr,
-	&dev_attr_hpd.attr,
-	&dev_attr_link_status.attr,
-	&dev_attr_irq_hpd.attr,
-	NULL
-};
+static struct attribute *dp_attrs[] = { &dev_attr_orientation.attr,
+					&dev_attr_pin_assignment.attr,
+					&dev_attr_hpd.attr,
+					&dev_attr_dp_hotplug_error_code.attr,
+					&dev_attr_link_status.attr,
+					&dev_attr_irq_hpd.attr,
+					NULL };
 
 static const struct attribute_group dp_group = {
 	.name = "drm-displayport",

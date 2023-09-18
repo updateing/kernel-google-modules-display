@@ -2367,7 +2367,13 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 
 	/* Set System Common Functions Enable */
 	dp_hw_set_initial_common_funcs();
+	dp_reg_set_pcs_func_en(1);
 	cal_log_debug(0, "set common function\n");
+
+	/* Set Single-Stream Transport Functions Enable */
+	dp_reg_set_enhanced_mode(hw_config->enhanced_mode ? 1 : 0);
+	dp_reg_set_sst1_video_func_en(1);
+	cal_log_debug(0, "set sst function\n");
 
 	/* Set System SW Functions Enable */
 	dp_reg_set_sw_func_en(1);
