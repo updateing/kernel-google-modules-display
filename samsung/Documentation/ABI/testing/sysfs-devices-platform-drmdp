@@ -32,3 +32,11 @@ KernelVersion:	5.15
 Contact:	"Petri Gynther" <pgynther@google.com>
 Description:
 		USB HAL uses this interface to report DP cable pin assignment.
+
+What:          /sys/devices/platform/110f0000.drmdp/drm-displayport/dp_hotplug_error_code
+Date:          September 2023
+KernelVersion: 5.15
+Contact:       "Sergey Volk" <servolk@google.com>
+Description:
+               Used to pass error code associated with a hotplug event sent to client.
+               Zero indicates successful hotplug event, non-zero value indicates hotplug failure.

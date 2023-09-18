@@ -3864,14 +3864,17 @@ void exynos_panel_wait_for_vsync_done(struct exynos_panel *ctx, u32 te_us, u32 p
 {
 	u32 delay_us;
 
+	DPU_ATRACE_BEGIN(__func__);
 	if (unlikely(exynos_panel_wait_for_vblank(ctx))) {
 		delay_us = period_us + 1000;
 		usleep_range(delay_us, delay_us + 10);
+		DPU_ATRACE_END(__func__);
 		return;
 	}
 
 	delay_us = exynos_panel_vsync_start_time_us(te_us, period_us);
 	usleep_range(delay_us, delay_us + 10);
+	DPU_ATRACE_END(__func__);
 }
 EXPORT_SYMBOL(exynos_panel_wait_for_vsync_done);
 
