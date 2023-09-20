@@ -306,6 +306,7 @@ static void dp_fill_sink_caps(struct dp_device *dp, u8 dpcd[DP_RECEIVER_CAP_SIZE
 	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CAPABILITY, &fec_dpcd) == 1) {
 		dp->sink.fec = dp_check_fec_caps(dp, fec_dpcd);
 	} else {
+		dp->stats.dpcd_read_failures++;
 		dp_warn(dp, "DP Sink: failed to read FEC support register\n");
 	}
 
@@ -314,6 +315,7 @@ static void dp_fill_sink_caps(struct dp_device *dp, u8 dpcd[DP_RECEIVER_CAP_SIZE
 			sizeof(dsc_dpcd)) {
 		dp->sink.dsc = !!dsc_dpcd[0];
 	} else {
+		dp->stats.dpcd_read_failures++;
 		dp_warn(dp, "DP Sink: failed to read DSC support registers\n");
 	}
 }
@@ -920,6 +922,7 @@ static int dp_link_up(struct dp_device *dp)
 	if (ret < 0) {
 		dp_err(dp, "failed to read DP Sink device capabilities\n");
 		mutex_unlock(&dp->training_lock);
+		dp->stats.dpcd_read_failures++;
 		return -EIO;
 	}
 
@@ -929,6 +932,7 @@ static int dp_link_up(struct dp_device *dp)
 		if (ret < 0) {
 			dp_err(dp, "failed to read DP Sink device capabilities\n");
 			mutex_unlock(&dp->training_lock);
+			dp->stats.dpcd_read_failures++;
 			return -EIO;
 		}
 	}
@@ -949,6 +953,7 @@ static int dp_link_up(struct dp_device *dp)
 	if (dp->sink_count < 0) {
 		dp_err(dp, "DP Sink: failed to read sink count\n");
 		mutex_unlock(&dp->training_lock);
+		dp->stats.dpcd_read_failures++;
 		return -EIO;
 	}
 
@@ -960,6 +965,7 @@ static int dp_link_up(struct dp_device *dp)
 		if (ret < 0) {
 			dp_err(dp, "DP Branch Device: failed to read DP Downstream Port info\n");
 			mutex_unlock(&dp->training_lock);
+			dp->stats.dpcd_read_failures++;
 			return -EIO;
 		}
 
@@ -978,6 +984,7 @@ static int dp_link_up(struct dp_device *dp)
 		} else {
 			dp_err(dp, "DP Sink: invalid sink count = 0\n");
 			mutex_unlock(&dp->training_lock);
+			dp->stats.sink_count_invalid_failures++;
 			return -EINVAL;
 		}
 	}
@@ -999,6 +1006,7 @@ static int dp_link_up(struct dp_device *dp)
 	if (!interval_us || dp_do_full_link_training(dp, interval_us)) {
 		dp_err(dp, "failed to train DP Link\n");
 		mutex_unlock(&dp->training_lock);
+		dp->stats.link_negotiation_failures++;
 		return -ENOLINK;
 	}
 
@@ -1357,9 +1365,11 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 	edid = drm_do_get_edid(connector, dp_get_edid_block, dp);
 	if (!edid) {
 		dp_err(dp, "EDID: failed to read EDID from sink, using fake EDID\n");
+		dp->stats.edid_read_failures++;
 		edid = kmemdup(dp_fake_edid, EDID_LENGTH, GFP_KERNEL);
 	} else if (!drm_edid_is_valid(edid)) {
 		dp_err(dp, "EDID: invalid EDID, using fake EDID\n");
+		dp->stats.edid_invalid_failures++;
 		kfree(edid);
 		edid = kmemdup(dp_fake_edid, EDID_LENGTH, GFP_KERNEL);
 	}
@@ -1860,6 +1870,7 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	if (!drm_dp_channel_eq_ok(link_status, dp->link.num_lanes)) {
 		dp_info(dp, "[HPD IRQ] DP link is down, re-establish the link\n");
 		dp_link_down_event_handler(dp);
+		dp->stats.link_unstable_failures++;
 		goto release_irq_resource;
 	}
 
@@ -2442,6 +2453,10 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 	drm_connector_attach_content_protection_property(&dp->connector,
 		DRM_MODE_HDCP_CONTENT_TYPE0);
 
+	ret = sysfs_create_link(&encoder->dev->dev->kobj, &dp->dev->kobj, "displayport");
+	if (ret)
+		dp_err(dp, "unable to link displayport sysfs (%d)\n", ret);
+
 	dp_info(dp, "DP Driver has been binded\n");
 
 	return ret;
@@ -2453,6 +2468,7 @@ static void dp_unbind(struct device *dev, struct device *master, void *data)
 	struct dp_device *dp = encoder_to_dp(encoder);
 
 	dp_debug(dp, "%s +\n", __func__);
+	sysfs_remove_link(&encoder->dev->dev->kobj, "displayport");
 	dp_debug(dp, "%s -\n", __func__);
 }
 
@@ -2742,6 +2758,71 @@ static const struct attribute_group dp_group = {
 	.attrs = dp_attrs,
 };
 
+static ssize_t link_negotiation_failures_show(struct device *dev, struct device_attribute *attr,
+					      char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->stats.link_negotiation_failures);
+}
+static DEVICE_ATTR_RO(link_negotiation_failures);
+
+static ssize_t edid_read_failures_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->stats.edid_read_failures);
+}
+static DEVICE_ATTR_RO(edid_read_failures);
+
+static ssize_t dpcd_read_failures_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->stats.dpcd_read_failures);
+}
+static DEVICE_ATTR_RO(dpcd_read_failures);
+
+static ssize_t edid_invalid_failures_show(struct device *dev, struct device_attribute *attr,
+					  char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->stats.edid_invalid_failures);
+}
+static DEVICE_ATTR_RO(edid_invalid_failures);
+
+static ssize_t sink_count_invalid_failures_show(struct device *dev, struct device_attribute *attr,
+						char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->stats.sink_count_invalid_failures);
+}
+static DEVICE_ATTR_RO(sink_count_invalid_failures);
+
+static ssize_t link_unstable_failures_show(struct device *dev, struct device_attribute *attr,
+					   char *buf)
+{
+	struct dp_device *dp = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", dp->stats.link_unstable_failures);
+}
+static DEVICE_ATTR_RO(link_unstable_failures);
+
+static struct attribute *dp_stats_attrs[] = { &dev_attr_link_negotiation_failures.attr,
+					      &dev_attr_edid_read_failures.attr,
+					      &dev_attr_dpcd_read_failures.attr,
+					      &dev_attr_edid_invalid_failures.attr,
+					      &dev_attr_sink_count_invalid_failures.attr,
+					      &dev_attr_link_unstable_failures.attr,
+					      NULL };
+
+static const struct attribute_group dp_stats_group = {
+	.name = "drm-displayport-stats",
+	.attrs = dp_stats_attrs,
+};
+
 static int dp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2751,6 +2832,12 @@ static int dp_probe(struct platform_device *pdev)
 	ret = sysfs_create_group(&dev->kobj, &dp_group);
 	if (ret) {
 		dev_err(dev, "failed to allocate dp attributes\n");
+		return ret;
+	}
+
+	ret = sysfs_create_group(&dev->kobj, &dp_stats_group);
+	if (ret) {
+		dev_err(dev, "failed to allocate dp stats attributes\n");
 		return ret;
 	}
 
@@ -2810,6 +2897,7 @@ static int dp_probe(struct platform_device *pdev)
 
 err:
 	sysfs_remove_group(&dev->kobj, &dp_group);
+	sysfs_remove_group(&dev->kobj, &dp_stats_group);
 	return ret;
 }
 
@@ -2827,6 +2915,7 @@ static int dp_remove(struct platform_device *pdev)
 	mutex_destroy(&dp->typec_notification_lock);
 
 	sysfs_remove_group(&dev->kobj, &dp_group);
+	sysfs_remove_group(&dev->kobj, &dp_stats_group);
 
 	destroy_workqueue(dp->dp_wq);
 

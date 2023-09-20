@@ -146,6 +146,15 @@ enum link_training_status {
 	LINK_TRAINING_FAILURE_SINK,
 };
 
+struct dp_stats_counters {
+	u32 link_negotiation_failures;
+	u32 edid_read_failures;
+	u32 dpcd_read_failures;
+	u32 edid_invalid_failures;
+	u32 sink_count_invalid_failures;
+	u32 link_unstable_failures;
+};
+
 /* DisplayPort Device */
 struct dp_device {
 	struct drm_encoder encoder;
@@ -210,6 +219,9 @@ struct dp_device {
 	struct dentry *dp_crc_values_debugfs_file;
 
 	bool hdcp_and_audio_enabled;
+
+	/* DP stats/error counters */
+	struct dp_stats_counters stats;
 };
 
 static inline struct dp_device *get_dp_drvdata(void)
