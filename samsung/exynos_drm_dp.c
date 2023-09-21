@@ -1850,7 +1850,16 @@ int dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data)
 	struct dp_device *dp = get_dp_drvdata();
 	int ret;
 
-	ret = drm_dp_dpcd_read(&dp->dp_aux, address, data, length);
+	mutex_lock(&dp->hpd_lock);
+	pm_runtime_get_sync(dp->dev);
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+		ret = drm_dp_dpcd_read(&dp->dp_aux, address, data, length);
+	} else {
+		ret = -EFAULT;
+	}
+	pm_runtime_put_sync(dp->dev);
+	mutex_unlock(&dp->hpd_lock);
+
 	if (ret == length)
 		return 0;
 
@@ -1864,7 +1873,16 @@ int dp_dpcd_write_for_hdcp22(u32 address, u32 length, u8 *data)
 	struct dp_device *dp = get_dp_drvdata();
 	int ret;
 
-	ret = drm_dp_dpcd_write(&dp->dp_aux, address, data, length);
+	mutex_lock(&dp->hpd_lock);
+	pm_runtime_get_sync(dp->dev);
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+		ret = drm_dp_dpcd_write(&dp->dp_aux, address, data, length);
+	} else {
+		ret = -EFAULT;
+	}
+	pm_runtime_put_sync(dp->dev);
+	mutex_unlock(&dp->hpd_lock);
+
 	if (ret == length)
 		return 0;
 
