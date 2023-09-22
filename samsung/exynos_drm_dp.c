@@ -1134,9 +1134,8 @@ static void dp_enable(struct drm_encoder *encoder)
 
 	if (dp->bist_mode != DP_BIST_OFF) {
 		/* BIST mode */
-		dp->hw_config.num_audio_ch = dp->sink.audio_ch_num;
-		// To remove HDMI_AUDIO_SAMPLE_FREQUENCY_STREAM, minus 1
-		dp->hw_config.audio_fs = dp->sink.audio_sample_rates - 1;
+		dp->hw_config.num_audio_ch = 2;
+		dp->hw_config.audio_fs = FS_48KHZ;
 		dp->hw_config.audio_bit = AUDIO_16_BIT;
 		dp->hw_config.audio_packed_mode = NORMAL_MODE;
 		dp->hw_config.audio_word_length = WORD_LENGTH_1;
