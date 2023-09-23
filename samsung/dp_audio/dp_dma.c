@@ -193,6 +193,16 @@ RESERVEDMEM_OF_DECLARE(dp_ado_rmem, "exynos,dp_ado_rmem", dp_ado_rmem_setup);
 #error "need to select SWITCH or EXTCON"
 #endif
 
+static void dp_audio_stop(struct runtime_data *prtd)
+{
+	if (prtd == NULL || prtd->state != ST_RUNNING)
+		return;
+	pr_info("dp audio is disconnected\n");
+	prtd->state &= ~ST_RUNNING;
+	prtd->dp_config.audio_state = DP_AUDIO_WAIT_BUF_FULL;
+	dp_audio_config(&prtd->dp_config);
+}
+
 #if IS_ENABLED(CONFIG_SWITCH)
 struct switch_dev dp_ado_switch;
 void dp_ado_switch_set_state(int state)
@@ -223,6 +233,7 @@ void dp_ado_switch_set_state(int state)
 			pdata->channel = 0;
 			pdata->width = 0;
 			pdata->rate = 0;
+			dp_audio_stop(pdata->prtd);
 		}
 	} else {
 		for (i = 0; i < dp_dma_count; i++) {
@@ -572,36 +583,54 @@ static int dma_trigger(struct snd_soc_component *component,
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		prtd->state |= ST_RUNNING;
+		dev_info(dev, "Start DP DMA request\n");
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Start DP DMA request initial status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		prtd->dp_config.audio_state = DP_AUDIO_START;
 		dp_audio_config(&prtd->dp_config);
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Start DP DMA request Low status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		prtd->params->ops->trigger(prtd->params->ch);
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Start DP DMA request DMA On status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		prtd->dp_config.audio_state = DP_AUDIO_REQ_BUF_READ;
 		dp_audio_config(&prtd->dp_config);
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Start DP DMA request DP Audio En status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		break;
 
 	case SNDRV_PCM_TRIGGER_STOP:
 		prtd->state &= ~ST_RUNNING;
 		prtd->dp_config.audio_state = DP_AUDIO_WAIT_BUF_FULL;
+		dev_info(dev, "Stop DP DMA request\n");
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Stop DP DMA request WAIT BUF FULL status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		dp_audio_config(&prtd->dp_config);
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Stop DP DMA request DMA Off status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		prtd->params->ops->stop(prtd->params->ch);
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Stop DP DMA request DP Audio Dis status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		prtd->dp_config.audio_state = DP_AUDIO_DISABLE;
 		dp_audio_config(&prtd->dp_config);
+#ifdef DP_DMA_DEBUG
 		dev_info(dev, "Stop DP DMA request End status = 0x%08x\n",
 			readl(dp_debug_sfr + 0x580C));
+#endif
 		break;
 
 	default:
@@ -670,6 +699,7 @@ static int dma_open(struct snd_soc_component *component,
 	prtd->dp_config.audio_state = DP_AUDIO_ENABLE;
 	dp_audio_config(&prtd->dp_config);
 
+	pdata->prtd = prtd;
 	dev_dbg(dev, "%s: prtd = %pK\n", __func__, prtd);
 
 	return 0;
@@ -695,6 +725,7 @@ static int dma_close(struct snd_soc_component *component,
 	dp_audio_config(&prtd->dp_config);
 
 	pdata = snd_soc_component_get_drvdata(component);
+	pdata->prtd = NULL;
 	exynos_update_ip_idle_status(pdata->idle_ip_index, 1);
 
 #ifdef DP_DMA_DEBUG
