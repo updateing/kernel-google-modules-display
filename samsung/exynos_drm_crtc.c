@@ -15,6 +15,7 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_atomic_uapi.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_color_mgmt.h>
@@ -482,6 +483,140 @@ exynos_drm_crtc_duplicate_state(struct drm_crtc *crtc)
 	copy->hibernation_exit = false;
 
 	return &copy->base;
+}
+
+struct drm_atomic_state
+*exynos_duplicate_active_crtc_state(struct drm_crtc *crtc,
+				struct drm_modeset_acquire_ctx *ctx)
+{
+	struct drm_device *dev = crtc->dev;
+	struct drm_atomic_state *state;
+	struct drm_crtc_state *crtc_state;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct decon_device *decon = exynos_crtc->ctx;
+	int err;
+
+	state = drm_atomic_state_alloc(dev);
+	if (!state)
+		return ERR_PTR(-ENOMEM);
+
+	state->acquire_ctx = ctx;
+
+	crtc_state = drm_atomic_get_crtc_state(state, crtc);
+	if (IS_ERR(crtc_state)) {
+		err = PTR_ERR(crtc_state);
+		goto free_state;
+	}
+
+	if (!crtc_state->active) {
+		if (!atomic_read(&decon->recovery.recovering)) {
+			drm_atomic_state_put(state);
+			return NULL;
+		}
+		pr_warn("crtc[%s]: skipping duplication of inactive crtc state\n", crtc->name);
+		err = -EPERM;
+		goto free_state;
+	}
+
+	err = drm_atomic_add_affected_planes(state, crtc);
+	if (err)
+		goto free_state;
+
+	err = drm_atomic_add_affected_connectors(state, crtc);
+	if (err)
+		goto free_state;
+
+	/* clear the acquire context so that it isn't accidentally reused */
+	state->acquire_ctx = NULL;
+
+free_state:
+	if (err < 0) {
+		drm_atomic_state_put(state);
+		state = ERR_PTR(err);
+	}
+
+	return state;
+}
+
+struct drm_atomic_state
+*exynos_crtc_suspend(struct drm_crtc *crtc,
+			struct drm_modeset_acquire_ctx *ctx)
+{
+	struct drm_crtc_state *crtc_state;
+	struct drm_connector *conn;
+	struct drm_connector_state *conn_state;
+	struct drm_plane *plane;
+	struct drm_plane_state *plane_state;
+	struct drm_atomic_state *state, *suspend_state;
+	int ret, i;
+
+	suspend_state = exynos_duplicate_active_crtc_state(crtc, ctx);
+	if (IS_ERR_OR_NULL(suspend_state))
+		return suspend_state;
+
+	state = drm_atomic_state_alloc(crtc->dev);
+	if (!state) {
+		drm_atomic_state_put(suspend_state);
+		return ERR_PTR(-ENOMEM);
+	}
+	state->acquire_ctx = ctx;
+retry:
+	crtc_state = drm_atomic_get_crtc_state(state, crtc);
+	if (IS_ERR(crtc_state)) {
+		ret = PTR_ERR(crtc_state);
+		goto out;
+	}
+
+	crtc_state->active = false;
+
+	ret = drm_atomic_set_mode_prop_for_crtc(crtc_state, NULL);
+	if (ret)
+		goto out;
+
+	ret = drm_atomic_add_affected_planes(state, crtc);
+	if (ret)
+		goto out;
+
+	ret = drm_atomic_add_affected_connectors(state, crtc);
+	if (ret)
+		goto out;
+
+	for_each_new_connector_in_state(state, conn, conn_state, i) {
+		ret = drm_atomic_set_crtc_for_connector(conn_state, NULL);
+		if (ret)
+			goto out;
+	}
+
+	for_each_new_plane_in_state(state, plane, plane_state, i) {
+		ret = drm_atomic_set_crtc_for_plane(plane_state, NULL);
+		if (ret)
+			goto out;
+
+		drm_atomic_set_fb_for_plane(plane_state, NULL);
+	}
+
+	ret = drm_atomic_commit(state);
+out:
+	if (ret == -EDEADLK) {
+		drm_atomic_state_clear(state);
+		drm_atomic_state_clear(suspend_state);
+		ret = drm_modeset_backoff(ctx);
+		if (!ret)
+			goto retry;
+	} else if (ret) {
+		drm_atomic_state_put(suspend_state);
+		suspend_state = ERR_PTR(ret);
+	}
+
+	drm_atomic_state_put(state);
+
+	return suspend_state;
+}
+
+int exynos_crtc_resume(struct drm_atomic_state *state,
+				struct drm_modeset_acquire_ctx *ctx)
+{
+	return drm_atomic_helper_commit_duplicated_state(state, ctx);
 }
 
 static int

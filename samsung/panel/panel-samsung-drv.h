@@ -719,6 +719,10 @@ struct exynos_panel {
 	bool self_refresh_active;
 	/* indicates if panel brightness is set or not after reset */
 	bool is_brightness_initialized;
+	/* indicates need to adjust vddd lp in self refresh */
+	bool need_post_vddd_lp;
+	/* adjust lp vddd in self refresh instead of mode set */
+	bool post_vddd_lp;
 	/**
 	 * refresh rate in panel idle mode
 	 * 0 means not in idle mode or not specified

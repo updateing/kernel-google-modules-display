@@ -270,6 +270,8 @@ static int exynos_panel_parse_regulators(struct exynos_panel *ctx)
 			pr_warn("ignore vddd normal %u\n", ctx->vddd_normal_uV);
 			ctx->vddd_normal_uV = 0;
 		}
+	} else {
+		ctx->post_vddd_lp = of_property_read_bool(dev->of_node, "post-vddd-lp");
 	}
 
 	reg = devm_regulator_get_optional(dev, "vddr_en");
@@ -3776,6 +3778,10 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 
 		ctx->self_refresh_active = true;
 		panel_update_idle_mode_locked(ctx);
+		if (ctx->post_vddd_lp && ctx->need_post_vddd_lp) {
+			_exynos_panel_set_vddd_voltage(ctx, true);
+			ctx->need_post_vddd_lp = false;
+		}
 
 		if (funcs && funcs->pre_update_ffc &&
 		    (dsim->clk_param.hs_clk_changed || dsim->clk_param.pending_hs_clk))
@@ -4287,8 +4293,12 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				ctx->panel_state = PANEL_STATE_LP;
 				need_update_backlight = true;
 			}
-			_exynos_panel_set_vddd_voltage(ctx, true);
+			if (!ctx->post_vddd_lp)
+				_exynos_panel_set_vddd_voltage(ctx, true);
+			else
+				ctx->need_post_vddd_lp = true;
 		} else if (was_lp_mode && !is_lp_mode) {
+			ctx->need_post_vddd_lp = false;
 			_exynos_panel_set_vddd_voltage(ctx, false);
 			if (is_active && funcs->set_nolp_mode) {
 				funcs->set_nolp_mode(ctx, pmode);
