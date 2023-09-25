@@ -148,6 +148,10 @@ static unsigned long dp_bpc = 8;    /* 8 bpc is the default */
 module_param(dp_bpc, ulong, 0664);
 MODULE_PARM_DESC(dp_bpc, "use specific BPC by setting dp_bpc=x");
 
+static bool dp_ssc = false;
+module_param(dp_ssc, bool, 0664);
+MODULE_PARM_DESC(dp_ssc, "Enable/disable DP link spread spectrum clocking");
+
 #define DP_BIST_OFF     0
 #define DP_BIST_ON      1
 #define DP_BIST_ON_HDCP 2
@@ -222,7 +226,7 @@ static void dp_fill_host_caps(struct dp_device *dp)
 	dp->host.fast_training = false;
 	dp->host.enhanced_frame = true;
 	dp->host.scrambler = true;
-	dp->host.ssc = true;
+	dp->host.ssc = dp_ssc;
 }
 
 static void dp_fill_sink_caps(struct dp_device *dp,
