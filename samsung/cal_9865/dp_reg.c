@@ -2451,9 +2451,9 @@ void dp_hw_start(void)
 
 void dp_hw_stop(void)
 {
-	dp_reg_set_sst1_longhop_power(0);
-	dp_hw_set_video_interrupt(0);
 	dp_reg_set_video_en(0);
+	dp_hw_set_video_interrupt(0);
+	dp_reg_set_sst1_longhop_power(0);
 }
 
 void dp_hw_set_video_config(struct dp_hw_config *hw_config)

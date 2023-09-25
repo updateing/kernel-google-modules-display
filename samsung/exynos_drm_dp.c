@@ -95,7 +95,6 @@ static void dp_init_info(struct dp_device *dp)
 	dp->hpd_current_state = EXYNOS_HPD_UNPLUG;
 	dp->audio_state = DP_AUDIO_DISABLE;
 	dp->output_type = EXYNOS_DISPLAY_TYPE_DP0_SST1;
-	dp->bist_used = false;
 	dp->dp_link_crc_enabled = false;
 }
 
@@ -149,6 +148,14 @@ static unsigned long dp_bpc = 8;    /* 8 bpc is the default */
 module_param(dp_bpc, ulong, 0664);
 MODULE_PARM_DESC(dp_bpc, "use specific BPC by setting dp_bpc=x");
 
+#define DP_BIST_OFF     0
+#define DP_BIST_ON      1
+#define DP_BIST_ON_HDCP 2
+
+static unsigned long dp_bist_mode = DP_BIST_OFF;
+module_param(dp_bist_mode, ulong, 0664);
+MODULE_PARM_DESC(dp_bist_mode, "use BIST mode by setting dp_bist_mode=x");
+
 static int dp_emulation_mode;
 
 static void dp_fill_host_caps(struct dp_device *dp)
@@ -192,6 +199,19 @@ static void dp_fill_host_caps(struct dp_device *dp)
 	case 6:
 	default:
 		dp->host.max_bpc = 6;
+		break;
+	}
+
+	switch (dp_bist_mode) {
+	case DP_BIST_ON_HDCP:
+		dp->bist_mode = DP_BIST_ON_HDCP;
+		break;
+	case DP_BIST_ON:
+		dp->bist_mode = DP_BIST_ON;
+		break;
+	case DP_BIST_OFF:
+	default:
+		dp->bist_mode = DP_BIST_OFF;
 		break;
 	}
 
@@ -1094,13 +1114,14 @@ static void dp_enable(struct drm_encoder *encoder)
 	dp->hw_config.range = VESA_RANGE;
 	dp_set_video_timing(dp);
 
-	if (dp->bist_used) {
+	if (dp->bist_mode == DP_BIST_OFF) {
+		dp_hw_set_video_config(&dp->hw_config);
+	} else {
+		/* BIST mode */
 		dp->hw_config.bist_mode = true;
 		dp->hw_config.bist_type = COLOR_BAR;
-
 		dp_hw_set_bist_video_config(&dp->hw_config);
-	} else
-		dp_hw_set_video_config(&dp->hw_config);
+	}
 
 	dp_set_avi_infoframe(dp);
 	dp_set_spd_infoframe();
@@ -1111,7 +1132,8 @@ static void dp_enable(struct drm_encoder *encoder)
 	dp_info(dp, "enabled DP as cur_mode = %s@%d\n", dp->cur_mode.name,
 		drm_mode_vrefresh(&dp->cur_mode));
 
-	if (dp->bist_used) {
+	if (dp->bist_mode != DP_BIST_OFF) {
+		/* BIST mode */
 		dp->hw_config.num_audio_ch = dp->sink.audio_ch_num;
 		// To remove HDMI_AUDIO_SAMPLE_FREQUENCY_STREAM, minus 1
 		dp->hw_config.audio_fs = dp->sink.audio_sample_rates - 1;
@@ -1140,7 +1162,8 @@ static void dp_disable(struct drm_encoder *encoder)
 
 	if (dp->state == DP_STATE_RUN) {
 		disable_irq(dp->res.irq);
-		if (dp->bist_used) {
+		if (dp->bist_mode != DP_BIST_OFF) {
+			/* BIST mode */
 			dp_hw_stop_audio();
 			dp_hw_deinit_audio();
 		}
@@ -1301,10 +1324,7 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 	dp->state = DP_STATE_ON;
 	dp_info(dp, "%s: DP State changed to ON\n", __func__);
 
-	if (dp->bist_used) {
-		/* Enable BIST video */
-		dp_enable(&dp->encoder);
-	} else {
+	if (dp->bist_mode == DP_BIST_OFF) {
 		hdcp_dplink_connect_state(DP_CONNECT);
 
 		if (dev) {
@@ -1318,6 +1338,12 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 			dp_info(dp, "call DP audio notifier (connected)\n");
 			blocking_notifier_call_chain(&dp_ado_notifier_head, 1UL, NULL);
 		}
+	} else {
+		/* BIST mode */
+		drm_mode_copy(&dp->cur_mode, fs_mode);
+		dp_enable(&dp->encoder);
+		if (dp->bist_mode == DP_BIST_ON_HDCP)
+			hdcp_dplink_connect_state(DP_CONNECT);
 	}
 }
 
@@ -1375,7 +1401,7 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 	int timeout = 0;
 
 	if (dp->state >= DP_STATE_ON) {
-		if (!dp->bist_used) {
+		if (dp->bist_mode == DP_BIST_OFF) {
 			hdcp_dplink_connect_state(DP_DISCONNECT);
 
 			if (dev) {
@@ -1404,8 +1430,12 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 				dp_err(dp, "dp_wait_state_change: timeout for disable\n");
 				dp_disable(&dp->encoder);
 			}
-		} else
-			dp_disable(&dp->encoder); /* for bist video disable */
+		} else {
+			/* BIST mode */
+			if (dp->bist_mode == DP_BIST_ON_HDCP)
+				hdcp_dplink_connect_state(DP_DISCONNECT);
+			dp_disable(&dp->encoder);
+		}
 	}
 }
 
@@ -1933,7 +1963,16 @@ int dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data)
 	struct dp_device *dp = get_dp_drvdata();
 	int ret;
 
-	ret = drm_dp_dpcd_read(&dp->dp_aux, address, data, length);
+	mutex_lock(&dp->hpd_lock);
+	pm_runtime_get_sync(dp->dev);
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+		ret = drm_dp_dpcd_read(&dp->dp_aux, address, data, length);
+	} else {
+		ret = -EFAULT;
+	}
+	pm_runtime_put_sync(dp->dev);
+	mutex_unlock(&dp->hpd_lock);
+
 	if (ret == length)
 		return 0;
 
@@ -1947,7 +1986,16 @@ int dp_dpcd_write_for_hdcp22(u32 address, u32 length, u8 *data)
 	struct dp_device *dp = get_dp_drvdata();
 	int ret;
 
-	ret = drm_dp_dpcd_write(&dp->dp_aux, address, data, length);
+	mutex_lock(&dp->hpd_lock);
+	pm_runtime_get_sync(dp->dev);
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+		ret = drm_dp_dpcd_write(&dp->dp_aux, address, data, length);
+	} else {
+		ret = -EFAULT;
+	}
+	pm_runtime_put_sync(dp->dev);
+	mutex_unlock(&dp->hpd_lock);
+
 	if (ret == length)
 		return 0;
 
