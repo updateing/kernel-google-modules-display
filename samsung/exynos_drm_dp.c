@@ -148,6 +148,10 @@ static unsigned long dp_bpc = 8;    /* 8 bpc is the default */
 module_param(dp_bpc, ulong, 0664);
 MODULE_PARM_DESC(dp_bpc, "use specific BPC by setting dp_bpc=x");
 
+static bool dp_ssc = false;
+module_param(dp_ssc, bool, 0664);
+MODULE_PARM_DESC(dp_ssc, "Enable/disable DP link spread spectrum clocking");
+
 #define DP_BIST_OFF     0
 #define DP_BIST_ON      1
 #define DP_BIST_ON_HDCP 2
@@ -222,7 +226,7 @@ static void dp_fill_host_caps(struct dp_device *dp)
 	dp->host.fast_training = false;
 	dp->host.enhanced_frame = true;
 	dp->host.scrambler = true;
-	dp->host.ssc = true;
+	dp->host.ssc = dp_ssc;
 }
 
 static void dp_fill_sink_caps(struct dp_device *dp,
@@ -1134,9 +1138,8 @@ static void dp_enable(struct drm_encoder *encoder)
 
 	if (dp->bist_mode != DP_BIST_OFF) {
 		/* BIST mode */
-		dp->hw_config.num_audio_ch = dp->sink.audio_ch_num;
-		// To remove HDMI_AUDIO_SAMPLE_FREQUENCY_STREAM, minus 1
-		dp->hw_config.audio_fs = dp->sink.audio_sample_rates - 1;
+		dp->hw_config.num_audio_ch = 2;
+		dp->hw_config.audio_fs = FS_48KHZ;
 		dp->hw_config.audio_bit = AUDIO_16_BIT;
 		dp->hw_config.audio_packed_mode = NORMAL_MODE;
 		dp->hw_config.audio_word_length = WORD_LENGTH_1;
