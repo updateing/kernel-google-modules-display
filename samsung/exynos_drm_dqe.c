@@ -307,7 +307,10 @@ int histogram_chan_configure(struct exynos_dqe *dqe, const enum exynos_histogram
 	dqe_reg_set_histogram_pos(id, hist_id, config->pos);
 	dqe_reg_set_histogram_roi(id, hist_id, &config->roi);
 	dqe_reg_set_histogram_weights(id, hist_id, &config->weights);
-
+#if IS_ENABLED(CONFIG_SOC_ZUMA)
+	if (config->flags & HISTOGRAM_FLAGS_BLOCKED_ROI)
+		dqe_reg_set_histogram_block_roi(id, hist_id, &config->blocked_roi);
+#endif
 	return 0;
 }
 
@@ -627,12 +630,21 @@ static void exynos_histogram_channel_update(struct exynos_dqe *dqe, struct exyno
 		weights = config->weights.weight_b + config->weights.weight_g +
 			  config->weights.weight_r;
 		roi = config->roi.hsize + config->roi.vsize;
-		if (weights && roi)
+		if (weights && roi) {
 			hist_state = HISTOGRAM_ROI;
-		else if (weights)
+#if IS_ENABLED(CONFIG_SOC_ZUMA)
+			if (config->flags & HISTOGRAM_FLAGS_BLOCKED_ROI)
+				hist_state = HISTOGRAM_BLOCKED_ROI;
+#endif
+		} else if (weights) {
 			hist_state = HISTOGRAM_FULL;
-		else
+#if IS_ENABLED(CONFIG_SOC_ZUMA)
+			if (config->flags & HISTOGRAM_FLAGS_BLOCKED_ROI)
+				hist_state = HISTOGRAM_BLOCKED_FULL;
+#endif
+		} else {
 			hist_state = HISTOGRAM_OFF;
+		}
 		histogram_chan_set_state(dqe, hist_id, hist_state, NULL);
 
 		if (hist_state == HISTOGRAM_OFF)

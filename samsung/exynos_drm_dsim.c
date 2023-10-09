@@ -630,11 +630,6 @@ dsim_get_clock_mode(const struct dsim_device *dsim,
 static void dsim_update_clock_config(struct dsim_device *dsim,
 				     const struct dsim_pll_param *p)
 {
-	/*
-	 * TODO(b/298878831): DPU trace shouldn't be added here since decon may be
-	 * null while running this function. Need to find another way to trace the
-	 * change of hs_clk, or add the protection to avoid possible race condition.
-	 */
 	dsim->config.dphy_pms.p = p->p;
 	dsim->config.dphy_pms.m = p->m;
 	dsim->config.dphy_pms.s = p->s;
@@ -662,8 +657,10 @@ static void dsim_update_clock_config(struct dsim_device *dsim,
 	}
 	dsim->clk_param.hs_clk = p->pll_freq;
 	dsim->clk_param.esc_clk = p->esc_freq;
-	if (dsim->clk_param.hs_clk_changed)
+	if (dsim->clk_param.hs_clk_changed) {
 		dsim_info(dsim, "hs_clk is changed to %u\n", p->pll_freq);
+		DPU_ATRACE_INT("mipi_clk", p->pll_freq);
+	}
 
 	dsim_debug(dsim, "found proper pll parameter\n");
 	dsim_debug(dsim, "\t%s(p:0x%x,m:0x%x,s:0x%x,k:0x%x)\n", p->name,

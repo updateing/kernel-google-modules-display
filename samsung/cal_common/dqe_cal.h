@@ -222,7 +222,11 @@ enum dqe_dither_type {
 enum histogram_state {
 	HISTOGRAM_OFF,
 	HISTOGRAM_FULL, /* ON, ROI is disabled, full screen */
-	HISTOGRAM_ROI /* ON, ROI is enabled */
+	HISTOGRAM_ROI, /* ON, ROI is enabled */
+#if CONFIG_SOC_ZUMA
+	HISTOGRAM_BLOCKED_FULL,
+	HISTOGRAM_BLOCKED_ROI,
+#endif
 };
 
 struct exynos_atc {
@@ -335,6 +339,10 @@ void dqe_reg_restore_lpd_atc(u32 dqe_id, u32 *lpd_atc_regs);
 bool dqe_reg_dimming_in_progress(u32 dqe_id);
 void dqe_reg_set_histogram_roi(u32 dqe_id, enum exynos_histogram_id hist_id,
 			       struct histogram_roi *roi);
+#if defined(CONFIG_SOC_ZUMA)
+void dqe_reg_set_histogram_block_roi(u32 dqe_id, enum exynos_histogram_id hist_id,
+				     struct histogram_roi *roi);
+#endif
 void dqe_reg_set_histogram_weights(u32 dqe_id, enum exynos_histogram_id hist_id,
 				   struct histogram_weights *weights);
 void dqe_reg_set_histogram_threshold(u32 dqe_id, enum exynos_histogram_id hist_id, u32 threshold);
