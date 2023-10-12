@@ -511,6 +511,13 @@ struct exynos_panel_funcs {
 	 * This callback is used to do something before updating FFC for panel.
 	 */
 	void (*pre_update_ffc)(struct exynos_panel *exynos_panel);
+
+	/**
+	 * @get_pwr_vreg:
+	 *
+	 * This callback is used to get panel power Vreg settings.
+	 */
+	void (*get_pwr_vreg)(struct exynos_panel *exynos_panel, char *buf, size_t len);
 };
 
 /**

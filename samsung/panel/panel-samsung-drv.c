@@ -1777,6 +1777,23 @@ static ssize_t error_count_unknown_show(struct device *dev, struct device_attrib
 	return scnprintf(buf, PAGE_SIZE, "%u\n", count);
 }
 
+static ssize_t panel_pwr_vreg_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
+
+	if (!funcs || !funcs->get_pwr_vreg)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&ctx->mode_lock);
+	funcs->get_pwr_vreg(ctx, buf, PAGE_SIZE);
+	mutex_unlock(&ctx->mode_lock);
+
+	return strlcat(buf, "\n", PAGE_SIZE);
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
@@ -1795,6 +1812,7 @@ static DEVICE_ATTR_RW(op_hz);
 static DEVICE_ATTR_RO(refresh_rate);
 static DEVICE_ATTR_RO(error_count_te);
 static DEVICE_ATTR_RO(error_count_unknown);
+static DEVICE_ATTR_RO(panel_pwr_vreg);
 
 static const struct attribute *panel_attrs[] = {
 	&dev_attr_serial_number.attr,
@@ -1815,6 +1833,7 @@ static const struct attribute *panel_attrs[] = {
 	&dev_attr_refresh_rate.attr,
 	&dev_attr_error_count_te.attr,
 	&dev_attr_error_count_unknown.attr,
+	&dev_attr_panel_pwr_vreg.attr,
 	NULL
 };
 
