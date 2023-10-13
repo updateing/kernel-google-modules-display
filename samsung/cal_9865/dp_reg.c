@@ -812,7 +812,7 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 	case LINK_RATE_RBR:
 	default:
 		mpllb_cp_int_gs = 0x41;
-		mpllb_cp_prop = 0x3;
+		mpllb_cp_prop = 0x1C;
 		mpllb_fracn_quot = 0xC000;
 		mpllb_freq_vco = 0x3;
 		mpllb_multiplier = 0x130;
