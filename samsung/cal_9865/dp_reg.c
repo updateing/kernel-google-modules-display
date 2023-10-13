@@ -776,8 +776,6 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_fracn_quot = 0xF000;
 		mpllb_freq_vco = 0x2;
 		mpllb_multiplier = 0x184;
-		mpllb_ssc_peak = 0xF300;
-		mpllb_ssc_stepsize = 0x1983D;
 		mpllb_tx_clk_div = 0x0;
 		mpllb_v2i = 0x3;
 		if (mpllb_ssc_en) {
@@ -791,8 +789,6 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_fracn_quot = 0xA000;
 		mpllb_freq_vco = 0x3;
 		mpllb_multiplier = 0xF8;
-		mpllb_ssc_peak = 0xA200;
-		mpllb_ssc_stepsize = 0x11029;
 		mpllb_tx_clk_div = 0x0;
 		mpllb_v2i = 0x3;
 		if (mpllb_ssc_en) {
@@ -806,8 +802,6 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_fracn_quot = 0xA000;
 		mpllb_freq_vco = 0x3;
 		mpllb_multiplier = 0xF8;
-		mpllb_ssc_peak = 0xA200;
-		mpllb_ssc_stepsize = 0x11029;
 		mpllb_tx_clk_div = 0x1;
 		mpllb_v2i = 0x3;
 		if (mpllb_ssc_en) {
@@ -822,8 +816,6 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_fracn_quot = 0xC000;
 		mpllb_freq_vco = 0x3;
 		mpllb_multiplier = 0x130;
-		mpllb_ssc_peak = 0xC266;
-		mpllb_ssc_stepsize = 0x14698;
 		mpllb_tx_clk_div = 0x2;
 		mpllb_v2i = 0x2;
 		dcc_byp_ac_cap = 0x1;
