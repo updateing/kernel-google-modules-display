@@ -249,39 +249,23 @@ static void dp_fill_host_caps(struct dp_device *dp)
 static void dp_fill_sink_caps(struct dp_device *dp,
 			      u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
-	if (!dp_emulation_mode) {
-		dp->sink.revision = dpcd[0];
-		dp->sink.link_rate = drm_dp_max_link_rate(dpcd);
-		dp->sink.num_lanes = drm_dp_max_lane_count(dpcd);
-		dp->sink.enhanced_frame = drm_dp_enhanced_frame_cap(dpcd);
+	dp->sink.revision = dpcd[0];
+	dp->sink.link_rate = drm_dp_max_link_rate(dpcd);
+	dp->sink.num_lanes = drm_dp_max_lane_count(dpcd);
+	dp->sink.enhanced_frame = drm_dp_enhanced_frame_cap(dpcd);
 
-		/* Set SSC support */
-		dp->sink.ssc = !!(dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
+	/* Set SSC support */
+	dp->sink.ssc = !!(dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
 
-		/* Set TPS support */
-		dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2);
-		if (drm_dp_tps3_supported(dpcd))
-			dp->sink.support_tps |= DP_SUPPORT_TPS(3);
-		if (drm_dp_tps4_supported(dpcd))
-			dp->sink.support_tps |= DP_SUPPORT_TPS(4);
+	/* Set TPS support */
+	dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2);
+	if (drm_dp_tps3_supported(dpcd))
+		dp->sink.support_tps |= DP_SUPPORT_TPS(3);
+	if (drm_dp_tps4_supported(dpcd))
+		dp->sink.support_tps |= DP_SUPPORT_TPS(4);
 
-		/* Set fast link support */
-		dp->sink.fast_training = drm_dp_fast_training_cap(dpcd);
-	} else {
-		// dp_emulation_mode is enabled, use hard-coded sink params.
-		dp->sink.revision = DP_DPCD_REV_12;
-		dp->sink.link_rate = 5400 * 100;
-		dp->sink.num_lanes = 4;
-		dp->sink.enhanced_frame = false;
-
-		dp->sink.ssc = 0;
-
-		/* Set TPS support */
-		dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2) | DP_SUPPORT_TPS(3) |
-				       DP_SUPPORT_TPS(4);
-
-		dp->sink.fast_training = true;
-	}
+	/* Set fast link support */
+	dp->sink.fast_training = drm_dp_fast_training_cap(dpcd);
 }
 
 // Callback function for DRM DP Helper
@@ -369,11 +353,6 @@ static int dp_sink_power_up(struct dp_device *dp, bool up)
 {
 	u8 val = 0;
 	int ret;
-
-	if (dp_emulation_mode) {
-		dp_debug(dp, "dp_emulation_mode=1, skipping %s\n", __func__);
-		return 0;
-	}
 
 	if (dp->sink.revision >= DP_DPCD_REV_11) {
 		ret = drm_dp_dpcd_readb(&dp->dp_aux, DP_SET_POWER, &val);
@@ -851,26 +830,55 @@ static int dp_link_up(struct dp_device *dp)
 	dp->connector.state->max_bpc = dp->host.max_bpc;
 	dp->connector.state->max_requested_bpc = dp->host.max_bpc;
 
+	if (dp_emulation_mode) {
+		dp_debug(dp, "dp_emulation_mode=1, skipped link training\n");
+
+		// dp_emulation_mode is enabled, use hard-coded sink params.
+		dp->sink.revision = DP_DPCD_REV_12;
+		dp->sink.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_5_4);
+		dp->sink.num_lanes = 4;
+		dp->sink.enhanced_frame = false;
+		dp->sink.ssc = false;
+		dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2) |
+				       DP_SUPPORT_TPS(3) | DP_SUPPORT_TPS(4);
+		dp->sink.fast_training = true;
+		dp->sink_count = 1;
+
+		dp->link.link_rate = dp_get_max_link_rate(dp);
+		dp->link.num_lanes = dp_get_max_num_lanes(dp);
+		dp->link.enhanced_frame = dp_get_enhanced_mode(dp);
+		dp->link.ssc = dp_get_ssc(dp);
+		dp->link.support_tps = dp_get_supported_pattern(dp);
+		dp->link.fast_training = dp_get_fast_training(dp);
+
+		/* Reconfigure DP HW for emulation mode */
+		dp_set_hwconfig_dplink(dp);
+		dp_set_hwconfig_video(dp);
+		dp_hw_reinit(&dp->hw_config);
+		dp_info(dp, "HW configured with Rate(%d) and Lanes(%u)\n",
+			dp->hw_config.link_rate, dp->hw_config.num_lanes);
+
+		mutex_unlock(&dp->training_lock);
+		return 0;
+	}
+
 	/* Read DP Sink device's Capabilities */
-	if (!dp_emulation_mode) {
-		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
+	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE + 1);
+	if (ret < 0) {
+		dp_err(dp, "failed to read DP Sink device capabilities\n");
+		mutex_unlock(&dp->training_lock);
+		return -EIO;
+	}
+
+	if (dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT) {
+		ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DP13_DPCD_REV, dpcd,
+				       DP_RECEIVER_CAP_SIZE + 1);
 		if (ret < 0) {
 			dp_err(dp, "failed to read DP Sink device capabilities\n");
 			mutex_unlock(&dp->training_lock);
 			return -EIO;
 		}
-
-		if (dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_EXTENDED_RECEIVER_CAP_FIELD_PRESENT) {
-			ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DP13_DPCD_REV, dpcd,
-					       DP_RECEIVER_CAP_SIZE + 1);
-			if (ret < 0) {
-				dp_err(dp, "failed to read DP Sink device capabilities\n");
-				mutex_unlock(&dp->training_lock);
-				return -EIO;
-			}
-		}
-	} else
-		dp_debug(dp, "dp_emulation_mode=1, skipped reading dcpd sink caps\n");
+	}
 
 	/* Fill Sink Capabilities */
 	dp_fill_sink_caps(dp, dpcd);
@@ -880,19 +888,6 @@ static int dp_link_up(struct dp_device *dp)
 
 	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
-
-	if (dp_emulation_mode) {
-		dp_debug(dp, "dp_emulation_mode=1, skipping link training\n");
-		dp->sink_count = 1;
-		dp->link.link_rate = dp_get_max_link_rate(dp);
-		dp->link.num_lanes = dp_get_max_num_lanes(dp);
-		dp->link.enhanced_frame = dp_get_enhanced_mode(dp);
-		dp->link.ssc = dp_get_ssc(dp);
-		dp->link.support_tps = dp_get_supported_pattern(dp);
-		dp->link.fast_training = dp_get_fast_training(dp);
-		mutex_unlock(&dp->training_lock);
-		return 0;
-	}
 
 	/* Check DSC & FEC support */
 	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE);
