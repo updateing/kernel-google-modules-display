@@ -140,6 +140,11 @@ static bool dp_get_ssc(struct dp_device *dp)
 	return (dp->host.ssc && dp->sink.ssc);
 }
 
+static bool dp_get_fec(struct dp_device *dp)
+{
+	return (dp->host.fec && dp->sink.fec);
+}
+
 static bool dp_get_fast_training(struct dp_device *dp)
 {
 	return (dp->host.fast_training && dp->sink.fast_training);
@@ -164,6 +169,10 @@ MODULE_PARM_DESC(dp_lanes, "use specific number of DP lanes by setting dp_lanes=
 static unsigned long dp_bpc = 8;    /* 8 bpc is the default */
 module_param(dp_bpc, ulong, 0664);
 MODULE_PARM_DESC(dp_bpc, "use specific BPC by setting dp_bpc=x");
+
+static bool dp_fec = false;
+module_param(dp_fec, bool, 0664);
+MODULE_PARM_DESC(dp_fec, "Enable/disable DP link forward error correction");
 
 static bool dp_ssc = false;
 module_param(dp_ssc, bool, 0664);
@@ -243,12 +252,40 @@ static void dp_fill_host_caps(struct dp_device *dp)
 	dp->host.fast_training = false;
 	dp->host.enhanced_frame = true;
 	dp->host.scrambler = true;
+	dp->host.fec = dp_fec;
 	dp->host.ssc = dp_ssc;
 }
 
-static void dp_fill_sink_caps(struct dp_device *dp,
-			      u8 dpcd[DP_RECEIVER_CAP_SIZE])
+static bool dp_check_fec_caps(struct dp_device *dp, u8 fec_dpcd)
 {
+	u8 fec_data;
+
+	if (!drm_dp_sink_supports_fec(fec_dpcd)) {
+		dp_info(dp, "DP Sink: doesn't support FEC\n");
+		return false;
+	}
+
+	fec_data = DP_FEC_DECODE_EN_DETECTED | DP_FEC_DECODE_DIS_DETECTED;
+	if (drm_dp_dpcd_writeb(&dp->dp_aux, DP_FEC_STATUS, fec_data) < 0)
+		return false;
+
+	fec_data = DP_FEC_READY;
+	if (drm_dp_dpcd_writeb(&dp->dp_aux, DP_FEC_CONFIGURATION, fec_data) < 0)
+		return false;
+
+	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CONFIGURATION, &fec_data) < 0)
+		return false;
+
+	dp_info(dp, "DP Sink: FEC support: 0x%X\n", fec_data);
+	return true;
+}
+
+static void dp_fill_sink_caps(struct dp_device *dp, u8 dpcd[DP_RECEIVER_CAP_SIZE])
+{
+	u8 fec_dpcd = 0;
+
+	memset(&dp->sink, 0, sizeof(struct dp_sink));
+
 	dp->sink.revision = dpcd[0];
 	dp->sink.link_rate = drm_dp_max_link_rate(dpcd);
 	dp->sink.num_lanes = drm_dp_max_lane_count(dpcd);
@@ -266,6 +303,13 @@ static void dp_fill_sink_caps(struct dp_device *dp,
 
 	/* Set fast link support */
 	dp->sink.fast_training = drm_dp_fast_training_cap(dpcd);
+
+	/* Set FEC support */
+	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CAPABILITY, &fec_dpcd) == 1) {
+		if (dp_check_fec_caps(dp, fec_dpcd))
+			dp->sink.fec = true;
+	} else
+		dp_err(dp, "DP Sink: failed to read FEC support register\n");
 }
 
 // Callback function for DRM DP Helper
@@ -472,7 +516,7 @@ static void dp_set_hwconfig_dplink(struct dp_device *dp)
 static void dp_set_hwconfig_video(struct dp_device *dp)
 {
 	dp->hw_config.enhanced_mode = dp_get_enhanced_mode(dp);
-	dp->hw_config.use_fec = false;
+	dp->hw_config.use_fec = dp_get_fec(dp);
 	dp->hw_config.use_ssc = dp_get_ssc(dp);
 }
 
@@ -528,6 +572,9 @@ static void dp_init_link_training_cr(struct dp_device *dp)
 	dp_hw_reinit(&dp->hw_config);
 	dp_info(dp, "HW configured with Rate(%d) and Lanes(%u)\n",
 		dp->hw_config.link_rate, dp->hw_config.num_lanes);
+
+	/* Configure FEC before link training */
+	dp_hw_set_fec(dp->link.fec);
 
 	/* Reconfigure DP Link */
 	dp_link_configure(dp);
@@ -816,7 +863,6 @@ static int dp_link_up(struct dp_device *dp)
 	u8 dpcd[DP_RECEIVER_CAP_SIZE + 1];
 	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE];
 	u8 dfp_info[DP_MAX_DOWNSTREAM_PORTS];
-	u8 val = 0;
 	u32 interval, interval_us;
 	int ret;
 
@@ -838,6 +884,7 @@ static int dp_link_up(struct dp_device *dp)
 		dp->sink.link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_5_4);
 		dp->sink.num_lanes = 4;
 		dp->sink.enhanced_frame = false;
+		dp->sink.fec = false;
 		dp->sink.ssc = false;
 		dp->sink.support_tps = DP_SUPPORT_TPS(1) | DP_SUPPORT_TPS(2) |
 				       DP_SUPPORT_TPS(3) | DP_SUPPORT_TPS(4);
@@ -847,6 +894,7 @@ static int dp_link_up(struct dp_device *dp)
 		dp->link.link_rate = dp_get_max_link_rate(dp);
 		dp->link.num_lanes = dp_get_max_num_lanes(dp);
 		dp->link.enhanced_frame = dp_get_enhanced_mode(dp);
+		dp->link.fec = dp_get_fec(dp);
 		dp->link.ssc = dp_get_ssc(dp);
 		dp->link.support_tps = dp_get_supported_pattern(dp);
 		dp->link.fast_training = dp_get_fast_training(dp);
@@ -889,19 +937,13 @@ static int dp_link_up(struct dp_device *dp)
 	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
 
-	/* Check DSC & FEC support */
+	/* Check DSC support */
 	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE);
 	if (ret < 0)
 		dp_warn(dp, "DP Sink: failed to read DSC support register\n");
 	else
 		dp_info(dp, "DP Sink: DSC support: %02x revision: %02x\n",
 			dsc_dpcd[0], dsc_dpcd[1]);
-
-	ret = drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CAPABILITY, &val);
-	if (ret < 0)
-		dp_warn(dp, "DP Sink: failed to read FEC support register\n");
-	else
-		dp_info(dp, "DP Sink: FEC support: %02x\n", val);
 
 	/* Get sink count */
 	dp->sink_count = drm_dp_read_sink_count(&dp->dp_aux);
@@ -945,11 +987,12 @@ static int dp_link_up(struct dp_device *dp)
 	dp->link.link_rate = dp_get_max_link_rate(dp);
 	dp->link.num_lanes = dp_get_max_num_lanes(dp);
 	dp->link.enhanced_frame = dp_get_enhanced_mode(dp);
+	dp->link.fec = dp_get_fec(dp);
 	dp->link.ssc = dp_get_ssc(dp);
 	dp->link.support_tps = dp_get_supported_pattern(dp);
 	dp->link.fast_training = dp_get_fast_training(dp);
-	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) SSC(%d)\n",
-		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.ssc);
+	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) SSC(%d) FEC(%d)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.ssc, dp->link.fec);
 
 	/* Link Training */
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;

@@ -58,6 +58,7 @@ struct dp_link {
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;
+	bool fec;
 	bool ssc;
 };
 
@@ -68,6 +69,7 @@ struct dp_host {
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;
+	bool fec;
 	bool ssc;
 	bool scrambler;
 
@@ -87,6 +89,7 @@ struct dp_sink {
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;
+	bool fec;
 	bool ssc;
 
 	/* From EDID */

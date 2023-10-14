@@ -1326,6 +1326,16 @@ static void dp_reg_aux_ch_received_buf(u8 *buf, u32 length)
 
 /* PCS (Scrambler/Encoder/FEC) Control Registers */
 // PCS Control
+static void dp_reg_set_fec_ready(u32 en)
+{
+	dp_write_mask(SST1, PCS_CONTROL, FEC_READY_SET(en), FEC_READY_MASK);
+}
+
+static void dp_reg_set_fec_func_en(u32 en)
+{
+	dp_write_mask(SST1, PCS_CONTROL, FEC_FUNC_EN_SET(en), FEC_FUNC_EN_MASK);
+}
+
 static void dp_reg_set_training_pattern(dp_training_pattern pattern)
 {
 	dp_write_mask(SST1, PCS_CONTROL, LINK_TRAINING_PATTERN_SET(pattern),
@@ -2545,6 +2555,12 @@ void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe)
 	dp_reg_set_spd_infoframe_data(spd_infoframe.data);
 	dp_reg_set_spd_infoframe_update(1);
 	dp_reg_set_spd_infoframe_send(1);
+}
+
+void dp_hw_set_fec(bool en)
+{
+	dp_reg_set_fec_func_en(en ? 1 : 0);
+	dp_reg_set_fec_ready(en ? 1 : 0);
 }
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern)

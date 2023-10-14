@@ -328,8 +328,10 @@
 
 /* PCS (Scrambler/Encoder/FEC) Control Registers */
 #define PCS_CONTROL			(0x3000)
-#define FEC_READY			(0x1 << 9)
-#define FEC_FUNC_EN			(0x1 << 8)
+#define FEC_READY_SET(_v)		(((_v)&0x1) << 9)
+#define FEC_READY_MASK			(0x1 << 9)
+#define FEC_FUNC_EN_SET(_v)		(((_v)&0x1) << 8)
+#define FEC_FUNC_EN_MASK		(0x1 << 8)
 #define LINK_TRAINING_PATTERN_SET(_v)	(((_v)&0x7) << 4)
 #define LINK_TRAINING_PATTERN_MASK	(0x7 << 4)
 #define BYTE_SWAP			(0x1 << 3)
