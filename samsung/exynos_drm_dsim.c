@@ -2080,6 +2080,22 @@ static void need_wait_vblank(struct dsim_device *dsim)
 	drm_crtc_vblank_put(crtc);
 }
 
+static void dsim_dump_cmd(struct dsim_device *dsim, const struct mipi_dsi_msg *msg, bool is_last)
+{
+	int tx_len = msg->tx_len;
+	const u8 *tx_buf = msg->tx_buf;
+
+	logbuffer_log(dsim->log, "last=%d delay=%d tx=", is_last, dsim->tx_delay_ms);
+	while (tx_len > 0) {
+		/* "%*phN" limits up to 64 bytes */
+		size_t sz = min(tx_len, 64);
+
+		logbuffer_log(dsim->log, "%*phN", sz, tx_buf);
+		tx_buf += sz;
+		tx_len -= sz;
+	}
+}
+
 #define PL_FIFO_THRESHOLD	mult_frac(MAX_PL_FIFO, 75, 100) /* 75% */
 #define IS_LAST(flags)		(((flags) & EXYNOS_DSI_MSG_QUEUE) == 0)
 static int dsim_write_data_locked(struct dsim_device *dsim, const struct mipi_dsi_msg *msg)
@@ -2162,6 +2178,7 @@ static int dsim_write_data_locked(struct dsim_device *dsim, const struct mipi_ds
 	}
 
 trace_dsi_cmd:
+	dsim_dump_cmd(dsim, msg, is_last);
 	/* TODO(b/278175371): print actual delay time */
 	trace_dsi_tx(msg->type, msg->tx_buf, msg->tx_len, is_last, dsim->tx_delay_ms);
 	dsim_debug(dsim, "%s last command\n", is_last ? "" : "Not");
@@ -2788,6 +2805,17 @@ static int dsim_probe(struct platform_device *pdev)
 			phy_init(dsim->res.phy_ex);
 	}
 
+	if (dsim->id == 0)
+		dsim->log = logbuffer_register("dsim0");
+	else if (dsim->id == 1)
+		dsim->log = logbuffer_register("dsim1");
+	else
+		dev_err(dsim->dev, "invalid dsim_id=%d for logbuffer registry\n", dsim->id);
+	if (IS_ERR_OR_NULL(dsim->log)) {
+		dev_err(dsim->dev, "logbuffer register failed\n");
+		dsim->log = NULL;
+	}
+
 	dsim_info(dsim, "driver has been probed.\n");
 	return component_add(dsim->dev, &dsim_component_ops);
 
@@ -2810,6 +2838,11 @@ static int dsim_remove(struct platform_device *pdev)
 	iounmap(dsim->res.phy_regs_ex);
 	iounmap(dsim->res.phy_regs);
 	iounmap(dsim->res.regs);
+
+	if (dsim->log) {
+		logbuffer_unregister(dsim->log);
+		dsim->log = NULL;
+	}
 
 	return 0;
 }

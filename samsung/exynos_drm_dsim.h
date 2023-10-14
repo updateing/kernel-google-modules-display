@@ -24,6 +24,7 @@
 
 #include <dsim_cal.h>
 
+#include <misc/logbuffer.h>
 #include "exynos_drm_drv.h"
 
 enum dsim_state {
@@ -119,6 +120,8 @@ struct dsim_device {
 	u32 tx_delay_ms;
 	/* override message flag ~EXYNOS_DSI_MSG_QUEUE */
 	bool force_batching;
+
+	struct logbuffer *log;
 
 	enum dsim_dual_dsi dual_dsi;
 };
