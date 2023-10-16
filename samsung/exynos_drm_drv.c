@@ -750,8 +750,6 @@ int exynos_atomic_enter_tui(void)
 	state->acquire_ctx = &ctx;
 
 	drm_for_each_crtc(crtc, dev) {
-		struct exynos_drm_crtc_state *exynos_crtc_state;
-
 		crtc_state = drm_atomic_get_crtc_state(state, crtc);
 		if (IS_ERR(crtc_state)) {
 			ret = PTR_ERR(crtc_state);
@@ -761,14 +759,6 @@ int exynos_atomic_enter_tui(void)
 		if (!crtc_state->enable || !crtc_state->active)
 			continue;
 
-		exynos_crtc_state = to_exynos_crtc_state(crtc_state);
-
-		exynos_crtc_state->bypass = true;
-		/*
-		 * set crtc in self refresh, this will keep power/regulators
-		 * enabled but disable everything else
-		 */
-		crtc_state->self_refresh_active = true;
 		crtc_state->active = false;
 		tui_crtc_mask |= drm_crtc_mask(crtc);
 
@@ -788,11 +778,30 @@ int exynos_atomic_enter_tui(void)
 	}
 
 	for_each_new_connector_in_state(state, conn, conn_state, i) {
-		if (!conn_state->self_refresh_aware &&
-		    (conn->connector_type != DRM_MODE_CONNECTOR_WRITEBACK)) {
-			pr_warn("%s: %s doesn't support self refresh\n", __func__, conn->name);
-			goto err;
+		struct exynos_drm_crtc_state *exynos_crtc_state;
+
+		if (!conn_state->self_refresh_aware) {
+			pr_debug("%s: %s doesn't support self refresh\n", __func__, conn->name);
+			continue;
 		}
+
+		if (!conn_state->crtc || !(tui_crtc_mask & drm_crtc_mask(conn_state->crtc))) {
+			pr_warn("%s: invalid connector %s in tui atomic state\n", __func__,
+				conn->name);
+			continue;
+		}
+
+		crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
+
+		/*
+		 * set crtc in self refresh, this will keep power/regulators
+		 * enabled but disable everything else
+		 */
+		crtc_state->self_refresh_active = true;
+
+		exynos_crtc_state = to_exynos_crtc_state(crtc_state);
+		exynos_crtc_state->bypass = true;
+
 		if (is_exynos_drm_connector(conn)) {
 			struct exynos_drm_connector_state *exynos_conn_state =
 				to_exynos_connector_state(conn_state);
