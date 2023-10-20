@@ -1177,6 +1177,11 @@ static void dp_disable(struct drm_encoder *encoder)
 {
 	struct dp_device *dp = encoder_to_dp(encoder);
 
+	if (!pm_runtime_get_if_in_use(dp->dev)) {
+		dp_debug(dp, "%s: DP is already disabled\n", __func__);
+		return;
+	}
+
 	mutex_lock(&dp->cmd_lock);
 
 	if (dp->state == DP_STATE_RUN) {
@@ -1195,6 +1200,7 @@ static void dp_disable(struct drm_encoder *encoder)
 		dp_info(dp, "%s: DP State is not RUN\n", __func__);
 
 	mutex_unlock(&dp->cmd_lock);
+	pm_runtime_put(dp->dev);
 }
 
 // For BIST
@@ -1672,6 +1678,11 @@ static void dp_work_hpd(struct work_struct *work)
 			dp_on_by_hpd_plug(dp);
 		}
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+		if (!pm_runtime_get_if_in_use(dp->dev)) {
+			mutex_unlock(&dp->hpd_lock);
+			return;
+		}
+
 		if (dp->sink_count > 0) {
 			dp_off_by_hpd_plug(dp);
 			dp_link_down(dp);
@@ -1681,6 +1692,8 @@ static void dp_work_hpd(struct work_struct *work)
 		dp_hw_deinit(&dp->hw_config);
 		dp_disable_dposc(dp);
 
+		pm_runtime_put(dp->dev);
+		/* put runtime power obtained during HPD_PLUG */
 		pm_runtime_put_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
@@ -1731,6 +1744,13 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	u8 sink_count;
 	u8 irq = 0, irq2 = 0, irq3 = 0;
 	u8 link_status[DP_LINK_STATUS_SIZE];
+
+	if (!pm_runtime_get_if_in_use(dp->dev)) {
+		dp_debug(dp, "[HPD IRQ] IRQ work skipped as power is off\n");
+		return;
+	}
+
+	mutex_lock(&dp->hpd_lock);
 
 	if (sysfs_triggered_irq != 0) {
 		irq = sysfs_triggered_irq;
@@ -1787,17 +1807,18 @@ static void dp_work_hpd_irq(struct work_struct *work)
 		    (dp->sink_count != sink_count)) {
 			dp_info(dp, "[HPD IRQ] DP downstream port status change\n");
 			dp_downstream_port_event_handler(dp, sink_count);
-			return;
+			goto release_irq_resource;
 		}
 
-		if (sink_count == 0)
-			return;
+		if (sink_count == 0) {
+			goto release_irq_resource;
+		}
 	}
 
 	if (!drm_dp_channel_eq_ok(link_status, dp->link.num_lanes)) {
 		dp_info(dp, "[HPD IRQ] DP link is down, re-establish the link\n");
 		dp_link_down_event_handler(dp);
-		return;
+		goto release_irq_resource;
 	}
 
 process_irq:
@@ -1812,6 +1833,10 @@ process_irq:
 		dp_link_down_event_handler(dp);
 	} else
 		dp_info(dp, "[HPD IRQ] unknown IRQ (0x%X)\n", irq);
+
+release_irq_resource:
+	mutex_unlock(&dp->hpd_lock);
+	pm_runtime_put(dp->dev);
 }
 
 /* Type-C Handshaking Functions */
@@ -1980,17 +2005,12 @@ EXPORT_SYMBOL(dp_hdcp22_enable);
 int dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data)
 {
 	struct dp_device *dp = get_dp_drvdata();
-	int ret;
+	int ret = -EFAULT;
 
-	mutex_lock(&dp->hpd_lock);
-	pm_runtime_get_sync(dp->dev);
-	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+	if (pm_runtime_get_if_in_use(dp->dev)) {
 		ret = drm_dp_dpcd_read(&dp->dp_aux, address, data, length);
-	} else {
-		ret = -EFAULT;
+		pm_runtime_put(dp->dev);
 	}
-	pm_runtime_put_sync(dp->dev);
-	mutex_unlock(&dp->hpd_lock);
 
 	if (ret == length)
 		return 0;
@@ -2003,17 +2023,12 @@ EXPORT_SYMBOL(dp_dpcd_read_for_hdcp22);
 int dp_dpcd_write_for_hdcp22(u32 address, u32 length, u8 *data)
 {
 	struct dp_device *dp = get_dp_drvdata();
-	int ret;
+	int ret = -EFAULT;
 
-	mutex_lock(&dp->hpd_lock);
-	pm_runtime_get_sync(dp->dev);
-	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+	if (pm_runtime_get_if_in_use(dp->dev)) {
 		ret = drm_dp_dpcd_write(&dp->dp_aux, address, data, length);
-	} else {
-		ret = -EFAULT;
+		pm_runtime_put(dp->dev);
 	}
-	pm_runtime_put_sync(dp->dev);
-	mutex_unlock(&dp->hpd_lock);
 
 	if (ret == length)
 		return 0;
