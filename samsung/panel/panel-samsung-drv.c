@@ -204,9 +204,6 @@ static void exynos_panel_update_te2(struct exynos_panel *ctx)
 		return;
 
 	funcs->update_te2(ctx);
-
-	if (ctx->bl)
-		te2_state_changed(ctx->bl);
 }
 
 static int exynos_panel_parse_gpios(struct exynos_panel *ctx)
@@ -1136,7 +1133,13 @@ static int exynos_update_status(struct backlight_device *bl)
 	    bl_range != ctx->bl_notifier.current_range) {
 		ctx->bl_notifier.current_range = bl_range;
 
-		sysfs_notify(&ctx->bl->dev.kobj, NULL, "brightness");
+		/* Prevent sysfs_notify from resolution switch */
+		if (ctx->desc->use_async_notify &&
+		    (ctx->mode_in_progress == MODE_RES_IN_PROGRESS ||
+		     ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS))
+			schedule_work(&ctx->brightness_notify);
+		else
+			sysfs_notify(&ctx->bl->dev.kobj, NULL, "brightness");
 
 		dev_dbg(ctx->dev, "bl range is changed to %d\n", bl_range);
 	}
@@ -4690,6 +4693,20 @@ static void exynos_panel_check_mode_clock(struct exynos_panel *ctx,
 	}
 }
 
+static void state_notify_worker(struct work_struct *work)
+{
+	struct exynos_panel *ctx = container_of(work, struct exynos_panel, state_notify);
+
+	sysfs_notify(&ctx->bl->dev.kobj, NULL, "state");
+}
+
+static void brightness_notify_worker(struct work_struct *work)
+{
+	struct exynos_panel *ctx = container_of(work, struct exynos_panel, brightness_notify);
+
+	sysfs_notify(&ctx->bl->dev.kobj, NULL, "brightness");
+}
+
 int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 				struct exynos_panel *ctx)
 {
@@ -4785,6 +4802,9 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 
 	ctx->panel_idle_enabled = exynos_panel_func && exynos_panel_func->set_self_refresh != NULL;
 	INIT_DELAYED_WORK(&ctx->idle_work, panel_idle_work);
+
+	INIT_WORK(&ctx->state_notify, state_notify_worker);
+	INIT_WORK(&ctx->brightness_notify, brightness_notify_worker);
 
 	if (exynos_panel_func && exynos_panel_func->run_normal_mode_work &&
 	    ctx->desc->normal_mode_work_delay_ms) {
