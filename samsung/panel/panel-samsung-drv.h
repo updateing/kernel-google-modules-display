@@ -606,6 +606,8 @@ struct exynos_panel_desc {
 	 *    - if `freq set` is changed when lhbm is on, lhbm may not work normally.
 	 */
 	bool no_lhbm_rr_constraints;
+	/* schedule sysfs_notify in workq */
+	bool use_async_notify;
 	const u32 lhbm_post_cmd_delay_frames;
 	const u32 lhbm_effective_delay_frames;
 	/**
@@ -779,6 +781,10 @@ struct exynos_panel {
 	ktime_t last_self_refresh_active_ts;
 	ktime_t last_panel_idle_set_ts;
 	struct delayed_work idle_work;
+
+	/* works of sysfs_notify */
+	struct work_struct state_notify;
+	struct work_struct brightness_notify;
 
 	/**
 	 * Record the last refresh rate switch. Note the mode switch doesn't
