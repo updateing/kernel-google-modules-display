@@ -2768,12 +2768,22 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_WO(irq_hpd);
 
+static ssize_t usbc_cable_disconnect_store(struct device *dev, struct device_attribute *attr,
+					   const char *buf, size_t size)
+{
+	/* To-Do: Handle Signal */
+
+	return size;
+}
+static DEVICE_ATTR_WO(usbc_cable_disconnect);
+
 static struct attribute *dp_attrs[] = { &dev_attr_orientation.attr,
 					&dev_attr_pin_assignment.attr,
 					&dev_attr_hpd.attr,
 					&dev_attr_dp_hotplug_error_code.attr,
 					&dev_attr_link_status.attr,
 					&dev_attr_irq_hpd.attr,
+					&dev_attr_usbc_cable_disconnect.attr,
 					NULL };
 
 static const struct attribute_group dp_group = {
