@@ -289,6 +289,15 @@ struct exynos_panel_funcs {
 	void (*set_acl_mode)(struct exynos_panel *exynos_panel, enum exynos_acl_mode mode);
 
 	/**
+	 * @set_ssc_mode:
+	 *
+	 * This callback is used to implement panel specific logic for ssc mode
+	 * enablement. If this is not defined, it means that panel does not
+	 * support ssc.
+	 */
+	void (*set_ssc_mode)(struct exynos_panel *exynos_panel, bool on);
+
+	/**
 	 * @set_power:
 	 *
 	 * This callback is used to implement panel specific power on/off sequence.
@@ -763,6 +772,7 @@ struct exynos_panel {
 
 	enum exynos_hbm_mode hbm_mode;
 	bool dimming_on;
+	bool ssc_mode;
 	/* indicates the LCD backlight is controlled by DCS */
 	bool bl_ctrl_dcs;
 	enum exynos_cabc_mode cabc_mode;
