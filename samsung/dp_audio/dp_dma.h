@@ -23,6 +23,7 @@ struct dp_audio_pdata {
 	u32 channel;
 	int idle_ip_index;
 	char *ch_name;
+	struct runtime_data *prtd;
 };
 
 void dp_ado_switch_set_state(int state);

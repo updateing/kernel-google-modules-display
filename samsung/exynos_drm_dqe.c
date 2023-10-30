@@ -20,6 +20,7 @@
 #include <dqe_cal.h>
 #include <decon_cal.h>
 #include <regs-dqe.h>
+#include <trace/dpu_trace.h>
 
 #include "exynos_drm_decon.h"
 
@@ -28,8 +29,7 @@ static inline u8 get_actual_dstep(u8 dstep, int vrefresh)
 	return dstep * vrefresh / 60;
 }
 
-static void
-exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
+void exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 {
 	const struct exynos_drm_crtc_state *exynos_crtc_state =
 		container_of(state, struct exynos_drm_crtc_state, dqe);
@@ -37,6 +37,8 @@ exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 	struct decon_device *decon = dqe->decon;
 	struct drm_printer p = drm_info_printer(decon->dev);
 	u32 id = decon->id;
+
+	DPU_ATRACE_BEGIN(__func__);
 
 	if (drm_atomic_crtc_needs_modeset(crtc_state) || dqe->dstep_changed ||
 			exynos_crtc_state->seamless_mode_changed) {
@@ -53,6 +55,8 @@ exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 			drm_mode_vrefresh(&crtc_state->mode),
 			dqe->force_atc_config.dstep,
 			dqe->force_atc_config.actual_dstep);
+	if (decon->thread)
+		DPU_ATRACE_INT_PID("atc_en", dqe->force_atc_config.en, decon->thread->pid);
 
 	if (dqe->force_atc_config.dirty) {
 		if (dqe->force_atc_config.en) {
@@ -65,7 +69,10 @@ exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 
 	if (dqe->verbose_atc)
 		dqe_reg_print_atc(id, &p);
+
+	DPU_ATRACE_END(__func__);
 }
+EXPORT_SYMBOL_GPL(exynos_atc_update);
 
 /*
  * emmits event (caller should protect)

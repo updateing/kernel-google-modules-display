@@ -187,6 +187,7 @@ void exynos_dqe_hibernation_enter(struct exynos_dqe *dqe);
 struct exynos_dqe *exynos_dqe_register(struct decon_device *decon);
 void exynos_dqe_save_lpd_data(struct exynos_dqe *dqe);
 void exynos_dqe_restore_lpd_data(struct exynos_dqe *dqe);
+void exynos_atc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state);
 
 int histogram_chan_configure(struct exynos_dqe *dqe, const enum exynos_histogram_id hist_id,
 			     struct histogram_channel_config *config);

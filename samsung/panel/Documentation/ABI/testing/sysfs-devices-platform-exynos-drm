@@ -17,3 +17,12 @@ Description:
 		during runtime.
 
 		Valid panels are 'primary-panel' or 'secondary-panel'.
+
+What:		/sys/devices/platform/exynos-drm/<panel>/panel_pwr_vreg
+Date:		October 2023
+KernelVersion:	5.15
+Contact:	"Chris Lu" <luchris@google.com>
+Description:
+		The file provides the Vreg power setting of a panel.
+
+		Valid panels are 'primary-panel' or 'secondary-panel'.
