@@ -1328,18 +1328,16 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 	dp_info(dp, "%s: DP State changed to ON\n", __func__);
 
 	if (dp->bist_mode == DP_BIST_OFF) {
-		hdcp_dplink_connect_state(DP_CONNECT);
-
+		/*
+		 * Notify userspace only about DP video path here.
+		 * Once the DP connection usage has been confirmed,
+		 * then enable HDCP and DP audio in dp_conn_atomic_check.
+		 */
 		if (dev) {
 			connector->status = connector_status_connected;
 			dp_info(dp,
 				"call drm_kms_helper_hotplug_event (connected)\n");
 			drm_kms_helper_hotplug_event(dev);
-		}
-
-		if (dp->sink.has_pcm_audio) {
-			dp_info(dp, "call DP audio notifier (connected)\n");
-			blocking_notifier_call_chain(&dp_ado_notifier_head, 1UL, NULL);
 		}
 	} else {
 		/* BIST mode */
@@ -1419,6 +1417,8 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 				dp_info(dp, "call DP audio notifier (disconnected)\n");
 				blocking_notifier_call_chain(&dp_ado_notifier_head, -1UL, NULL);
 			}
+
+			dp->hdcp_and_audio_enabled = false;
 
 			/* Wait Audio is stopped if Audio is working. */
 			if (dp_get_audio_state(dp) != DP_AUDIO_DISABLE) {
@@ -2256,10 +2256,38 @@ static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector, 
 	return MODE_OK;
 }
 
+static int dp_conn_atomic_check(struct drm_connector *c, struct drm_atomic_state *state)
+{
+	struct dp_device *dp = connector_to_dp(c);
+
+	dp_debug(dp, "%s: c->status=%d dp->state=%d c->dpms=%d dp->hdcp_and_audio_enabled=%d\n",
+		 __func__, c->status, dp->state, c->dpms, dp->hdcp_and_audio_enabled);
+
+	if (c->status == connector_status_connected && dp->state == DP_STATE_RUN &&
+	    c->dpms == DRM_MODE_DPMS_ON && !dp->hdcp_and_audio_enabled) {
+		/*
+		 * Connector has transitioned to DRM_MODE_DPMS_ON.
+		 * This means DP connection usage has been confirmed.
+		 * Enable HDCP and DP audio.
+		 */
+		hdcp_dplink_connect_state(DP_CONNECT);
+
+		if (dp->sink.has_pcm_audio) {
+			dp_info(dp, "call DP audio notifier (connected)\n");
+			blocking_notifier_call_chain(&dp_ado_notifier_head, 1UL, NULL);
+		}
+
+		dp->hdcp_and_audio_enabled = true;
+	}
+
+	return 0;
+}
+
 static const struct drm_connector_helper_funcs dp_connector_helper_funcs = {
 	.detect_ctx = dp_detect,
 	.get_modes = dp_get_modes,
 	.mode_valid = dp_conn_mode_valid,
+	.atomic_check = dp_conn_atomic_check,
 };
 
 /* DP DRM Component Functions */
@@ -2279,6 +2307,7 @@ static int dp_create_connector(struct drm_encoder *encoder)
 	}
 
 	connector->status = connector_status_disconnected;
+	connector->dpms = DRM_MODE_DPMS_OFF;
 	drm_connector_helper_add(connector, &dp_connector_helper_funcs);
 	drm_connector_register(connector);
 	drm_connector_attach_encoder(connector, encoder);

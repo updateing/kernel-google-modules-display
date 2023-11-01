@@ -204,6 +204,8 @@ struct dp_device {
 	bool dp_link_crc_enabled;
 	struct dentry *dp_crc_enabled_debugfs_file;
 	struct dentry *dp_crc_values_debugfs_file;
+
+	bool hdcp_and_audio_enabled;
 };
 
 static inline struct dp_device *get_dp_drvdata(void)
