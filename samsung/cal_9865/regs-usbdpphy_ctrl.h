@@ -421,7 +421,7 @@
 #define DP_TX1_WIDTH			     (0x3 << 2)
 #define DP_TX0_WIDTH			     (0x3 << 0)
 #define DP_TX_WIDTH_SET_4LANES		     ((0xFF & 0xFF) << 0)
-#define DP_TX_WIDTH_SET_2LANES		     ((0xF0 & 0xFF) << 0)
+#define DP_TX_WIDTH_SET_2LANES		     ((0x0F & 0xFF) << 0)
 #define DP_TX_WIDTH_SET_0LANES		     ((0x00 & 0xFF) << 0)
 #define DP_TX_WIDTH_MASK		     (0xFF << 0)
 
@@ -511,7 +511,7 @@
 #define DP_TX1_DCC_BYP_AC_CAP		     (0x1 << 1)
 #define DP_TX0_DCC_BYP_AC_CAP		     (0x1 << 0)
 #define DP_TX_DCC_BYP_AC_CAP_SET_4LANES	     (0xF << 0)
-#define DP_TX_DCC_BYP_AC_CAP_SET_2LANES	     (0xC << 0)
+#define DP_TX_DCC_BYP_AC_CAP_SET_2LANES	     (0x3 << 0)
 #define DP_TX_DCC_BYP_AC_CAP_SET_0LANES	     (0x0 << 0)
 #define DP_TX_DCC_BYP_AC_CAP_MASK	     (0xF << 0)
 

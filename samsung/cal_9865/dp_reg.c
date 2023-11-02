@@ -618,7 +618,7 @@ static void dpphy_reg_set_config17_dcc_byp_ac_cap(u32 dcc_byp_ac_cap,
 	// Need to check this function
 	u32 val = 0;
 
-	if (lane == DP_USE_2_LANES)
+	if (lane == DP_USE_0_LANES)
 		val = DP_TX_DCC_BYP_AC_CAP_SET_0LANES;
 	else if (lane == DP_USE_2_LANES)
 		val = DP_TX_DCC_BYP_AC_CAP_SET_2LANES;
