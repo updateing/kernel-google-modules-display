@@ -1602,18 +1602,16 @@ static void dp_hw_set_video_interrupt(u32 en)
 }
 
 // SST1 Video M/N Value
-static void dp_reg_set_mn_value(u32 mvid, u32 nvid)
+static void dp_reg_set_video_mn_value(u32 mvid_master, u32 nvid_master)
 {
-	dp_write(SST1, SST1_MVID_MASTER_MODE, mvid);
-	dp_write(SST1, SST1_NVID_MASTER_MODE, nvid);
+	dp_write(SST1, SST1_MVID_MASTER_MODE, mvid_master);
+	dp_write(SST1, SST1_NVID_MASTER_MODE, nvid_master);
 }
 
-static void dp_reg_set_mn_config(u32 strm_clk, u32 ls_clk)
+static void dp_reg_set_video_mn_config(u32 mvid, u32 nvid)
 {
-	dp_write_mask(SST1, SST1_MVID_SFR_CONFIGURE, strm_clk,
-		      MNVID_SFR_CONFIG_MASK);
-	dp_write_mask(SST1, SST1_NVID_SFR_CONFIGURE, ls_clk,
-		      MNVID_SFR_CONFIG_MASK);
+	dp_write_mask(SST1, SST1_MVID_SFR_CONFIGURE, mvid, MNVID_SFR_CONFIG_MASK);
+	dp_write_mask(SST1, SST1_NVID_SFR_CONFIGURE, nvid, MNVID_SFR_CONFIG_MASK);
 }
 
 // SST1 Audio M/N Value
@@ -1659,15 +1657,21 @@ static u32 dp_get_ls_clk(struct dp_hw_config *hw_config)
 
 static void dp_reg_set_video_clock(struct dp_hw_config *hw_config)
 {
-	u32 strm_clk = hw_config->vtiming.clock; // KHz Unit
-	u32 ls_clk = dp_get_ls_clk(hw_config) / 1000; // KHz Unit
+	u32 strm_clk = hw_config->vtiming.clock;  /* KHz unit */
+	u32 ls_clk = dp_get_ls_clk(hw_config);  /* Hz unit */
 
-	// Synopsys PHY should be set a quarter of stream clock
-	u32 mvid_master = strm_clk / 4;
-	u32 nvid_master = ls_clk;
+	/*
+	 * Adjust ls_clk when SSC is enabled.
+	 * Max downspread is 0.5%, so use 0.25% average adjustment.
+	 */
+	if (hw_config->use_ssc)
+		ls_clk = (ls_clk / 10000) * 9975;
 
-	dp_reg_set_mn_value(mvid_master, nvid_master);
-	dp_reg_set_mn_config(strm_clk, ls_clk);
+	ls_clk = ls_clk / 1000;  /* KHz unit */
+
+	/* Synopsys PHY needs mvid_master = stream clock / 4 */
+	dp_reg_set_video_mn_value(strm_clk / 4, ls_clk);
+	dp_reg_set_video_mn_config(strm_clk, ls_clk);
 }
 
 // SST1 Active Symbol SW Control
