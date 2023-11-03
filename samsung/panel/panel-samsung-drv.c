@@ -5003,6 +5003,7 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	return 0;
 
 err_panel:
+	drm_bridge_remove(&ctx->bridge);
 	drm_panel_remove(&ctx->panel);
 	dev_err(ctx->dev, "failed to probe samsung panel driver(%d)\n", ret);
 
