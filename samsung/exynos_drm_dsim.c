@@ -584,32 +584,20 @@ static void dsim_encoder_disable(struct drm_encoder *encoder, struct drm_atomic_
 	DPU_ATRACE_END(__func__);
 }
 
-static void dsim_modes_release(struct dsim_pll_params *pll_params)
-{
-	if (pll_params->params) {
-		unsigned int i;
-
-		for (i = 0; i < pll_params->num_modes; i++)
-			kfree(pll_params->params[i]);
-		kfree(pll_params->params);
-	}
-	kfree(pll_params->features);
-
-	kfree(pll_params);
-}
-
 static struct dsim_pll_param *
 dsim_get_clock_mode(const struct dsim_device *dsim,
 		    const struct drm_display_mode *mode)
 {
 	int i;
-	const struct dsim_pll_params *pll_params = dsim->pll_params;
 	const size_t mlen = strnlen(mode->name, DRM_DISPLAY_MODE_LEN);
 	struct dsim_pll_param *ret = NULL;
 	size_t plen;
 
-	for (i = 0; i < pll_params->num_modes; i++) {
-		struct dsim_pll_param *p = pll_params->params[i];
+	if (!dsim->pll_params || !dsim->pll_params->num_modes)
+		return NULL;
+
+	for (i = 0; i < dsim->pll_params->num_modes; i++) {
+		struct dsim_pll_param *p = dsim->pll_params->params[i];
 
 		plen = strnlen(p->name, DRM_DISPLAY_MODE_LEN);
 
@@ -752,7 +740,7 @@ static struct dsim_pll_features *dsim_of_get_pll_features(
 	u32 range32[2];
 	struct dsim_pll_features *pll_features;
 
-	pll_features = kzalloc(sizeof(*pll_features), GFP_KERNEL);
+	pll_features = devm_kzalloc(dsim->dev, sizeof(*pll_features), GFP_KERNEL);
 	if (!pll_features)
 		return NULL;
 
@@ -841,38 +829,38 @@ static struct dsim_pll_params *dsim_of_get_clock_mode(struct dsim_device *dsim)
 	mode_np = of_get_child_by_name(np, "dsim-modes");
 	if (!mode_np) {
 		dsim_err(dsim, "%pOF: could not find dsim-modes node\n", np);
-		goto getnode_fail;
+		goto err_put_np;
 	}
 
-	pll_params = kzalloc(sizeof(*pll_params), GFP_KERNEL);
+	pll_params = devm_kzalloc(dsim->dev, sizeof(*pll_params), GFP_KERNEL);
 	if (!pll_params)
-		goto getmode_fail;
+		goto err_put_mode_np;
 
 	entry = of_get_next_child(mode_np, NULL);
 	if (!entry) {
 		dsim_err(dsim, "could not find child node of dsim-modes");
-		goto getchild_fail;
+		goto err_put_mode_np;
 	}
 
 	pll_params->num_modes = of_get_child_count(mode_np);
 	if (pll_params->num_modes == 0) {
 		dsim_err(dsim, "%pOF: no modes specified\n", np);
-		goto getchild_fail;
+		goto err_put_mode_np;
 	}
 
-	pll_params->params = kzalloc(sizeof(struct dsim_pll_param *) *
+	pll_params->params = devm_kcalloc(dsim->dev, sizeof(struct dsim_pll_param *),
 				pll_params->num_modes, GFP_KERNEL);
 	if (!pll_params->params)
-		goto getchild_fail;
+		goto err_put_mode_np;
 
 	pll_params->num_modes = 0;
 
 	for_each_child_of_node(mode_np, entry) {
 		struct dsim_pll_param *pll_param;
 
-		pll_param = kzalloc(sizeof(*pll_param), GFP_KERNEL);
+		pll_param = devm_kzalloc(dsim->dev, sizeof(*pll_param), GFP_KERNEL);
 		if (!pll_param)
-			goto getpll_fail;
+			goto err_put_entry;
 
 		if (dsim_of_parse_modes(entry, pll_param) < 0) {
 			kfree(pll_param);
@@ -891,13 +879,11 @@ static struct dsim_pll_params *dsim_of_get_clock_mode(struct dsim_device *dsim)
 
 	return pll_params;
 
-getpll_fail:
+err_put_entry:
 	of_node_put(entry);
-getchild_fail:
-	dsim_modes_release(pll_params);
-getmode_fail:
+err_put_mode_np:
 	of_node_put(mode_np);
-getnode_fail:
+err_put_np:
 	of_node_put(np);
 	return NULL;
 }
@@ -1502,8 +1488,6 @@ static void dsim_unbind(struct device *dev, struct device *master,
 	struct dsim_device *dsim = encoder_to_dsim(encoder);
 
 	dsim_debug(dsim, "%s +\n", __func__);
-	if (dsim->pll_params)
-		dsim_modes_release(dsim->pll_params);
 
 	if (dsim->dual_dsi == DSIM_DUAL_DSI_SEC)
 		return;
