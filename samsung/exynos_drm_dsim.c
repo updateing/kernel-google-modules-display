@@ -1134,7 +1134,7 @@ static void dsim_set_display_mode(struct dsim_device *dsim,
 {
 	struct dsim_device *sec_dsi;
 
-	if (!dsim->dsi_device)
+	if (IS_ERR_OR_NULL(dsim->dsi_device))
 		return;
 
 	mutex_lock(&dsim->state_lock);
@@ -1457,9 +1457,6 @@ static int dsim_attach_bridge(struct dsim_device *dsim)
 	struct device_node *np;
 	int ret;
 
-	if (!dsim->dsi_device)
-		return -ENODEV;
-
 	np = dsim->dsi_device->dev.of_node;
 	if (!np)
 		return -ENOENT;
@@ -1499,12 +1496,18 @@ static int dsim_bind(struct device *dev, struct device *master, void *data)
 
 	dsim_debug(dsim, "%s +\n", __func__);
 
-	/* ignore cases where there's no dsi device to be attached */
-	if (PTR_ERR(dsim->dsi_device) == -ENODEV)
+	/* ignore bind calls for dual dsi */
+	if (dsim->dual_dsi == DSIM_DUAL_DSI_SEC)
 		return 0;
 
-	if (!dsim->dsi_device)
+	if (!dsim->dsi_device) {
 		return -EPROBE_DEFER;
+	} else if (IS_ERR(dsim->dsi_device)) {
+		int ret = PTR_ERR(dsim->dsi_device);
+
+		/* ignore cases where there's no dsi device to be attached */
+		return ret == -ENODEV ? 0 : ret;
+	}
 
 	drm_encoder_init(drm_dev, encoder, &dsim_encoder_funcs,
 			 DRM_MODE_ENCODER_DSI, NULL);
@@ -2786,25 +2789,28 @@ static int dsim_probe(struct platform_device *pdev)
 		dsim_warn(dsim, "idle ip index is not provided\n");
 	exynos_update_ip_idle_status(dsim->idle_ip_index, 1);
 #endif
-	dsim->state = DSIM_STATE_HANDOVER;
 
 	/* parse the panel name to select the dsi device for the detected panel */
 	ret = dsim_parse_panel_name(dsim);
+	if (ret) {
+		dsim->state = DSIM_STATE_MISSING;
+	} else {
+		dsim->state = DSIM_STATE_HANDOVER;
 
-	// TODO: get which panel is active from bootloader?
+		// TODO: get which panel is active from bootloader?
 
-	pm_runtime_use_autosuspend(dsim->dev);
-	pm_runtime_set_autosuspend_delay(dsim->dev, 20);
-	pm_runtime_enable(dsim->dev);
+		pm_runtime_use_autosuspend(dsim->dev);
+		pm_runtime_set_autosuspend_delay(dsim->dev, 20);
+		pm_runtime_enable(dsim->dev);
 
-	if (!IS_ENABLED(CONFIG_BOARD_EMULATOR)) {
-		phy_init(dsim->res.phy);
-		if (dsim->res.phy_ex)
-			phy_init(dsim->res.phy_ex);
+		if (!IS_ENABLED(CONFIG_BOARD_EMULATOR)) {
+			phy_init(dsim->res.phy);
+			if (dsim->res.phy_ex)
+				phy_init(dsim->res.phy_ex);
+		}
 	}
 
-	if ((ret < 0) || dsim->dual_dsi == DSIM_DUAL_DSI_SEC) {
-		/* ignore cases where unable to find panel */
+	if (dsim->state == DSIM_STATE_MISSING || dsim->dual_dsi == DSIM_DUAL_DSI_SEC) {
 		dsim->dsi_device = ERR_PTR(-ENODEV);
 
 		ret = component_add(dsim->dev, &dsim_component_ops);
@@ -2847,10 +2853,13 @@ static int dsim_remove(struct platform_device *pdev)
 	device_remove_file(dsim->dev, &dev_attr_hs_clock);
 	pm_runtime_disable(&pdev->dev);
 
-	if (PTR_ERR(dsim->dsi_device) == -ENODEV)
+	if (dsim->state == DSIM_STATE_MISSING || dsim->dual_dsi == DSIM_DUAL_DSI_SEC) {
 		component_del(&pdev->dev, &dsim_component_ops);
-
-	mipi_dsi_host_unregister(&dsim->dsi_host);
+	} else {
+		if (!IS_ERR_OR_NULL(dsim->dsi_device))
+			component_del(&pdev->dev, &dsim_component_ops);
+		mipi_dsi_host_unregister(&dsim->dsi_host);
+	}
 
 	iounmap(dsim->res.ss_reg_base);
 	iounmap(dsim->res.phy_regs_ex);
