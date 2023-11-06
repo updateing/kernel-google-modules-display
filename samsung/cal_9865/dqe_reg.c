@@ -801,7 +801,7 @@ void dqe_reg_get_histogram_bins(struct device *dev, u32 dqe_id, enum exynos_hist
 	int regs_cnt = DIV_ROUND_UP(HISTOGRAM_BIN_COUNT, 2);
 	int i;
 	u32 val;
-	u16 dqe_channel = (dqe_id & 0xff << 8) | (hist_id & 0xff);
+	u16 dqe_channel = ((dqe_id & 0xff) << 8) | (hist_id & 0xff);
 	phys_addr_t pa;
 	dma_addr_t dma_addr;
 
