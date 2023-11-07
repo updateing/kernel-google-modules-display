@@ -334,13 +334,37 @@ int histogram_chan_set_state(struct exynos_dqe *dqe, const enum exynos_histogram
 	return 0;
 }
 
+static void histogram_chan_handle_event_locked(struct exynos_dqe *dqe, uint32_t hist_id,
+					       bool force_collect)
+{
+	struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[hist_id];
+	histogram_chan_callback hist_cb = hist_chan->cb;
+	struct exynos_drm_pending_histogram_event *e = hist_chan->event;
+
+	if (!e && !hist_cb && !force_collect)
+		return;
+
+	histogram_chan_collect_bins_locked(dqe, hist_id, &hist_chan->bins);
+
+	/* handle DRM request */
+	if (e) {
+		pr_debug("decon%u histogram%u: handle event(0x%pK), rstate(%s)\n", dqe->decon->id,
+			 hist_id, e, str_run_state(hist_chan->run_state));
+		memcpy(&e->event.bins, &hist_chan->bins, sizeof(e->event.bins));
+		histogram_chan_emmit_event_locked(dqe, hist_id);
+	}
+
+	/* handle LHBM request. TODO: review if LHBM can be moved to DRM fw. */
+	if (hist_cb)
+		(hist_cb)(dqe->decon->id, hist_id, &hist_chan->bins);
+}
+
 /* This function runs in interrupt context */
 void handle_histogram_event(struct exynos_dqe *dqe)
 {
-	uint32_t id, hist_id;
+	uint32_t hist_id;
 
 	spin_lock(&dqe->state.histogram_slock);
-	id = dqe->decon->id;
 
 	/*
 	 * histogram engine data is available after first frame done.
@@ -348,27 +372,12 @@ void handle_histogram_event(struct exynos_dqe *dqe)
 	 */
 	for (hist_id = 0; hist_id < HISTOGRAM_MAX; hist_id++) {
 		struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[hist_id];
-		histogram_chan_callback hist_cb = hist_chan->cb;
-		struct exynos_drm_pending_histogram_event *e = hist_chan->event;
 
 		/* skip if histogram channel is disabled */
 		if (hist_chan->run_state == HSTATE_DISABLED)
 			continue;
 
-		/* handle DRM request */
-		if (e) {
-			pr_debug("histogram: handle event(0x%pK), rstate(%s)\n",
-				 e, str_run_state(hist_chan->run_state));
-			histogram_chan_collect_bins_locked(dqe, hist_id, &hist_chan->bins);
-			memcpy(&e->event.bins, &hist_chan->bins, sizeof(e->event.bins));
-			histogram_chan_emmit_event_locked(dqe, hist_id);
-		}
-
-		/* handle LHBM request. TODO: review if LHBM can be moved to DRM fw. */
-		if (hist_cb) {
-			histogram_chan_collect_bins_locked(dqe, hist_id, &hist_chan->bins);
-			(hist_cb)(id, hist_id, &hist_chan->bins);
-		}
+		histogram_chan_handle_event_locked(dqe, hist_id, false);
 
 		if ((atomic_read(&dqe->decon->frames_pending) == 0) &&
 		    (dqe->decon->config.mode.op_mode != DECON_VIDEO_MODE))
@@ -776,11 +785,14 @@ void exynos_dqe_hibernation_enter(struct exynos_dqe *dqe)
 	unsigned long flags;
 	enum exynos_histogram_id hist_id;
 	struct histogram_chan_state *hist_chan;
+	bool decon_idle;
 
 	if (!dqe->state.enabled)
 		return;
 
 	spin_lock_irqsave(&dqe->state.histogram_slock, flags);
+	decon_idle = decon_reg_is_idle(dqe->decon->id);
+
 	for (hist_id = 0; hist_id < HISTOGRAM_MAX; hist_id++) {
 		hist_chan = &dqe->state.hist_chan[hist_id];
 
@@ -788,8 +800,20 @@ void exynos_dqe_hibernation_enter(struct exynos_dqe *dqe)
 			histogram_chan_collect_bins_locked(dqe, hist_id, &hist_chan->bins);
 			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_HIBERNATION);
 		} else if (hist_chan->run_state == HSTATE_PENDING_FRAMEDONE) {
-			/* mark as disabled to avoid start_pending_framedone related issues */
-			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_DISABLED);
+			if (!decon_idle) {
+				/* mark as disabled to avoid start_pending_framedone
+				 * related issues
+				 */
+				pr_warn("decon%u histogram%u: pending framedone during hibernation\n",
+					dqe->decon->id, hist_id);
+				histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_DISABLED);
+			} else {
+				pr_debug("decon%u histogram%u: decon is already idle\n",
+					 dqe->decon->id, hist_id);
+				histogram_chan_handle_event_locked(dqe, hist_id, true);
+				histogram_chan_set_run_state_locked(dqe, hist_id,
+								    HSTATE_HIBERNATION);
+			}
 		}
 	}
 	spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
