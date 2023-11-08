@@ -98,7 +98,7 @@ static void dp_init_info(struct dp_device *dp)
 	dp->dp_link_crc_enabled = false;
 }
 
-static u32 dp_get_max_link_rate(struct dp_device *dp)
+static int dp_get_max_link_rate(struct dp_device *dp)
 {
 	/*
 	 * When the host is limited in software to RBR and
@@ -113,8 +113,7 @@ static u32 dp_get_max_link_rate(struct dp_device *dp)
 	 */
 	if (dp->host.link_rate == drm_dp_bw_code_to_link_rate(DP_LINK_BW_1_62) &&
 	    dp->sink.num_lanes < 4) {
-		return min((unsigned int)drm_dp_bw_code_to_link_rate(DP_LINK_BW_2_7),
-			   dp->sink.link_rate);
+		return min(drm_dp_bw_code_to_link_rate(DP_LINK_BW_2_7), dp->sink.link_rate);
 	} else {
 		return min(dp->host.link_rate, dp->sink.link_rate);
 	}
@@ -575,8 +574,8 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 	u8 fail_counter_short = 0, fail_counter_long = 0;
 	int i;
 
-	dp_info(dp, "Link Training CR Phase with BW(%u) and Lanes(%u)\n",
-		dp->link.link_rate, dp->link.num_lanes);
+	dp_info(dp, "Link Training CR Phase with Rate(%d) and Lanes(%u)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes);
 
 	for (i = 0; i < MAX_LANE_CNT; i++) {
 		vol_swing_level[i] = 0;
@@ -650,8 +649,8 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 	} while (fail_counter_short < 5 && fail_counter_long < 10);
 
 err:
-	dp_err(dp, "failed Link Training CR phase with BW(%u) and Lanes(%u)\n",
-	       dp->link.link_rate, dp->link.num_lanes);
+	dp_err(dp, "failed Link Training CR phase with Rate(%d) and Lanes(%u)\n",
+	       dp->link.link_rate / 100, dp->link.num_lanes);
 	return false;
 }
 
@@ -693,8 +692,8 @@ static bool dp_do_link_training_eq(struct dp_device *dp, u32 interval_us,
 	u8 fail_counter = 0;
 	int i;
 
-	dp_info(dp, "Link Training EQ Phase with BW(%u) and Lanes(%u)\n",
-		dp->link.link_rate, dp->link.num_lanes);
+	dp_info(dp, "Link Training EQ Phase with Rate(%d) and Lanes(%u)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes);
 
 	dp_init_link_training_eq(dp, tps);
 
@@ -737,8 +736,8 @@ static bool dp_do_link_training_eq(struct dp_device *dp, u32 interval_us,
 	} while (fail_counter < 6);
 
 err:
-	dp_err(dp, "failed Link Training EQ phase with BW(%u) and Lanes(%u)\n",
-	       dp->link.link_rate, dp->link.num_lanes);
+	dp_err(dp, "failed Link Training EQ phase with Rate(%d) and Lanes(%u)\n",
+	       dp->link.link_rate / 100, dp->link.num_lanes);
 	return false;
 }
 
@@ -770,8 +769,8 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 				dp_get_lower_link_rate(&dp->link);
 
 				dp_info(dp,
-					"reducing link rate to %u during CR phase\n",
-					dp->link.link_rate);
+					"reducing link rate to %d during CR phase\n",
+					dp->link.link_rate / 100);
 				continue;
 			} else if (dp->link.num_lanes > 1) {
 				dp->link.num_lanes >>= 1;
@@ -794,8 +793,8 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 				dp_get_lower_link_rate(&dp->link);
 
 				dp_info(dp,
-					"reducing link rate to %u during EQ phase\n",
-					dp->link.link_rate);
+					"reducing link rate to %d during EQ phase\n",
+					dp->link.link_rate / 100);
 				continue;
 			} else if (dp->link.num_lanes > 1) {
 				dp->link.num_lanes >>= 1;
@@ -814,7 +813,7 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 		training_done = true;
 	} while (!training_done);
 
-	dp_info(dp, "DP Link: training done: Rate(%u Mbps) and Lanes(%u)\n",
+	dp_info(dp, "DP Link: training done: Rate(%d Mbps) and Lanes(%u)\n",
 		dp->link.link_rate / 100, dp->link.num_lanes);
 
 	dp_hw_set_training_pattern(NORMAL_DATA);
@@ -874,7 +873,7 @@ static int dp_link_up(struct dp_device *dp)
 
 	/* Fill Sink Capabilities */
 	dp_fill_sink_caps(dp, dpcd);
-	dp_info(dp, "DP Sink: DPCD_Rev_%X, Rate(%u Mbps), Lanes(%u)\n",
+	dp_info(dp, "DP Sink: DPCD_Rev_%X, Rate(%d Mbps), Lanes(%u)\n",
 		dp->sink.revision, dp->sink.link_rate / 100,
 		dp->sink.num_lanes);
 
@@ -953,7 +952,7 @@ static int dp_link_up(struct dp_device *dp)
 	dp->link.ssc = dp_get_ssc(dp);
 	dp->link.support_tps = dp_get_supported_pattern(dp);
 	dp->link.fast_training = dp_get_fast_training(dp);
-	dp_info(dp, "DP Link: training start: Rate(%u Mbps) and Lanes(%u)\n",
+	dp_info(dp, "DP Link: training start: Rate(%d Mbps) and Lanes(%u)\n",
 		dp->link.link_rate / 100, dp->link.num_lanes);
 
 	/* Link Training */

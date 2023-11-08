@@ -53,7 +53,7 @@ enum hotplug_state {
 };
 
 struct dp_link {
-	u32  link_rate;
+	int  link_rate;
 	u8   num_lanes;
 	u8   support_tps;
 	bool fast_training;
@@ -62,7 +62,7 @@ struct dp_link {
 };
 
 struct dp_host {
-	u32  link_rate;
+	int  link_rate;
 	u8   num_lanes;
 	u8   max_bpc;
 	u8   support_tps;
@@ -82,7 +82,7 @@ struct dp_host {
 #define SINK_NAME_LEN	14	/* monitor name */
 struct dp_sink {
 	u8   revision;
-	u32  link_rate;
+	int  link_rate;
 	u8   num_lanes;
 	u8   support_tps;
 	bool fast_training;
