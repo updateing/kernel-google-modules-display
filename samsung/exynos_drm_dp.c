@@ -100,7 +100,24 @@ static void dp_init_info(struct dp_device *dp)
 
 static u32 dp_get_max_link_rate(struct dp_device *dp)
 {
-	return min(dp->host.link_rate, dp->sink.link_rate);
+	/*
+	 * When the host is limited in software to RBR and
+	 * the sink supports only max 2 lanes, it leads to
+	 * best-case link of RBR/2 lanes. Such link cannot
+	 * support 1920x1080@60 video resolution, which is
+	 * not an optimal experience.
+	 *
+	 * For max 2-lane devices, such as USB 3.0 hubs,
+	 * let's bump the link speed to HBR, so we can get
+	 * HBR/2 lanes link for 1920x1080@60 support.
+	 */
+	if (dp->host.link_rate == drm_dp_bw_code_to_link_rate(DP_LINK_BW_1_62) &&
+	    dp->sink.num_lanes < 4) {
+		return min((unsigned int)drm_dp_bw_code_to_link_rate(DP_LINK_BW_2_7),
+			   dp->sink.link_rate);
+	} else {
+		return min(dp->host.link_rate, dp->sink.link_rate);
+	}
 }
 
 static u8 dp_get_max_num_lanes(struct dp_device *dp)
