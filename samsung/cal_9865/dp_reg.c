@@ -139,7 +139,6 @@ static u32 phy_eq_hbr2_3[4][4][5] = {
 static u32 m_aud_master[7] = {
 	32000, 44100, 48000, 88200, 96000, 176000, 192000
 };
-static u32 n_aud_master[4] = { 81000000, 135000000, 270000000, 405000000 };
 
 static u32 audio_async_m_n[2][4][7] = {
 	{
@@ -1615,31 +1614,16 @@ static void dp_reg_set_video_mn_config(u32 mvid, u32 nvid)
 }
 
 // SST1 Audio M/N Value
-static void dp_reg_set_audio_mn_value(enum audio_sampling_frequency fs,
-				      enum dp_link_rate_type rate)
+static void dp_reg_set_audio_mn_value(u32 maud_master, u32 naud_master)
 {
-	dp_write(SST1, SST1_MAUD_MASTER_MODE, m_aud_master[fs]);
-	dp_write(SST1, SST1_NAUD_MASTER_MODE, n_aud_master[rate]);
+	dp_write(SST1, SST1_MAUD_MASTER_MODE, maud_master);
+	dp_write(SST1, SST1_NAUD_MASTER_MODE, naud_master);
 }
 
-static void dp_reg_set_audio_mn_config(enum audio_mode mode,
-				       enum dp_link_rate_type rate,
-				       enum audio_sampling_frequency fs)
+static void dp_reg_set_audio_mn_config(u32 maud, u32 naud)
 {
-	u32 m_value, n_value;
-
-	if (mode == AUDIO_MODE_ASYNC) {
-		m_value = audio_async_m_n[0][rate][fs];
-		n_value = audio_async_m_n[1][rate][fs];
-	} else {
-		m_value = audio_sync_m_n[0][rate][fs];
-		n_value = audio_sync_m_n[1][rate][fs];
-	}
-
-	dp_write_mask(SST1, SST1_MAUD_SFR_CONFIGURE, m_value,
-		      MNAUD_SFR_CONFIG_MASK);
-	dp_write_mask(SST1, SST1_NAUD_SFR_CONFIGURE, n_value,
-		      MNAUD_SFR_CONFIG_MASK);
+	dp_write_mask(SST1, SST1_MAUD_SFR_CONFIGURE, maud, MNAUD_SFR_CONFIG_MASK);
+	dp_write_mask(SST1, SST1_NAUD_SFR_CONFIGURE, naud, MNAUD_SFR_CONFIG_MASK);
 }
 
 static u32 dp_get_ls_clk(struct dp_hw_config *hw_config)
@@ -1673,6 +1657,33 @@ static void dp_reg_set_video_clock(struct dp_hw_config *hw_config)
 	dp_reg_set_video_mn_value(strm_clk / 4, ls_clk);
 	dp_reg_set_video_mn_config(strm_clk, ls_clk);
 }
+
+static void dp_reg_set_audio_clock(struct dp_hw_config *hw_config, enum audio_mode mode)
+{
+	u32 audio_fs = m_aud_master[hw_config->audio_fs];  /* Hz unit */
+	u32 ls_clk = dp_get_ls_clk(hw_config);  /* Hz unit */
+	u32 m_value, n_value;
+
+	if (mode == AUDIO_MODE_ASYNC) {
+		m_value = audio_async_m_n[0][hw_config->link_rate][hw_config->audio_fs];
+		n_value = audio_async_m_n[1][hw_config->link_rate][hw_config->audio_fs];
+	} else {
+		m_value = audio_sync_m_n[0][hw_config->link_rate][hw_config->audio_fs];
+		n_value = audio_sync_m_n[1][hw_config->link_rate][hw_config->audio_fs];
+	}
+
+	/*
+	 * Adjust ls_clk when SSC is enabled.
+	 * Max downspread is 0.5%, so use 0.25% average adjustment.
+	 */
+	if (hw_config->use_ssc)
+		ls_clk = (ls_clk / 10000) * 9975;
+
+	/* Synopsys PHY needs naud_master = LS clock / 2 */
+	dp_reg_set_audio_mn_value(audio_fs, ls_clk / 2);
+	dp_reg_set_audio_mn_config(m_value, n_value);
+}
+
 
 // SST1 Active Symbol SW Control
 static void dp_reg_set_active_symbol_config_fec_off(u32 integer, u32 fraction,
@@ -2694,10 +2705,10 @@ void dp_hw_stop_audio(void)
 
 void dp_hw_set_audio_config(struct dp_hw_config *hw_config)
 {
-	dp_reg_set_audio_mode(AUDIO_MODE_ASYNC);
-	dp_reg_set_audio_mn_config(AUDIO_MODE_ASYNC, hw_config->link_rate,
-				   hw_config->audio_fs);
-	dp_reg_set_audio_mn_value(hw_config->audio_fs, hw_config->link_rate);
+	enum audio_mode aud_mode = AUDIO_MODE_ASYNC;
+
+	dp_reg_set_audio_mode(aud_mode);
+	dp_reg_set_audio_clock(hw_config, aud_mode);
 
 	dp_reg_set_audio_dma_burst_size(hw_config->audio_word_length);
 	dp_reg_set_audio_pcm_size(hw_config->audio_bit);
