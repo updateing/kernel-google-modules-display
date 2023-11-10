@@ -779,8 +779,9 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_tx_clk_div = 0x0;
 		mpllb_v2i = 0x3;
 		if (mpllb_ssc_en) {
-			mpllb_ssc_peak = 0xF300; // 62208
-			mpllb_ssc_stepsize = 0x1983D; // 104509
+			/* Max down-spread (-0.5%) for HBR3 SSC */
+			mpllb_ssc_peak = 0x10E00;
+			mpllb_ssc_stepsize = 0x1C59A;
 		}
 		break;
 	case LINK_RATE_HBR2:
@@ -792,8 +793,9 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_tx_clk_div = 0x0;
 		mpllb_v2i = 0x3;
 		if (mpllb_ssc_en) {
-			mpllb_ssc_peak = 0xA200; // 41472
-			mpllb_ssc_stepsize = 0x11029; // 69673
+			/* Max down-spread (-0.5%) for HBR2 SSC */
+			mpllb_ssc_peak = 0xB400;
+			mpllb_ssc_stepsize = 0x12E66;
 		}
 		break;
 	case LINK_RATE_HBR:
@@ -805,8 +807,9 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_tx_clk_div = 0x1;
 		mpllb_v2i = 0x3;
 		if (mpllb_ssc_en) {
-			mpllb_ssc_peak = 0xA200; // 41472
-			mpllb_ssc_stepsize = 0x11029; // 69673
+			/* Max down-spread (-0.5%) for HBR SSC */
+			mpllb_ssc_peak = 0xB400;
+			mpllb_ssc_stepsize = 0x12E66;
 		}
 		break;
 	case LINK_RATE_RBR:
@@ -820,8 +823,9 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		mpllb_v2i = 0x2;
 		dcc_byp_ac_cap = 0x1;
 		if (mpllb_ssc_en) {
-			mpllb_ssc_peak = 0xC266; // 49766
-			mpllb_ssc_stepsize = 0x14698; // 83608
+			/* Max down-spread (-0.5%) for RBR SSC */
+			mpllb_ssc_peak = 0xD800;
+			mpllb_ssc_stepsize = 0x16AE1;
 		}
 		break;
 	}
