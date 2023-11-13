@@ -20,6 +20,7 @@
 #include <linux/hdmi.h>
 #include <video/videomode.h>
 
+#include <drm/drm_hdcp.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_state_helper.h>
@@ -1999,12 +2000,18 @@ int dp_audio_config(struct dp_audio_config *audio_config)
 EXPORT_SYMBOL(dp_audio_config);
 
 /* HDCP Driver Handshaking Functions */
-void dp_hdcp22_enable(u32 en)
+void dp_hdcp_update_cp(u32 drm_cp_status)
 {
-	dp_hw_set_hdcp22_function(en);
-	dp_hw_set_hdcp22_encryption(en);
+	struct dp_device *dp = get_dp_drvdata();
+	struct drm_connector *connector = &dp->connector;
+
+	dp_info(dp, "dp_hdcp_update_cp to %d\n", drm_cp_status);
+
+	drm_modeset_lock(&connector->dev->mode_config.connection_mutex, NULL);
+	drm_hdcp_update_content_protection(connector, drm_cp_status);
+	drm_modeset_unlock(&connector->dev->mode_config.connection_mutex);
 }
-EXPORT_SYMBOL(dp_hdcp22_enable);
+EXPORT_SYMBOL(dp_hdcp_update_cp);
 
 int dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data)
 {
@@ -2395,6 +2402,8 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 
 	drm_atomic_helper_connector_reset(&dp->connector);
 	drm_connector_attach_max_bpc_property(&dp->connector, 6, dp->host.max_bpc);
+	drm_connector_attach_content_protection_property(&dp->connector,
+		DRM_MODE_HDCP_CONTENT_TYPE0);
 
 	dp_info(dp, "DP Driver has been binded\n");
 
@@ -2756,7 +2765,7 @@ static int dp_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 
 	/* Register callback to HDCP */
-	dp_register_func_for_hdcp22(dp_hdcp22_enable, dp_dpcd_read_for_hdcp22,
+	dp_register_func_for_hdcp22(dp_hdcp_update_cp, dp_dpcd_read_for_hdcp22,
 		dp_dpcd_write_for_hdcp22);
 
 	dp_info(dp, "DP Driver has been probed.\n");

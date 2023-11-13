@@ -218,7 +218,12 @@ static inline struct dp_device *get_dp_drvdata(void)
 int dp_audio_config(struct dp_audio_config *audio_config);
 
 /* HDCP 2.2 Prototype */
-void dp_hdcp22_enable(u32 en);
+
+/* Used to update the current authentication status through uevent.
+ * pass in either DRM_MODE_CONTENT_PROTECTION_ENABLED or
+ * DRM_MODE_CONTENT_PROTECTION_DESIRED */
+void dp_hdcp_update_cp(u32 drm_cp_status);
+
 int  dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data);
 int  dp_dpcd_write_for_hdcp22(u32 address, u32 length, u8 *data);
 
