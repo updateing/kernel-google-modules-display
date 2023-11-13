@@ -24,9 +24,9 @@ kernel_module(
     srcs = glob([
         "**/*.c",
         "**/*.h",
+    ]) + [
         "Kbuild",
         "panel/Kbuild",
-    ]) + [
         "//private/google-modules/aoc/alsa:headers",
         "//private/google-modules/display/samsung:headers",
         "//private/google-modules/hdcp/samsung:headers",
@@ -50,6 +50,7 @@ kernel_module(
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
     visibility = [
         "//private/devices/google:__subpackages__",
+        "//private/google-modules/aoc/alsa:__pkg__",
         "//private/google-modules/soc/gs:__pkg__",
     ],
     deps = [
