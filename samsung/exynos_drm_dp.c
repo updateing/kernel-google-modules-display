@@ -952,8 +952,8 @@ static int dp_link_up(struct dp_device *dp)
 	dp->link.ssc = dp_get_ssc(dp);
 	dp->link.support_tps = dp_get_supported_pattern(dp);
 	dp->link.fast_training = dp_get_fast_training(dp);
-	dp_info(dp, "DP Link: training start: Rate(%d Mbps) and Lanes(%u)\n",
-		dp->link.link_rate / 100, dp->link.num_lanes);
+	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) SSC(%d)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.ssc);
 
 	/* Link Training */
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
