@@ -1758,7 +1758,11 @@ static void dp_work_hpd_irq(struct work_struct *work)
 		goto process_irq;
 	}
 
-	if (dp->sink.revision < DP_DPCD_REV_12) {
+	if (dp->sink.revision <= DP_DPCD_REV_12) {
+		/*
+		 * Some DPCD 1.2 sinks/hubs haven't properly implemented the IRQ ESI registers.
+		 * Thus, we will force all DPCD 1.2 sinks/hubs to use the legacy IRQ registers.
+		 */
 		sink_count = drm_dp_read_sink_count(&dp->dp_aux);
 		dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count);
 
