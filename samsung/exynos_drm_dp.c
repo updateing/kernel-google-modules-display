@@ -20,6 +20,7 @@
 #include <linux/hdmi.h>
 #include <video/videomode.h>
 
+#include <drm/drm_hdcp.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_state_helper.h>
@@ -952,8 +953,8 @@ static int dp_link_up(struct dp_device *dp)
 	dp->link.ssc = dp_get_ssc(dp);
 	dp->link.support_tps = dp_get_supported_pattern(dp);
 	dp->link.fast_training = dp_get_fast_training(dp);
-	dp_info(dp, "DP Link: training start: Rate(%d Mbps) and Lanes(%u)\n",
-		dp->link.link_rate / 100, dp->link.num_lanes);
+	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) SSC(%d)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.ssc);
 
 	/* Link Training */
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
@@ -1177,6 +1178,11 @@ static void dp_disable(struct drm_encoder *encoder)
 {
 	struct dp_device *dp = encoder_to_dp(encoder);
 
+	if (!pm_runtime_get_if_in_use(dp->dev)) {
+		dp_debug(dp, "%s: DP is already disabled\n", __func__);
+		return;
+	}
+
 	mutex_lock(&dp->cmd_lock);
 
 	if (dp->state == DP_STATE_RUN) {
@@ -1195,6 +1201,7 @@ static void dp_disable(struct drm_encoder *encoder)
 		dp_info(dp, "%s: DP State is not RUN\n", __func__);
 
 	mutex_unlock(&dp->cmd_lock);
+	pm_runtime_put(dp->dev);
 }
 
 // For BIST
@@ -1672,6 +1679,11 @@ static void dp_work_hpd(struct work_struct *work)
 			dp_on_by_hpd_plug(dp);
 		}
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+		if (!pm_runtime_get_if_in_use(dp->dev)) {
+			mutex_unlock(&dp->hpd_lock);
+			return;
+		}
+
 		if (dp->sink_count > 0) {
 			dp_off_by_hpd_plug(dp);
 			dp_link_down(dp);
@@ -1681,6 +1693,8 @@ static void dp_work_hpd(struct work_struct *work)
 		dp_hw_deinit(&dp->hw_config);
 		dp_disable_dposc(dp);
 
+		pm_runtime_put(dp->dev);
+		/* put runtime power obtained during HPD_PLUG */
 		pm_runtime_put_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
@@ -1732,13 +1746,24 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	u8 irq = 0, irq2 = 0, irq3 = 0;
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
+	if (!pm_runtime_get_if_in_use(dp->dev)) {
+		dp_debug(dp, "[HPD IRQ] IRQ work skipped as power is off\n");
+		return;
+	}
+
+	mutex_lock(&dp->hpd_lock);
+
 	if (sysfs_triggered_irq != 0) {
 		irq = sysfs_triggered_irq;
 		sysfs_triggered_irq = 0;
 		goto process_irq;
 	}
 
-	if (dp->sink.revision < DP_DPCD_REV_12) {
+	if (dp->sink.revision <= DP_DPCD_REV_12) {
+		/*
+		 * Some DPCD 1.2 sinks/hubs haven't properly implemented the IRQ ESI registers.
+		 * Thus, we will force all DPCD 1.2 sinks/hubs to use the legacy IRQ registers.
+		 */
 		sink_count = drm_dp_read_sink_count(&dp->dp_aux);
 		dp_info(dp, "[HPD IRQ] sink count = %u\n", sink_count);
 
@@ -1787,17 +1812,18 @@ static void dp_work_hpd_irq(struct work_struct *work)
 		    (dp->sink_count != sink_count)) {
 			dp_info(dp, "[HPD IRQ] DP downstream port status change\n");
 			dp_downstream_port_event_handler(dp, sink_count);
-			return;
+			goto release_irq_resource;
 		}
 
-		if (sink_count == 0)
-			return;
+		if (sink_count == 0) {
+			goto release_irq_resource;
+		}
 	}
 
 	if (!drm_dp_channel_eq_ok(link_status, dp->link.num_lanes)) {
 		dp_info(dp, "[HPD IRQ] DP link is down, re-establish the link\n");
 		dp_link_down_event_handler(dp);
-		return;
+		goto release_irq_resource;
 	}
 
 process_irq:
@@ -1812,6 +1838,10 @@ process_irq:
 		dp_link_down_event_handler(dp);
 	} else
 		dp_info(dp, "[HPD IRQ] unknown IRQ (0x%X)\n", irq);
+
+release_irq_resource:
+	mutex_unlock(&dp->hpd_lock);
+	pm_runtime_put(dp->dev);
 }
 
 /* Type-C Handshaking Functions */
@@ -1970,27 +2000,28 @@ int dp_audio_config(struct dp_audio_config *audio_config)
 EXPORT_SYMBOL(dp_audio_config);
 
 /* HDCP Driver Handshaking Functions */
-void dp_hdcp22_enable(u32 en)
+void dp_hdcp_update_cp(u32 drm_cp_status)
 {
-	dp_hw_set_hdcp22_function(en);
-	dp_hw_set_hdcp22_encryption(en);
+	struct dp_device *dp = get_dp_drvdata();
+	struct drm_connector *connector = &dp->connector;
+
+	dp_info(dp, "dp_hdcp_update_cp to %d\n", drm_cp_status);
+
+	drm_modeset_lock(&connector->dev->mode_config.connection_mutex, NULL);
+	drm_hdcp_update_content_protection(connector, drm_cp_status);
+	drm_modeset_unlock(&connector->dev->mode_config.connection_mutex);
 }
-EXPORT_SYMBOL(dp_hdcp22_enable);
+EXPORT_SYMBOL(dp_hdcp_update_cp);
 
 int dp_dpcd_read_for_hdcp22(u32 address, u32 length, u8 *data)
 {
 	struct dp_device *dp = get_dp_drvdata();
-	int ret;
+	int ret = -EFAULT;
 
-	mutex_lock(&dp->hpd_lock);
-	pm_runtime_get_sync(dp->dev);
-	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+	if (pm_runtime_get_if_in_use(dp->dev)) {
 		ret = drm_dp_dpcd_read(&dp->dp_aux, address, data, length);
-	} else {
-		ret = -EFAULT;
+		pm_runtime_put(dp->dev);
 	}
-	pm_runtime_put_sync(dp->dev);
-	mutex_unlock(&dp->hpd_lock);
 
 	if (ret == length)
 		return 0;
@@ -2003,17 +2034,12 @@ EXPORT_SYMBOL(dp_dpcd_read_for_hdcp22);
 int dp_dpcd_write_for_hdcp22(u32 address, u32 length, u8 *data)
 {
 	struct dp_device *dp = get_dp_drvdata();
-	int ret;
+	int ret = -EFAULT;
 
-	mutex_lock(&dp->hpd_lock);
-	pm_runtime_get_sync(dp->dev);
-	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+	if (pm_runtime_get_if_in_use(dp->dev)) {
 		ret = drm_dp_dpcd_write(&dp->dp_aux, address, data, length);
-	} else {
-		ret = -EFAULT;
+		pm_runtime_put(dp->dev);
 	}
-	pm_runtime_put_sync(dp->dev);
-	mutex_unlock(&dp->hpd_lock);
 
 	if (ret == length)
 		return 0;
@@ -2376,6 +2402,8 @@ static int dp_bind(struct device *dev, struct device *master, void *data)
 
 	drm_atomic_helper_connector_reset(&dp->connector);
 	drm_connector_attach_max_bpc_property(&dp->connector, 6, dp->host.max_bpc);
+	drm_connector_attach_content_protection_property(&dp->connector,
+		DRM_MODE_HDCP_CONTENT_TYPE0);
 
 	dp_info(dp, "DP Driver has been binded\n");
 
@@ -2737,7 +2765,7 @@ static int dp_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 
 	/* Register callback to HDCP */
-	dp_register_func_for_hdcp22(dp_hdcp22_enable, dp_dpcd_read_for_hdcp22,
+	dp_register_func_for_hdcp22(dp_hdcp_update_cp, dp_dpcd_read_for_hdcp22,
 		dp_dpcd_write_for_hdcp22);
 
 	dp_info(dp, "DP Driver has been probed.\n");

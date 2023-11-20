@@ -3940,6 +3940,9 @@ static void exynos_panel_bridge_disable(struct drm_bridge *bridge,
 				dev_info(ctx->dev, "%s: cancel normal_mode_work\n", __func__);
 				cancel_delayed_work(&ctx->normal_mode_work);
 			}
+
+			/* clear the flag since display will be off */
+			ctx->atc_need_enabled = false;
 		}
 
 		drm_panel_disable(&ctx->panel);

@@ -781,11 +781,16 @@ static bool nt37290_set_self_refresh(struct exynos_panel *ctx, bool enable)
 }
 
 /**
+ * EARLY_EXIT_THRESHOLD_US
+ *
  * 120hz auto mode takes at least 2 frames to start lowering refresh rate in addition to
  * time to next vblank. Use just over 2 frames time to consider worst case scenario
  */
 #define EARLY_EXIT_THRESHOLD_US 17000
+
 /**
+ * IDLE_DELAY_THRESHOLD_US
+ *
  * Use a threshold to avoid disabling idle auto mode too frequently while continuously
  * updating frames. Considering the hibernation time for this scenario.
  */
@@ -1047,7 +1052,9 @@ static const struct brightness_data evt1_1_normal_band_data[] = {
 	{ .nits = 2, .level = 3 },      /* band 8 */
 };
 
-/**
+/*
+ * struct brightness_data dvt1_range_data
+ *
  * All coefficients are multiplied by 10^6 to have sufficient accuracy.
  * For example, the original equation of range 0 is:
  *
