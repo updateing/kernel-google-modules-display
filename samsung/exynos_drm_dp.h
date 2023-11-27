@@ -89,6 +89,7 @@ struct dp_sink {
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;
+	bool dsc;
 	bool fec;
 	bool ssc;
 

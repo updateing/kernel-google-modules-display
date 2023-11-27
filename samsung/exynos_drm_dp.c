@@ -260,10 +260,8 @@ static bool dp_check_fec_caps(struct dp_device *dp, u8 fec_dpcd)
 {
 	u8 fec_data;
 
-	if (!drm_dp_sink_supports_fec(fec_dpcd)) {
-		dp_info(dp, "DP Sink: doesn't support FEC\n");
+	if (!drm_dp_sink_supports_fec(fec_dpcd))
 		return false;
-	}
 
 	fec_data = DP_FEC_DECODE_EN_DETECTED | DP_FEC_DECODE_DIS_DETECTED;
 	if (drm_dp_dpcd_writeb(&dp->dp_aux, DP_FEC_STATUS, fec_data) < 0)
@@ -276,13 +274,13 @@ static bool dp_check_fec_caps(struct dp_device *dp, u8 fec_dpcd)
 	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CONFIGURATION, &fec_data) < 0)
 		return false;
 
-	dp_info(dp, "DP Sink: FEC support: 0x%X\n", fec_data);
 	return true;
 }
 
 static void dp_fill_sink_caps(struct dp_device *dp, u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
 	u8 fec_dpcd = 0;
+	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE + 1];
 
 	memset(&dp->sink, 0, sizeof(struct dp_sink));
 
@@ -306,10 +304,18 @@ static void dp_fill_sink_caps(struct dp_device *dp, u8 dpcd[DP_RECEIVER_CAP_SIZE
 
 	/* Set FEC support */
 	if (drm_dp_dpcd_readb(&dp->dp_aux, DP_FEC_CAPABILITY, &fec_dpcd) == 1) {
-		if (dp_check_fec_caps(dp, fec_dpcd))
-			dp->sink.fec = true;
-	} else
-		dp_err(dp, "DP Sink: failed to read FEC support register\n");
+		dp->sink.fec = dp_check_fec_caps(dp, fec_dpcd);
+	} else {
+		dp_warn(dp, "DP Sink: failed to read FEC support register\n");
+	}
+
+	/* Set DSC support */
+	if (drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, sizeof(dsc_dpcd)) ==
+			sizeof(dsc_dpcd)) {
+		dp->sink.dsc = !!dsc_dpcd[0];
+	} else {
+		dp_warn(dp, "DP Sink: failed to read DSC support registers\n");
+	}
 }
 
 // Callback function for DRM DP Helper
@@ -861,7 +867,6 @@ err:
 static int dp_link_up(struct dp_device *dp)
 {
 	u8 dpcd[DP_RECEIVER_CAP_SIZE + 1];
-	u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE];
 	u8 dfp_info[DP_MAX_DOWNSTREAM_PORTS];
 	u32 interval, interval_us;
 	int ret;
@@ -930,20 +935,14 @@ static int dp_link_up(struct dp_device *dp)
 
 	/* Fill Sink Capabilities */
 	dp_fill_sink_caps(dp, dpcd);
-	dp_info(dp, "DP Sink: DPCD_Rev_%X, Rate(%d Mbps), Lanes(%u)\n",
-		dp->sink.revision, dp->sink.link_rate / 100,
-		dp->sink.num_lanes);
+
+	/* Dump Sink Capabilities */
+	dp_info(dp, "DP Sink: DPCD_Rev_%X Rate(%d Mbps) Lanes(%u) SSC(%d) FEC(%d) DSC(%d)\n",
+		dp->sink.revision, dp->sink.link_rate / 100, dp->sink.num_lanes,
+		dp->sink.ssc, dp->sink.fec, dp->sink.dsc);
 
 	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
-
-	/* Check DSC support */
-	ret = drm_dp_dpcd_read(&dp->dp_aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE);
-	if (ret < 0)
-		dp_warn(dp, "DP Sink: failed to read DSC support register\n");
-	else
-		dp_info(dp, "DP Sink: DSC support: %02x revision: %02x\n",
-			dsc_dpcd[0], dsc_dpcd[1]);
 
 	/* Get sink count */
 	dp->sink_count = drm_dp_read_sink_count(&dp->dp_aux);
