@@ -606,6 +606,11 @@ static void exynos_atomic_queue_work(struct drm_atomic_state *old_state)
 		struct decon_device *decon = crtc_to_decon(crtc);
 		struct kthread_work *work = &to_exynos_crtc_state(old_crtc_state)->commit_work;
 
+		if (decon->hibernation && old_crtc_state->active) {
+			hibernation_block(decon->hibernation);
+			hibernation_unblock_enter(decon->hibernation);
+		}
+
 		kthread_init_work(work, commit_kthread_work);
 		kthread_queue_work(&decon->worker, work);
 
