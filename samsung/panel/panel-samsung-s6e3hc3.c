@@ -582,7 +582,7 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 	}
 	EXYNOS_DCS_WRITE_TABLE(ctx, lock_cmd_f0);
 
-	backlight_state_changed(ctx->bl);
+	schedule_work(&ctx->state_notify);
 
 	DPU_ATRACE_END(__func__);
 

@@ -1135,13 +1135,7 @@ static int exynos_update_status(struct backlight_device *bl)
 	    bl_range != ctx->bl_notifier.current_range) {
 		ctx->bl_notifier.current_range = bl_range;
 
-		/* Prevent sysfs_notify from resolution switch */
-		if (ctx->desc->use_async_notify &&
-		    (ctx->mode_in_progress == MODE_RES_IN_PROGRESS ||
-		     ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS))
-			schedule_work(&ctx->brightness_notify);
-		else
-			sysfs_notify(&ctx->bl->dev.kobj, NULL, "brightness");
+		schedule_work(&ctx->brightness_notify);
 
 		dev_dbg(ctx->dev, "bl range is changed to %d\n", bl_range);
 	}
@@ -2160,7 +2154,7 @@ static void exynos_panel_pre_commit_properties(
 		DPU_ATRACE_BEGIN("set_hbm");
 		mutex_lock(&ctx->mode_lock);
 		exynos_panel_func->set_hbm_mode(ctx, conn_state->global_hbm_mode);
-		backlight_state_changed(ctx->bl);
+		schedule_work(&ctx->state_notify);
 		mutex_unlock(&ctx->mode_lock);
 		DPU_ATRACE_END("set_hbm");
 		ghbm_updated = true;
@@ -2928,7 +2922,7 @@ static ssize_t hbm_mode_store(struct device *dev,
 
 	if (hbm_mode != ctx->hbm_mode) {
 		funcs->set_hbm_mode(ctx, hbm_mode);
-		backlight_state_changed(bd);
+		schedule_work(&ctx->state_notify);
 	}
 
 unlock:
@@ -3509,7 +3503,7 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 	mutex_unlock(&ctx->bl_state_lock);
 
 	if (state_changed) {
-		backlight_state_changed(bl);
+		schedule_work(&ctx->state_notify);
 		dev_info(ctx->dev, "panel: %s | bl: brightness@%u, state@0x%x\n",
 			 exynos_panel_get_state_str(panel_state), bl->props.brightness,
 			 bl->props.state);
@@ -4473,7 +4467,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				exynos_panel_set_backlight_state(
 					ctx, is_active ? PANEL_STATE_NORMAL : PANEL_STATE_OFF);
 			else if (ctx->bl)
-				backlight_state_changed(ctx->bl);
+				schedule_work(&ctx->state_notify);
 
 			if (!is_lp_mode)
 				exynos_panel_update_te2(ctx);
