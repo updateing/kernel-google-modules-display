@@ -83,18 +83,22 @@ static void histogram_chan_emmit_event_locked(struct exynos_dqe *dqe,
 	struct drm_device *dev = dqe->decon->drm_dev;
 	struct exynos_drm_pending_histogram_event *e = dqe->state.hist_chan[hist_id].event;
 
+	DPU_ATRACE_BEGIN(__func__);
 	e->event.crtc_id = dqe->decon->crtc->base.base.id;
 	e->event.hist_id = hist_id;
 	drm_send_event(dev, &e->base);
 	dqe->state.hist_chan[hist_id].event = NULL;
+	DPU_ATRACE_END(__func__);
 }
 
 static void histogram_chan_collect_bins_locked(struct exynos_dqe *dqe,
 					       enum exynos_histogram_id hist_id,
 					       struct histogram_bins *bins)
 {
+	DPU_ATRACE_BEGIN(__func__);
 	/* collect data from bins */
 	dqe_reg_get_histogram_bins(dqe->dev, dqe->decon->id, hist_id, bins);
+	DPU_ATRACE_END(__func__);
 }
 
 static const char *str_run_state(enum histogram_run_state state)
@@ -809,6 +813,7 @@ void exynos_dqe_hibernation_enter(struct exynos_dqe *dqe)
 	if (!dqe->state.enabled)
 		return;
 
+	DPU_ATRACE_BEGIN(__func__);
 	spin_lock_irqsave(&dqe->state.histogram_slock, flags);
 	decon_idle = decon_reg_is_idle(dqe->decon->id);
 
@@ -836,6 +841,7 @@ void exynos_dqe_hibernation_enter(struct exynos_dqe *dqe)
 		}
 	}
 	spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
+	DPU_ATRACE_END(__func__);
 }
 
 void exynos_dqe_reset(struct exynos_dqe *dqe)
