@@ -1726,7 +1726,9 @@ static void dp_work_hpd(struct work_struct *work)
 			dp_on_by_hpd_plug(dp);
 		}
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
-		if (!pm_runtime_get_if_in_use(dp->dev)) {
+		if ((!pm_runtime_get_if_in_use(dp->dev)) ||
+		    (dp->state == DP_STATE_INIT)) {
+			dp_info(dp, "%s: DP is not ON\n", __func__);
 			mutex_unlock(&dp->hpd_lock);
 			return;
 		}
