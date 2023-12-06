@@ -496,17 +496,17 @@ static void dpphy_reg_set_config10_tx_eq_pre(u32 eq_pre_val, u32 eq_pre_mask)
 	dp_phy_write_mask(SST1, DP_CONFIG10, eq_pre_val, eq_pre_mask);
 }
 
-static void dpphy_reg_set_config11_tx_pstate(enum lane_usage lane)
+static void dpphy_reg_set_config11_tx_pstate(u32 en, enum lane_usage lane)
 {
-	/* P2(0b11) is power down */
-	u32 val = 0;
+	u32 val = DP_TX_PSTATE_SET_0LANES;
 
-	if (lane == DP_USE_0_LANES)
-		val = DP_TX_PSTATE_SET_0LANES; // Power Down for 4 Lanes
+	/* P2(0b11) is power down */
+	if (!en || lane == DP_USE_0_LANES)
+		val = DP_TX_PSTATE_SET_0LANES;
 	else if (lane == DP_USE_2_LANES)
-		val = DP_TX_PSTATE_SET_2LANES; // Power Up for 2 lanes
+		val = DP_TX_PSTATE_SET_2LANES;
 	else if (lane == DP_USE_4_LANES)
-		val = DP_TX_PSTATE_SET_4LANES; // Power Up for 4 lanes
+		val = DP_TX_PSTATE_SET_4LANES;
 
 	dp_phy_write_mask(SST1, DP_CONFIG11, val, DP_TX_PSTATE_MASK);
 }
@@ -515,8 +515,7 @@ static void dpphy_reg_wait_config12_tx_ack(enum lane_usage lane)
 {
 	u32 val = 0;
 
-	if (readl_poll_timeout_atomic(regs_dp[REGS_PHY][SST1].regs +
-					      DP_CONFIG12,
+	if (readl_poll_timeout_atomic(regs_dp[REGS_PHY][SST1].regs + DP_CONFIG12,
 				      val, !DP_TX_ACK_GET(val), 10, 2000)) {
 		cal_log_err(0, "is timeout. Fail to ack DP TX.\n");
 		cal_log_err(0, "val(0x%08x) DP_CONFIG12 read:0x%08x\n", val,
@@ -524,34 +523,30 @@ static void dpphy_reg_wait_config12_tx_ack(enum lane_usage lane)
 	}
 }
 
-static void dpphy_reg_set_config12_status_update(enum lane_usage lane)
+static void dpphy_reg_set_config12_status_update(void)
 {
 	u32 val = 0;
 
-	if (lane == DP_USE_0_LANES)
-		return;
-	else if (lane == DP_USE_2_LANES)
-		val = DP_TX_REQ_STATUS_SET_2LANES;
-	else if (lane == DP_USE_4_LANES)
-		val = DP_TX_REQ_STATUS_SET_4LANES;
+	/* Set DP TX Request */
+	dp_phy_write_mask(SST1, DP_CONFIG12, DP_TX_REQ_SET_4LANES, DP_TX_REQ_MASK);
 
-	dp_phy_write_mask(SST1, DP_CONFIG12, val, DP_TX_REQ_STATUS_MASK);
-
-	if (readl_poll_timeout_atomic(
-		    regs_dp[REGS_PHY][SST1].regs + DP_CONFIG12, val,
-		    !DP_TX_REQ_STATUS_GET(val), 10, 2000)) {
-		cal_log_err(0, "is timeout. Fail to update DP TX status.\n");
+	/* Wait for DP TX Request Clear */
+	if (readl_poll_timeout_atomic(regs_dp[REGS_PHY][SST1].regs + DP_CONFIG12,
+				      val, !DP_TX_REQ_GET(val), 10, 2000)) {
+		cal_log_err(0, "is timeout. Fail to request DP TX update.\n");
 		cal_log_err(0, "val(0x%08x) DP_CONFIG12 read:0x%08x\n", val,
 			    readl(regs_dp[REGS_PHY][SST1].regs + DP_CONFIG12));
-	} else
-		cal_log_debug(0, "Success to update DP TX status.\n");
+	}
+
+	/* Wait for TX Acknowledge to confirm DP TX request is applied */
+	dpphy_reg_wait_config12_tx_ack(DP_USE_4_LANES);
 }
 
-static void dpphy_reg_set_config12_tx_mpllb_en(enum lane_usage lane)
+static void dpphy_reg_set_config12_tx_mpllb_en(u32 en, enum lane_usage lane)
 {
-	u32 val = 0;
+	u32 val = DP_TX_MPLL_EN_SET_0LANES;
 
-	if (lane == DP_USE_0_LANES)
+	if (!en || lane == DP_USE_0_LANES)
 		val = DP_TX_MPLL_EN_SET_0LANES;
 	else if (lane == DP_USE_2_LANES)
 		val = DP_TX_MPLL_EN_SET_2LANES;
@@ -561,11 +556,12 @@ static void dpphy_reg_set_config12_tx_mpllb_en(enum lane_usage lane)
 	dp_phy_write_mask(SST1, DP_CONFIG12, val, DP_TX_MPLL_EN_MASK);
 }
 
-static void dpphy_reg_set_config12_tx_width(enum lane_usage lane)
+static void dpphy_reg_set_config12_tx_width(u32 en, enum lane_usage lane)
 {
 	u32 val = 0;
 
-	if (lane == DP_USE_0_LANES)
+	/* "0b11" is 20bit DP TX lane width */
+	if (!en || lane == DP_USE_0_LANES)
 		val = DP_TX_WIDTH_SET_0LANES;
 	else if (lane == DP_USE_2_LANES)
 		val = DP_TX_WIDTH_SET_2LANES;
@@ -577,36 +573,22 @@ static void dpphy_reg_set_config12_tx_width(enum lane_usage lane)
 
 static void dpphy_reg_set_config13_tx_reset(u32 en)
 {
-	u32 val = 0;
-
-	if (en)
-		val = DP_TX_RESET_ALL;
-	else
-		val = DP_TX_RESET_RELEASE;
-
-	dp_phy_write_mask(SST1, DP_CONFIG13, val, DP_TX_RESET_MASK);
+	dp_phy_write_mask(SST1, DP_CONFIG13,
+			  en ? DP_TX_RESET_ALL : DP_TX_RESET_RELEASE,
+			  DP_TX_RESET_MASK);
 }
 
-static void dpphy_reg_set_config13_tx_enable(enum lane_usage lane)
+static void dpphy_reg_set_config13_tx_enable(u32 en, enum lane_usage lane)
 {
 	u32 val = 0;
 
-	if (lane == DP_USE_2_LANES)
-		val = DP_TX_ENABLE_SET_2LANES;
-	else if (lane == DP_USE_4_LANES)
-		val = DP_TX_ENABLE_SET_4LANES;
-
-	dp_phy_write_mask(SST1, DP_CONFIG13, val, DP_TX_DISABLE_MASK);
-}
-
-static void dpphy_reg_set_config13_tx_disable(enum lane_usage lane)
-{
-	u32 val = 0;
-
-	if (lane == DP_USE_2_LANES)
+	/* "0b1" disables DP TX lane, "0b0" enables DP TX lane */
+	if (!en || lane == DP_USE_0_LANES)
+		val = DP_TX_DISABLE_SET_4LANES;
+	else if (lane == DP_USE_2_LANES)
 		val = DP_TX_DISABLE_SET_2LANES;
 	else if (lane == DP_USE_4_LANES)
-		val = DP_TX_DISABLE_SET_4LANES;
+		val = DP_TX_DISABLE_SET_0LANES;
 
 	dp_phy_write_mask(SST1, DP_CONFIG13, val, DP_TX_DISABLE_MASK);
 }
@@ -690,11 +672,11 @@ static void dpphy_reg_reset_tx_lanes(void)
 {
 	// Assert all TX lanes reset
 	dpphy_reg_set_config13_tx_reset(1);
-	dpphy_reg_set_config13_tx_disable(DP_USE_4_LANES);
+	dpphy_reg_set_config13_tx_enable(0, DP_USE_4_LANES);
 	cal_log_debug(0, "disable all lanes.\n");
 
 	// Disable all TX lanes' power state: P2
-	dpphy_reg_set_config11_tx_pstate(DP_USE_0_LANES);
+	dpphy_reg_set_config11_tx_pstate(0, DP_USE_4_LANES);
 	cal_log_debug(0, "power off for all lanes.\n");
 
 	// Set TCA_TCPC Valid
@@ -705,8 +687,6 @@ static void dpphy_reg_reset_tx_lanes(void)
 
 	// De-Assert all TX lanes reset
 	dpphy_reg_set_config13_tx_reset(0);
-	dpphy_reg_set_config13_tx_enable(DP_USE_4_LANES);
-	cal_log_debug(0, "enable all lanes.\n");
 
 	// Wait TX_ACK De-Assert
 	dpphy_reg_wait_config12_tx_ack(DP_USE_4_LANES);
@@ -716,18 +696,18 @@ static void dpphy_reg_reset_mpllb(u32 en)
 {
 	if (en) {
 		// Assert USBDP PHY MPLLB reset
-		dpphy_reg_set_config12_tx_mpllb_en(DP_USE_0_LANES);
-		dpphy_reg_set_config11_tx_pstate(DP_USE_0_LANES);
+		dpphy_reg_set_config12_tx_mpllb_en(0, DP_USE_4_LANES);
+		dpphy_reg_set_config11_tx_pstate(0, DP_USE_4_LANES);
 		cal_log_debug(0, "disable mpllb and power off for all lanes\n");
 	} else {
 		// De-assert USBDP PHY MPLLB reset
-		dpphy_reg_set_config12_tx_mpllb_en(DP_USE_4_LANES);
-		dpphy_reg_set_config11_tx_pstate(DP_USE_4_LANES);
-		cal_log_debug(0, "enable mpllb and power off for all lanes\n");
+		dpphy_reg_set_config12_tx_mpllb_en(1, DP_USE_4_LANES);
+		dpphy_reg_set_config11_tx_pstate(1, DP_USE_4_LANES);
+		cal_log_debug(0, "enable mpllb and power on for all lanes\n");
 	}
 
 	// Request to update TX status
-	dpphy_reg_set_config12_status_update(DP_USE_4_LANES);
+	dpphy_reg_set_config12_status_update();
 	cal_log_debug(0, "status update for all lanes.\n");
 }
 
@@ -917,16 +897,13 @@ static void dpphy_reg_switch_to_dp(enum lane_usage num_lane)
 
 static void dpphy_reg_set_lanes(struct dp_hw_config *hw_config, enum lane_usage num_lane)
 {
-	dpphy_reg_set_config13_tx_enable(num_lane);
-	cal_log_debug(0, "enable %d lanes.\n", num_lane);
-
-	dpphy_reg_set_config12_tx_width(num_lane);
-	dpphy_reg_set_config12_tx_mpllb_en(num_lane);
-	dpphy_reg_set_config11_tx_pstate(num_lane);
+	dpphy_reg_set_config12_tx_width(1, num_lane);
+	dpphy_reg_set_config12_tx_mpllb_en(1, num_lane);
+	dpphy_reg_set_config11_tx_pstate(1, num_lane);
 	cal_log_debug(0, "enable mpllb/power for %d lanes.\n", num_lane);
 
-	dpphy_reg_set_config12_status_update(num_lane);
-	cal_log_debug(0, "status update for %d lanes.\n", num_lane);
+	dpphy_reg_set_config12_status_update();
+	cal_log_debug(0, "status update for all lanes.\n");
 
 	if (hw_config->link_rate > LINK_RATE_RBR) {
 		/*
@@ -935,6 +912,9 @@ static void dpphy_reg_set_lanes(struct dp_hw_config *hw_config, enum lane_usage 
 		 */
 		dpphy_reg_set_config17_dcc_byp_ac_cap(0, num_lane);
 	}
+
+	dpphy_reg_set_config13_tx_enable(1, num_lane);
+	cal_log_debug(0, "enable %d lanes.\n", num_lane);
 }
 
 static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
@@ -1488,11 +1468,11 @@ static void dp_hw_set_data_path(struct dp_hw_config *hw_config)
 		break;
 	}
 
-	// SNPS PHY Clock Enable
-	dp_reg_set_snps_tx_clk_en(num_lane);
-
 	// SNPS PHY Clock Ready
 	dp_reg_set_snps_tx_clk_rdy(num_lane);
+
+	// SNPS PHY Clock Enable
+	dp_reg_set_snps_tx_clk_en(num_lane);
 
 	// SNPS PHY Data Enable
 	dp_reg_set_snps_tx_data_en(num_lane);
