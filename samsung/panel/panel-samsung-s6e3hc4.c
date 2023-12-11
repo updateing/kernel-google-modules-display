@@ -562,8 +562,7 @@ static void s6e3hc4_update_refresh_mode(struct exynos_panel *ctx,
 	 */
 	ctx->panel_idle_vrefresh = idle_vrefresh;
 	s6e3hc4_update_panel_feat(ctx, pmode, false);
-	te2_state_changed(ctx->bl);
-	backlight_state_changed(ctx->bl);
+	schedule_work(&ctx->state_notify);
 }
 
 static void s6e3hc4_change_frequency(struct exynos_panel *ctx,

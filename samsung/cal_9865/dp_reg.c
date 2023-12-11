@@ -1075,7 +1075,7 @@ static void dp_hw_set_initial_common_funcs(void)
 	dp_reg_set_hdcp22_func_en(0);
 	dp_reg_set_hdcp13_func_en(0);
 	dp_reg_set_gtc_func_en(0);
-	dp_reg_set_pcs_func_en(0);
+	dp_reg_set_pcs_func_en(1);
 	dp_reg_set_aux_func_en(1);
 }
 
@@ -1326,6 +1326,16 @@ static void dp_reg_aux_ch_received_buf(u8 *buf, u32 length)
 
 /* PCS (Scrambler/Encoder/FEC) Control Registers */
 // PCS Control
+static void dp_reg_set_fec_ready(u32 en)
+{
+	dp_write_mask(SST1, PCS_CONTROL, FEC_READY_SET(en), FEC_READY_MASK);
+}
+
+static void dp_reg_set_fec_func_en(u32 en)
+{
+	dp_write_mask(SST1, PCS_CONTROL, FEC_FUNC_EN_SET(en), FEC_FUNC_EN_MASK);
+}
+
 static void dp_reg_set_training_pattern(dp_training_pattern pattern)
 {
 	dp_write_mask(SST1, PCS_CONTROL, LINK_TRAINING_PATTERN_SET(pattern),
@@ -2378,13 +2388,7 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 
 	/* Set System Common Functions Enable */
 	dp_hw_set_initial_common_funcs();
-	dp_reg_set_pcs_func_en(1);
 	cal_log_debug(0, "set common function\n");
-
-	/* Set Single-Stream Transport Functions Enable */
-	dp_reg_set_enhanced_mode(hw_config->enhanced_mode ? 1 : 0);
-	dp_reg_set_sst1_video_func_en(1);
-	cal_log_debug(0, "set sst function\n");
 
 	/* Set System SW Functions Enable */
 	dp_reg_set_sw_func_en(1);
@@ -2424,10 +2428,6 @@ void dp_hw_reinit(struct dp_hw_config *hw_config)
 	dp_reg_set_aux_pn(hw_config->orient_type);
 	dp_hw_set_lane_map_config(hw_config);
 	cal_log_debug(0, "set lane count & map\n");
-
-	/* Set System Common Functions Enable */
-	dp_reg_set_pcs_func_en(1);
-	cal_log_debug(0, "set common function\n");
 
 	/* Set Single-Stream Transport Functions Enable */
 	dp_reg_set_enhanced_mode(hw_config->enhanced_mode ? 1 : 0);
@@ -2555,6 +2555,12 @@ void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe)
 	dp_reg_set_spd_infoframe_data(spd_infoframe.data);
 	dp_reg_set_spd_infoframe_update(1);
 	dp_reg_set_spd_infoframe_send(1);
+}
+
+void dp_hw_set_fec(bool en)
+{
+	dp_reg_set_fec_func_en(en ? 1 : 0);
+	dp_reg_set_fec_ready(en ? 1 : 0);
 }
 
 void dp_hw_set_training_pattern(dp_training_pattern pattern)

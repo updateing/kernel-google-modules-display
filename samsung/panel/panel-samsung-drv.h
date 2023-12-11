@@ -622,8 +622,6 @@ struct exynos_panel_desc {
 	 *    - if `freq set` is changed when lhbm is on, lhbm may not work normally.
 	 */
 	bool no_lhbm_rr_constraints;
-	/* schedule sysfs_notify in workq */
-	bool use_async_notify;
 	const u32 lhbm_post_cmd_delay_frames;
 	const u32 lhbm_effective_delay_frames;
 	/**
@@ -960,16 +958,6 @@ static inline ssize_t exynos_get_te2_type_len(struct exynos_panel *ctx, bool lp_
 {
 	return (lp_mode ? (ctx->desc->lp_mode_count ? : 1) * (ctx->desc->num_binned_lp - 1) :
 		ctx->desc->num_modes);
-}
-
-static inline void backlight_state_changed(struct backlight_device *bl)
-{
-	sysfs_notify(&bl->dev.kobj, NULL, "state");
-}
-
-static inline void te2_state_changed(struct backlight_device *bl)
-{
-	sysfs_notify(&bl->dev.kobj, NULL, "te2_state");
 }
 
 static inline u32 get_current_frame_duration_us(struct exynos_panel *ctx)

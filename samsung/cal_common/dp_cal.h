@@ -328,6 +328,7 @@ void dp_hw_send_audio_infoframe(struct infoframe audio_infoframe);
 void dp_hw_send_avi_infoframe(struct infoframe avi_infoframe);
 void dp_hw_send_spd_infoframe(struct infoframe spd_infoframe);
 
+void dp_hw_set_fec(bool en);
 void dp_hw_set_training_pattern(dp_training_pattern pattern);
 void dp_hw_set_quality_pattern(dp_qual_pattern pattern, dp_scrambling scramble);
 void dp_hw_set_voltage_and_pre_emphasis(struct dp_hw_config *hw_config, u8 *voltage, u8 *pre_emphasis);

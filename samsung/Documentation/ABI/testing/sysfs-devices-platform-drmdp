@@ -40,3 +40,51 @@ Contact:       "Sergey Volk" <servolk@google.com>
 Description:
                Used to pass error code associated with a hotplug event sent to client.
                Zero indicates successful hotplug event, non-zero value indicates hotplug failure.
+
+What:		/sys/devices/platform/110f0000.drmdp/drm-displayport-stats/link_negotiation_failures
+Date:		November 2023
+KernelVersion:	5.15
+Contact:	"Weizhung Ding" <weizhungding@google.com>
+Description:
+		Used to count the unmber of link negotiation failures, Link training failed
+		will increase the count.
+
+What:		/sys/devices/platform/110f0000.drmdp/drm-displayport-stats/edid_read_failures
+Date:		November 2023
+KernelVersion:	5.15
+Contact:	"Weizhung Ding" <weizhungding@google.com>
+Description:
+		Used to count the number of edid read failures. Read EDID failed will
+		increase the count.
+
+What:		/sys/devices/platform/110f0000.drmdp/drm-displayport-stats/dpcd_read_failures
+Date:		November 2023
+KernelVersion:	5.15
+Contact:	"Weizhung Ding" <weizhungding@google.com>
+Description:
+		Used to count the unmber of dpcd read failures. Read sink failed will increase
+		the count.
+
+What:		/sys/devices/platform/110f0000.drmdp/drm-displayport-stats/edid_invalid_failures
+Date:		November 2023
+KernelVersion:	5.15
+Contact:	"Weizhung Ding" <weizhungding@google.com>
+Description:
+		Used to count the number of edid invalid failures. If EDID is invalid, the count
+		will be increased.
+
+What:		/sys/devices/platform/110f0000.drmdp/drm-displayport-stats/sink_count_invalid_failures
+Date:		November 2023
+KernelVersion:	5.15
+Contact:	"Weizhung Ding" <weizhungding@google.com>
+Description:
+		Used to count the number of sink count invalid failures. If sink count is invalid,
+		the count will be increased.
+
+What:		/sys/devices/platform/110f0000.drmdp/drm-displayport-stats/link_unstable_failures
+Date:		November 2023
+KernelVersion:	5.15
+Contact:	"Weizhung Ding" <weizhungding@google.com>
+Description:
+		Used to count the number of link unstable failures. When DP link is down and re-establish
+		the link, the count will be increased.

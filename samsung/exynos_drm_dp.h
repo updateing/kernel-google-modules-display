@@ -58,6 +58,7 @@ struct dp_link {
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;
+	bool fec;
 	bool ssc;
 };
 
@@ -68,6 +69,7 @@ struct dp_host {
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;
+	bool fec;
 	bool ssc;
 	bool scrambler;
 
@@ -87,6 +89,8 @@ struct dp_sink {
 	u8   support_tps;
 	bool fast_training;
 	bool enhanced_frame;
+	bool dsc;
+	bool fec;
 	bool ssc;
 
 	/* From EDID */
@@ -140,6 +144,15 @@ enum link_training_status {
 	LINK_TRAINING_SUCCESS,
 	LINK_TRAINING_FAILURE,
 	LINK_TRAINING_FAILURE_SINK,
+};
+
+struct dp_stats_counters {
+	u32 link_negotiation_failures;
+	u32 edid_read_failures;
+	u32 dpcd_read_failures;
+	u32 edid_invalid_failures;
+	u32 sink_count_invalid_failures;
+	u32 link_unstable_failures;
 };
 
 /* DisplayPort Device */
@@ -206,6 +219,9 @@ struct dp_device {
 	struct dentry *dp_crc_values_debugfs_file;
 
 	bool hdcp_and_audio_enabled;
+
+	/* DP stats/error counters */
+	struct dp_stats_counters stats;
 };
 
 static inline struct dp_device *get_dp_drvdata(void)
