@@ -941,9 +941,9 @@ static int dp_link_up(struct dp_device *dp)
 	dp_fill_sink_caps(dp, dpcd);
 
 	/* Dump Sink Capabilities */
-	dp_info(dp, "DP Sink: DPCD_Rev_%X Rate(%d Mbps) Lanes(%u) SSC(%d) FEC(%d) DSC(%d)\n",
+	dp_info(dp, "DP Sink: DPCD_%X Rate(%d Mbps) Lanes(%u) EF(%d) SSC(%d) FEC(%d) DSC(%d)\n",
 		dp->sink.revision, dp->sink.link_rate / 100, dp->sink.num_lanes,
-		dp->sink.ssc, dp->sink.fec, dp->sink.dsc);
+		dp->sink.enhanced_frame, dp->sink.ssc, dp->sink.fec, dp->sink.dsc);
 
 	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
@@ -997,8 +997,9 @@ static int dp_link_up(struct dp_device *dp)
 	dp->link.ssc = dp_get_ssc(dp);
 	dp->link.support_tps = dp_get_supported_pattern(dp);
 	dp->link.fast_training = dp_get_fast_training(dp);
-	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) SSC(%d) FEC(%d)\n",
-		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.ssc, dp->link.fec);
+	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) EF(%d) SSC(%d) FEC(%d)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.enhanced_frame,
+		dp->link.ssc, dp->link.fec);
 
 	/* Link Training */
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
