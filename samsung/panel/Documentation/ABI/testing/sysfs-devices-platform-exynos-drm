@@ -26,3 +26,21 @@ Description:
 		The file provides the Vreg power setting of a panel.
 
 		Valid panels are 'primary-panel' or 'secondary-panel'.
+
+What:		/sys/devices/platform/exynos-drm/<panel>/time_in_state
+Date:		December 2023
+KernelVersion:	5.15
+Contact:	"Midas Chien" <midaschieh@google.com>
+Description:
+		The file provides the time (msec) spent in various display states.
+
+		Valid panels are 'primary-panel' or 'secondary-panel'.
+
+What:		/sys/devices/platform/exynos-drm/<panel>/available_disp_stats
+Date:		December 2023
+KernelVersion:	5.15
+Contact:	"Midas Chien" <midaschieh@google.com>
+Description:
+		The file provides the available display stats state.
+
+		Valid panels are 'primary-panel' or 'secondary-panel'.
