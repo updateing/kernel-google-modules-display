@@ -2202,6 +2202,8 @@ static void exynos_panel_pre_commit_properties(
 			ctx->atc_need_enabled = false;
 		} else if (decon->dqe->force_atc_config.en != true) {
 			ctx->atc_need_enabled = false;
+		} else if (ctx->desc->keep_atc_on_for_op) {
+			dev_dbg(ctx->dev, "keep atc on for op\n");
 		} else {
 			exynos_panel_set_atc_config(ctx, decon,
 						    to_exynos_crtc_state(crtc_state),
