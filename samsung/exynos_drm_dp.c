@@ -440,12 +440,11 @@ static u32 dp_get_training_interval_us(struct dp_device *dp, u32 interval)
 {
 	if (interval == 0)
 		return 400;
-	else if (interval < 5)
+	if (interval < 5)
 		return 4000 << (interval - 1);
-	else
-		dp_err(dp, "returned wrong training interval(%u)\n", interval);
 
-	return 0;
+	dp_warn(dp, "invalid link training AUX read interval value(%u)\n", interval);
+	return 4000;
 }
 
 static void dp_print_swing_level(struct dp_device *dp)
