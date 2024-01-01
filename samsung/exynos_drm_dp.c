@@ -440,12 +440,11 @@ static u32 dp_get_training_interval_us(struct dp_device *dp, u32 interval)
 {
 	if (interval == 0)
 		return 400;
-	else if (interval < 5)
+	if (interval < 5)
 		return 4000 << (interval - 1);
-	else
-		dp_err(dp, "returned wrong training interval(%u)\n", interval);
 
-	return 0;
+	dp_warn(dp, "invalid link training AUX read interval value(%u)\n", interval);
+	return 4000;
 }
 
 static void dp_print_swing_level(struct dp_device *dp)
@@ -941,9 +940,9 @@ static int dp_link_up(struct dp_device *dp)
 	dp_fill_sink_caps(dp, dpcd);
 
 	/* Dump Sink Capabilities */
-	dp_info(dp, "DP Sink: DPCD_Rev_%X Rate(%d Mbps) Lanes(%u) SSC(%d) FEC(%d) DSC(%d)\n",
+	dp_info(dp, "DP Sink: DPCD_%X Rate(%d Mbps) Lanes(%u) EF(%d) SSC(%d) FEC(%d) DSC(%d)\n",
 		dp->sink.revision, dp->sink.link_rate / 100, dp->sink.num_lanes,
-		dp->sink.ssc, dp->sink.fec, dp->sink.dsc);
+		dp->sink.enhanced_frame, dp->sink.ssc, dp->sink.fec, dp->sink.dsc);
 
 	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
@@ -997,8 +996,9 @@ static int dp_link_up(struct dp_device *dp)
 	dp->link.ssc = dp_get_ssc(dp);
 	dp->link.support_tps = dp_get_supported_pattern(dp);
 	dp->link.fast_training = dp_get_fast_training(dp);
-	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) SSC(%d) FEC(%d)\n",
-		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.ssc, dp->link.fec);
+	dp_info(dp, "DP Link: training start: Rate(%d Mbps) Lanes(%u) EF(%d) SSC(%d) FEC(%d)\n",
+		dp->link.link_rate / 100, dp->link.num_lanes, dp->link.enhanced_frame,
+		dp->link.ssc, dp->link.fec);
 
 	/* Link Training */
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
@@ -1726,7 +1726,9 @@ static void dp_work_hpd(struct work_struct *work)
 			dp_on_by_hpd_plug(dp);
 		}
 	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
-		if (!pm_runtime_get_if_in_use(dp->dev)) {
+		if ((!pm_runtime_get_if_in_use(dp->dev)) ||
+		    (dp->state == DP_STATE_INIT)) {
+			dp_info(dp, "%s: DP is not ON\n", __func__);
 			mutex_unlock(&dp->hpd_lock);
 			return;
 		}

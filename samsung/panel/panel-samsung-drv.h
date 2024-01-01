@@ -651,6 +651,8 @@ struct exynos_panel_desc {
 	const struct panel_reg_ctrl reg_ctrl_disable[PANEL_REG_COUNT];
 	const u32 normal_mode_work_delay_ms;
 	const u32 default_dsi_hs_clk;
+	/* Set true if need to keep ATC on while switching op_hz if it's already on */
+	const bool keep_atc_on_for_op;
 };
 
 #define PANEL_ID_MAX		40

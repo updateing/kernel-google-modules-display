@@ -70,6 +70,7 @@ inline void exynos_panel_msleep(u32 delay_ms)
 	dsim_trace_msleep(delay_ms);
 }
 EXPORT_SYMBOL(exynos_panel_msleep);
+static void exynos_panel_node_attach(struct exynos_drm_connector *exynos_connector);
 
 static inline bool is_backlight_off_state(const struct backlight_device *bl)
 {
@@ -2035,10 +2036,17 @@ static int exynos_panel_connector_set_property(
 	return 0;
 }
 
+static int exynos_panel_connector_late_register(struct exynos_drm_connector *exynos_connector)
+{
+	exynos_panel_node_attach(exynos_connector);
+	return 0;
+}
+
 static const struct exynos_drm_connector_funcs exynos_panel_connector_funcs = {
 	.atomic_print_state = exynos_panel_connector_print_state,
 	.atomic_get_property = exynos_panel_connector_get_property,
 	.atomic_set_property = exynos_panel_connector_set_property,
+	.late_register = exynos_panel_connector_late_register,
 };
 
 static void exynos_panel_set_dimming(struct exynos_panel *ctx, bool dimming_on)
@@ -2202,6 +2210,8 @@ static void exynos_panel_pre_commit_properties(
 			ctx->atc_need_enabled = false;
 		} else if (decon->dqe->force_atc_config.en != true) {
 			ctx->atc_need_enabled = false;
+		} else if (ctx->desc->keep_atc_on_for_op) {
+			dev_dbg(ctx->dev, "keep atc on for op\n");
 		} else {
 			exynos_panel_set_atc_config(ctx, decon,
 						    to_exynos_crtc_state(crtc_state),
@@ -2383,11 +2393,16 @@ static int exynos_drm_connector_check_mode(struct exynos_panel *ctx,
 		to_exynos_connector_state(connector_state);
 	const struct exynos_panel_mode *pmode =
 		exynos_panel_get_mode(ctx, &crtc_state->mode);
+	bool is_video_mode;
 
 	if (!pmode) {
 		dev_warn(ctx->dev, "invalid mode %s\n", crtc_state->mode.name);
 		return -EINVAL;
 	}
+	is_video_mode = (pmode->exynos_mode.mode_flags & MIPI_DSI_MODE_VIDEO) != 0;
+
+	/* self refresh is only supported in command mode */
+	connector_state->self_refresh_aware = !is_video_mode;
 
 	if (crtc_state->connectors_changed || !is_panel_active(ctx))
 		exynos_connector_state->seamless_possible = false;
@@ -3564,13 +3579,36 @@ static const char *exynos_panel_get_sysfs_name(struct exynos_panel *ctx)
 	return "primary-panel";
 }
 
+static void exynos_panel_node_attach(struct exynos_drm_connector *exynos_connector)
+{
+	struct exynos_panel *ctx = exynos_connector_to_panel(exynos_connector);
+	struct drm_connector *connector = &exynos_connector->base;
+	const char *sysfs_name = exynos_panel_get_sysfs_name(ctx);
+	struct drm_bridge *bridge = &ctx->bridge;
+	int ret;
+
+	ret = sysfs_create_link(&connector->kdev->kobj, &ctx->dev->kobj,
+				"panel");
+	if (ret)
+		dev_warn(ctx->dev, "unable to link panel sysfs (%d)\n", ret);
+
+	exynos_debugfs_panel_add(ctx, connector->debugfs_entry);
+	exynos_dsi_debugfs_add(to_mipi_dsi_device(ctx->dev), ctx->debugfs_entry);
+	panel_debugfs_add(ctx, ctx->debugfs_entry);
+
+	ret = sysfs_create_link(&bridge->dev->dev->kobj, &ctx->dev->kobj, sysfs_name);
+	if (ret)
+		dev_warn(ctx->dev, "unable to link %s sysfs (%d)\n", sysfs_name, ret);
+	else
+		dev_dbg(ctx->dev, "succeed to link %s sysfs\n", sysfs_name);
+}
+
 static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 				      enum drm_bridge_attach_flags flags)
 {
 	struct drm_device *dev = bridge->dev;
 	struct exynos_panel *ctx = bridge_to_exynos_panel(bridge);
 	struct drm_connector *connector = &ctx->exynos_connector.base;
-	const char *sysfs_name = exynos_panel_get_sysfs_name(ctx);
 	int ret;
 
 	ret = exynos_drm_connector_init(dev, &ctx->exynos_connector,
@@ -3590,32 +3628,13 @@ static int exynos_panel_bridge_attach(struct drm_bridge *bridge,
 
 	drm_connector_helper_add(connector, &exynos_connector_helper_funcs);
 
-	drm_connector_register(connector);
-
 	drm_connector_attach_encoder(connector, bridge->encoder);
 	connector->funcs->reset(connector);
 	connector->status = connector_status_connected;
-	connector->state->self_refresh_aware = true;
 	if (ctx->desc->exynos_panel_func && ctx->desc->exynos_panel_func->commit_done)
 		ctx->exynos_connector.needs_commit = true;
 
-	ret = sysfs_create_link(&connector->kdev->kobj, &ctx->dev->kobj,
-				"panel");
-	if (ret)
-		dev_warn(ctx->dev, "unable to link panel sysfs (%d)\n", ret);
-
-	exynos_debugfs_panel_add(ctx, connector->debugfs_entry);
-	exynos_dsi_debugfs_add(to_mipi_dsi_device(ctx->dev), ctx->debugfs_entry);
-	panel_debugfs_add(ctx, ctx->debugfs_entry);
-
 	drm_kms_helper_hotplug_event(connector->dev);
-
-
-	ret = sysfs_create_link(&bridge->dev->dev->kobj, &ctx->dev->kobj, sysfs_name);
-	if (ret)
-		dev_warn(ctx->dev, "unable to link %s sysfs (%d)\n", sysfs_name, ret);
-	else
-		dev_dbg(ctx->dev, "succeed to link %s sysfs\n", sysfs_name);
 
 	return 0;
 }
@@ -4997,6 +5016,7 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	return 0;
 
 err_panel:
+	drm_bridge_remove(&ctx->bridge);
 	drm_panel_remove(&ctx->panel);
 	dev_err(ctx->dev, "failed to probe samsung panel driver(%d)\n", ret);
 

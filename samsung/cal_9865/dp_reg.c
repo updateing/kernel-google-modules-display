@@ -1211,10 +1211,16 @@ static void dp_hw_set_common_interrupt(u32 en)
 }
 
 /* AUX Control Registers */
-static void dp_reg_set_aux_reply_timeout(void)
+static void dp_reg_set_aux_reply_timeout_and_retries(void)
 {
-	dp_write_mask(SST1, AUX_CONTROL, AUX_REPLY_TIMER_MODE_1800US,
-		      AUX_REPLY_TIMER_MODE_MASK);
+	/*
+	 * 1800 us timeout and no hardware retries.
+	 * Additional 1400 us wait will be done in software
+	 * to comply with DP CTS test 4.2.1.1 requirement.
+	 */
+	dp_write_mask(SST1, AUX_CONTROL,
+		      AUX_REPLY_TIMER_MODE_1800US | AUX_RETRY_TIMER_SET(0),
+		      AUX_REPLY_TIMER_MODE_MASK | AUX_RETRY_TIMER_MASK);
 }
 
 static void dp_reg_set_aux_pn(enum plug_orientation orient)
@@ -1297,8 +1303,14 @@ static int dp_reg_check_aux_monitors(void)
 			dp_read(SST1, AUX_REQUEST_CONTROL),
 			dp_read(SST1, AUX_COMMAND_CONTROL));
 
-		usleep_range(400, 410);
-		return -EIO;
+		if (AUX_CMD_STATUS_GET(val0) == AUX_CMD_STATUS_TIMEOUT_ERROR) {
+			cal_log_err(0, "DP Sink didn't reply in 1.8ms. Retry after 1.4ms.\n");
+			usleep_range(1400, 1410);
+			return -ETIME;
+		} else {
+			usleep_range(400, 410);
+			return -EIO;
+		}
 	} else
 		return 0;
 }
@@ -2141,10 +2153,7 @@ static int dp_reg_set_aux_ch_operation_enable(void)
 	if (dp_reg_do_aux_transaction())
 		return -ETIME;
 
-	if (dp_reg_check_aux_monitors())
-		return -EIO;
-
-	return 0;
+	return dp_reg_check_aux_monitors();
 }
 
 static int dp_write_dpcd(u32 address, u32 length, u8 *data)
@@ -2155,7 +2164,7 @@ static int dp_write_dpcd(u32 address, u32 length, u8 *data)
 	while (retry_cnt > 0) {
 		dp_reg_aux_ch_buf_clr();
 		dp_reg_aux_defer_ctrl(1);
-		dp_reg_set_aux_reply_timeout();
+		dp_reg_set_aux_reply_timeout_and_retries();
 		dp_reg_set_aux_ch_command(DPCD_WRITE);
 		dp_reg_set_aux_ch_address(address);
 		dp_reg_set_aux_ch_length(length);
@@ -2181,7 +2190,7 @@ static int dp_read_dpcd(u32 address, u32 length, u8 *data)
 		dp_reg_set_aux_ch_length(length);
 		dp_reg_aux_ch_buf_clr();
 		dp_reg_aux_defer_ctrl(1);
-		dp_reg_set_aux_reply_timeout();
+		dp_reg_set_aux_reply_timeout_and_retries();
 		ret = dp_reg_set_aux_ch_operation_enable();
 		if (ret == 0)
 			break;
@@ -2258,7 +2267,7 @@ int dp_hw_read_edid(u8 block_cnt, u32 length, u8 *data)
 	while (retry_cnt > 0) {
 		dp_reg_aux_ch_buf_clr();
 		dp_reg_aux_defer_ctrl(1);
-		dp_reg_set_aux_reply_timeout();
+		dp_reg_set_aux_reply_timeout_and_retries();
 		dp_reg_set_aux_ch_address_only_command(false);
 
 		/* for 3,4 block */
