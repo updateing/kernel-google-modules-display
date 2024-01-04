@@ -174,7 +174,7 @@ static bool dp_fec = false;
 module_param(dp_fec, bool, 0664);
 MODULE_PARM_DESC(dp_fec, "Enable/disable DP link forward error correction");
 
-static bool dp_ssc = false;
+static bool dp_ssc = true;
 module_param(dp_ssc, bool, 0664);
 MODULE_PARM_DESC(dp_ssc, "Enable/disable DP link spread spectrum clocking");
 
