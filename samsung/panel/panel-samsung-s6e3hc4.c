@@ -562,7 +562,7 @@ static void s6e3hc4_update_refresh_mode(struct exynos_panel *ctx,
 	 */
 	ctx->panel_idle_vrefresh = idle_vrefresh;
 	s6e3hc4_update_panel_feat(ctx, pmode, false);
-	notify_panel_mode_changed(ctx);
+	notify_panel_mode_changed(ctx, false);
 }
 
 static void s6e3hc4_change_frequency(struct exynos_panel *ctx,

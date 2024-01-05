@@ -2373,7 +2373,7 @@ static void exynos_panel_pre_commit_properties(
 		DPU_ATRACE_BEGIN("set_hbm");
 		mutex_lock(&ctx->mode_lock);
 		exynos_panel_func->set_hbm_mode(ctx, conn_state->global_hbm_mode);
-		notify_panel_mode_changed(ctx);
+		notify_panel_mode_changed(ctx, false);
 		mutex_unlock(&ctx->mode_lock);
 		DPU_ATRACE_END("set_hbm");
 		ghbm_updated = true;
@@ -3148,7 +3148,7 @@ static ssize_t hbm_mode_store(struct device *dev,
 
 	if (hbm_mode != ctx->hbm_mode) {
 		funcs->set_hbm_mode(ctx, hbm_mode);
-		notify_panel_mode_changed(ctx);
+		notify_panel_mode_changed(ctx, false);
 	}
 
 unlock:
@@ -3639,6 +3639,34 @@ static ssize_t acl_mode_show(struct device *dev,
 
 static DEVICE_ATTR_RW(acl_mode);
 
+static ssize_t allow_wakeup_by_state_change_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+	int ret;
+
+	ret = kstrtobool(buf, &ctx->allow_wakeup_by_state_change);
+	if (ret) {
+		dev_err(ctx->dev, "invalid allow wakeup by state change value\n");
+		return ret;
+	}
+
+	return count;
+}
+
+static ssize_t allow_wakeup_by_state_change_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct exynos_panel *ctx = bl_get_data(bd);
+
+	return sysfs_emit_at(buf, 0, "%d\n", ctx->allow_wakeup_by_state_change);
+}
+
+static DEVICE_ATTR_RW(allow_wakeup_by_state_change);
+
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_hbm_mode.attr,
 	&dev_attr_dimming_on.attr,
@@ -3648,6 +3676,7 @@ static struct attribute *bl_device_attrs[] = {
 	&dev_attr_lp_state.attr,
 	&dev_attr_te2_state.attr,
 	&dev_attr_als_table.attr,
+	&dev_attr_allow_wakeup_by_state_change.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bl_device);
@@ -3716,7 +3745,7 @@ static void exynos_panel_set_backlight_state(struct exynos_panel *ctx,
 	mutex_unlock(&ctx->bl_state_lock);
 
 	if (state_changed) {
-		notify_panel_mode_changed(ctx);
+		notify_panel_mode_changed(ctx, false);
 		dev_info(ctx->dev, "panel: %s | bl: brightness@%u, state@0x%x\n",
 			 exynos_panel_get_state_str(panel_state), bl->props.brightness,
 			 bl->props.state);
@@ -4684,7 +4713,7 @@ static void exynos_panel_bridge_mode_set(struct drm_bridge *bridge,
 				exynos_panel_set_backlight_state(
 					ctx, is_active ? PANEL_STATE_NORMAL : PANEL_STATE_OFF);
 			else if (ctx->bl)
-				notify_panel_mode_changed(ctx);
+				notify_panel_mode_changed(ctx, false);
 
 			if (!is_lp_mode)
 				exynos_panel_update_te2(ctx);
@@ -5257,10 +5286,20 @@ static int disp_stats_update_state(struct exynos_panel *ctx)
 
 static void notify_panel_mode_changed_worker(struct work_struct *work)
 {
+	struct notify_state_change *notify_state_change =
+		container_of(work, struct notify_state_change, work);
 	struct exynos_panel *ctx =
-		container_of(work, struct exynos_panel, notify_panel_mode_changed_work);
+		container_of(notify_state_change, struct exynos_panel, notify_panel_mode_changed);
 
 	disp_stats_update_state(ctx);
+
+	if (ctx->allow_wakeup_by_state_change && notify_state_change->abort_suspend) {
+		if (unlikely(!notify_state_change->ws))
+			dev_warn(ctx->dev, "wakeup source creation was unsuccessful\n");
+		else
+			pm_wakeup_ws_event(notify_state_change->ws, 0, true);
+	}
+
 	sysfs_notify(&ctx->bl->dev.kobj, NULL, "state");
 }
 
@@ -5326,6 +5365,10 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 		return PTR_ERR(ctx->bl);
 	}
 
+	ctx->notify_panel_mode_changed.ws = wakeup_source_register(dev, name);
+	if (!ctx->notify_panel_mode_changed.ws)
+		dev_warn(ctx->dev, "failed to register `%s` wakeup source\n", name);
+
 	ctx->bl->props.max_brightness = ctx->desc->max_brightness;
 	ctx->bl->props.brightness = ctx->desc->dft_brightness;
 
@@ -5368,7 +5411,7 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 	ctx->panel_idle_enabled = exynos_panel_func && exynos_panel_func->set_self_refresh != NULL;
 	INIT_DELAYED_WORK(&ctx->idle_work, panel_idle_work);
 
-	INIT_WORK(&ctx->notify_panel_mode_changed_work, notify_panel_mode_changed_worker);
+	INIT_WORK(&ctx->notify_panel_mode_changed.work, notify_panel_mode_changed_worker);
 	INIT_WORK(&ctx->notify_brightness_changed_work, notify_brightness_changed_worker);
 
 	if (exynos_panel_func && exynos_panel_func->run_normal_mode_work &&

@@ -710,7 +710,7 @@ static bool nt37290_change_frequency(struct exynos_panel *ctx,
 	ctx->panel_idle_vrefresh = ctx->self_refresh_active ? spanel->hw_idle_vrefresh : 0;
 
 	if (updated) {
-		notify_panel_mode_changed(ctx);
+		notify_panel_mode_changed(ctx, false);
 		dev_dbg(ctx->dev, "change to %dHz, idle %s, was_lp_mode %d\n",
 			vrefresh, idle_active ? "active" : "deactive", was_lp_mode);
 	}
