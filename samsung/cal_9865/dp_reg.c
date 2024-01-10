@@ -720,7 +720,7 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 	    mpllb_cp_prop_gs = (u32)0x7f;
 	// CONFIG02
 	u32 mpllb_div5_clk_en = 1, mpllb_div_cl_en = 0,
-	    mpllb_div_multiplier = 0, mpllb_force_en = 1;
+	    mpllb_div_multiplier = 0, mpllb_force_en = 0;
 	u32 mpllb_force_ack = 0, mpllb_fracn_cfg_update_en = 1,
 	    mpllb_fracn_en = 1, mpllb_fracn_den = 1;
 	// CONFIG03
