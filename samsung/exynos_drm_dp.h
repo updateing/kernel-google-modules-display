@@ -137,6 +137,7 @@ struct dp_audio_config {
 enum dp_state_for_hdcp22 {
 	DP_DISCONNECT,
 	DP_CONNECT,
+	DP_PHYSICAL_DISCONNECT,
 };
 
 enum link_training_status {

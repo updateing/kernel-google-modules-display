@@ -2771,7 +2771,7 @@ static DEVICE_ATTR_WO(irq_hpd);
 static ssize_t usbc_cable_disconnect_store(struct device *dev, struct device_attribute *attr,
 					   const char *buf, size_t size)
 {
-	/* To-Do: Handle Signal */
+	hdcp_dplink_connect_state(DP_PHYSICAL_DISCONNECT);
 
 	return size;
 }
