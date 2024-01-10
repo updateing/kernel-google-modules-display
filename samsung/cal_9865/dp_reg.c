@@ -947,7 +947,7 @@ static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
 	dpphy_reg_set_config19_dpalt_disable_ack(1);
 
 	/* CP(Charge Pump) Bias Boosting X2 */
-	if (!reconfig)
+	if (hw_config->phy_boost && !reconfig)
 		dpphy_reg_enable_cp_current_boost();
 
 	/* Set Master PLL-B for DP as Link_BW */

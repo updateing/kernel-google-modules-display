@@ -298,6 +298,9 @@ struct dp_hw_config {
 
 	/* USBDP combo phy enable ref count */
 	atomic_t usbdp_phy_en_cnt;
+
+	/* DP PHY boost */
+	bool phy_boost;
 };
 
 

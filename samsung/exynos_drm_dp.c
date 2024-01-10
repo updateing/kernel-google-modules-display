@@ -178,6 +178,10 @@ static bool dp_ssc = true;
 module_param(dp_ssc, bool, 0664);
 MODULE_PARM_DESC(dp_ssc, "Enable/disable DP link spread spectrum clocking");
 
+static bool dp_phy_boost = true;
+module_param(dp_phy_boost, bool, 0664);
+MODULE_PARM_DESC(dp_phy_boost, "Enable/disable DP PHY current boost");
+
 #define DP_BIST_OFF     0
 #define DP_BIST_ON      1
 #define DP_BIST_ON_HDCP 2
@@ -1984,6 +1988,7 @@ static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_s
 				dp->typec_pin_assignment);
 			dp->hw_config.pin_type = dp->typec_pin_assignment;
 
+			dp->hw_config.phy_boost = dp_phy_boost;
 			dp_hpd_changed(dp, EXYNOS_HPD_PLUG);
 		}
 	} else if (hpd == EXYNOS_HPD_IRQ) {
