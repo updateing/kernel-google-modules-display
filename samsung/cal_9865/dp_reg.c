@@ -380,6 +380,17 @@ static void dpphy_reg_cr_write_mask(u16 addr, u16 data, u16 mask)
 	cal_log_debug(0, "[CR][%04X][%04X]", addr, old);
 }
 
+/*
+ * Boost charge pump bias current
+ * [10:8] mpllb_ctr_cp_int_ref
+ * [2:0] mplla_ctr_cp_int_ref
+ */
+static void dpphy_reg_enable_cp_current_boost(void)
+{
+	dpphy_reg_cr_write_mask(0x5c, 0x400, 0x700);
+	dpphy_reg_cr_write_mask(0x5c, 0x4, 0x7);
+}
+
 /* fix abnormal lane2 signal */
 static void dpphy_reg_usb_tune_reset(enum plug_orientation orient)
 {
@@ -720,7 +731,7 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 	    mpllb_cp_prop_gs = (u32)0x7f;
 	// CONFIG02
 	u32 mpllb_div5_clk_en = 1, mpllb_div_cl_en = 0,
-	    mpllb_div_multiplier = 0, mpllb_force_en = 1;
+	    mpllb_div_multiplier = 0, mpllb_force_en = 0;
 	u32 mpllb_force_ack = 0, mpllb_fracn_cfg_update_en = 1,
 	    mpllb_fracn_en = 1, mpllb_fracn_den = 1;
 	// CONFIG03
@@ -934,6 +945,10 @@ static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
 
 	/* Assert DP Alt-mode Disable ACK */
 	dpphy_reg_set_config19_dpalt_disable_ack(1);
+
+	/* CP(Charge Pump) Bias Boosting X2 */
+	if (hw_config->phy_boost && !reconfig)
+		dpphy_reg_enable_cp_current_boost();
 
 	/* Set Master PLL-B for DP as Link_BW */
 	dpphy_reg_set_mpllb(hw_config, reconfig);
