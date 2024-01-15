@@ -753,6 +753,11 @@ static void dpphy_reg_set_mpllb(struct dp_hw_config *hw_config, bool reconfig)
 		cal_log_debug(0, "configure for SSC\n");
 	}
 
+	if (hw_config->dp_emul) {
+		mpllb_force_en = 1;
+		cal_log_debug(0, "configure for DP Emulation Mode\n");
+	}
+
 	cal_log_debug(0, "link_rate(%d)\n", link_rate);
 
 	switch (link_rate) {
