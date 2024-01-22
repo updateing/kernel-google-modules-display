@@ -301,6 +301,9 @@ struct dp_hw_config {
 
 	/* DP PHY boost */
 	bool phy_boost;
+
+	/* DP Emulation Mode */
+	bool dp_emul;
 };
 
 

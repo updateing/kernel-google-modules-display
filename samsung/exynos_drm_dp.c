@@ -912,6 +912,8 @@ static int dp_link_up(struct dp_device *dp)
 		/* Reconfigure DP HW for emulation mode */
 		dp_set_hwconfig_dplink(dp);
 		dp_set_hwconfig_video(dp);
+
+		dp->hw_config.dp_emul = true;
 		dp_hw_reinit(&dp->hw_config);
 		dp_info(dp, "HW configured with Rate(%d) and Lanes(%u)\n",
 			dp->hw_config.link_rate, dp->hw_config.num_lanes);
@@ -1951,6 +1953,7 @@ static int param_dp_emulation_mode_set(const char *val, const struct kernel_para
 			memset(&dp_drvdata->hw_config, 0, sizeof(struct dp_hw_config));
 			dp_drvdata->hw_config.orient_type = PLUG_NORMAL;
 			dp_drvdata->hw_config.num_lanes = 4;
+			dp_drvdata->hw_config.dp_emul = true;
 			dp_hpd_changed(dp_drvdata, EXYNOS_HPD_PLUG);
 		} else
 			dp_hpd_changed(dp_drvdata, EXYNOS_HPD_UNPLUG);
@@ -2765,12 +2768,22 @@ static ssize_t irq_hpd_store(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_WO(irq_hpd);
 
+static ssize_t usbc_cable_disconnect_store(struct device *dev, struct device_attribute *attr,
+					   const char *buf, size_t size)
+{
+	hdcp_dplink_connect_state(DP_PHYSICAL_DISCONNECT);
+
+	return size;
+}
+static DEVICE_ATTR_WO(usbc_cable_disconnect);
+
 static struct attribute *dp_attrs[] = { &dev_attr_orientation.attr,
 					&dev_attr_pin_assignment.attr,
 					&dev_attr_hpd.attr,
 					&dev_attr_dp_hotplug_error_code.attr,
 					&dev_attr_link_status.attr,
 					&dev_attr_irq_hpd.attr,
+					&dev_attr_usbc_cable_disconnect.attr,
 					NULL };
 
 static const struct attribute_group dp_group = {
