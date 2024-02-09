@@ -179,7 +179,7 @@ static u32 audio_sync_m_n[2][4][7] = {
  */
 
 /* USBDP PHY TCA Registers */
-static void dpphytca_reg_wait_mode_change(enum lane_usage lane)
+static int dpphytca_reg_wait_mode_change(enum lane_usage lane)
 {
 	unsigned int cnt = 0;
 	unsigned int val = 0;
@@ -202,9 +202,11 @@ static void dpphytca_reg_wait_mode_change(enum lane_usage lane)
 			      TCA_REG_TCA_INTR_STS));
 
 		cal_log_err(0, "Fail to change mode from USB to DP%d\n", lane);
-	} else
-		cal_log_debug(0, "Success to change mode from USB to DP%d\n",
-			      lane);
+		return -ETIME;
+	}
+
+	cal_log_debug(0, "Success to change mode from USB to DP%d\n", lane);
+	return 0;
 }
 
 static void dpphytca_reg_set_tcpc(u32 mux_control, u32 orientation,
@@ -886,7 +888,7 @@ static enum lane_usage dp_get_and_inform_lanes(struct dp_hw_config *hw_config)
 	return num_lane;
 }
 
-static void dpphy_reg_switch_to_dp(enum lane_usage num_lane)
+static int dpphy_reg_switch_to_dp(enum lane_usage num_lane)
 {
 	u32 tcpc_mux_con = NO_CONNECTION, tcpc_orientation = NORMAL;
 	u32 tcpc_low_pwr_en = STANDARD_OPERATION, tcpc_valid = VALID_I;
@@ -908,7 +910,7 @@ static void dpphy_reg_switch_to_dp(enum lane_usage num_lane)
 	cal_log_debug(0, "Start USB to DP%d\n", num_lane);
 	dpphytca_reg_set_tcpc(tcpc_mux_con, tcpc_orientation, tcpc_low_pwr_en,
 			      tcpc_valid);
-	dpphytca_reg_wait_mode_change(num_lane);
+	return dpphytca_reg_wait_mode_change(num_lane);
 }
 
 static void dpphy_reg_set_lanes(struct dp_hw_config *hw_config, enum lane_usage num_lane)
@@ -933,8 +935,9 @@ static void dpphy_reg_set_lanes(struct dp_hw_config *hw_config, enum lane_usage 
 	cal_log_debug(0, "enable %d lanes.\n", num_lane);
 }
 
-static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
+static int dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
 {
+	int ret;
 	enum lane_usage num_lane = DP_USE_0_LANES;
 
 	//dpphy_reg_usbdrd_qch_en(1);
@@ -963,7 +966,9 @@ static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
 	num_lane = dp_get_and_inform_lanes(hw_config);
 
 	/* Switch from USB to DP */
-	dpphy_reg_switch_to_dp(num_lane);
+	ret = dpphy_reg_switch_to_dp(num_lane);
+	if (ret)
+		return ret;
 	cal_log_debug(0, "switch from USB to DP.\n");
 
 	/* Set DP TX lanes */
@@ -972,6 +977,8 @@ static void dpphy_reg_init(struct dp_hw_config *hw_config, bool reconfig)
 
 	/* De-assert DP Alt-mode Disable ACK */
 	dpphy_reg_set_config19_dpalt_disable_ack(0);
+
+	return 0;
 }
 
 /*
@@ -2355,8 +2362,10 @@ int dp_hw_read_edid(u8 block_cnt, u32 length, u8 *data)
 }
 
 /* DP Hardware Control Interfaces */
-void dp_hw_init(struct dp_hw_config *hw_config)
+int dp_hw_init(struct dp_hw_config *hw_config)
 {
+	int ret;
+
 	cal_log_debug(0, "DP Link Version = 0x%X\n", dp_reg_get_version());
 
 	/* Apply Soft Reset */
@@ -2376,11 +2385,15 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 	dwc3_exynos_phy_enable(1, 1);
 	atomic_inc(&hw_config->usbdp_phy_en_cnt);
 
-	dpphy_reg_init(hw_config, false);
+	ret = dpphy_reg_init(hw_config, false);
+	if (ret)
+		return ret;
 	cal_log_debug(0, "init USBDP Combo PHY\n");
 
 	/* Wait for PHY PLL Lock */
-	dp_reg_wait_phy_pll_lock();
+	ret = dp_reg_wait_phy_pll_lock();
+	if (ret)
+		return ret;
 	cal_log_debug(0, "locked PHY PLL\n");
 
 	/* Set system clock to TXCLK */
@@ -2412,21 +2425,29 @@ void dp_hw_init(struct dp_hw_config *hw_config)
 	/* Set Interrupts */
 	dp_hw_set_common_interrupt(1);
 	cal_log_debug(0, "set interrupts\n");
+
+	return 0;
 }
 
-void dp_hw_reinit(struct dp_hw_config *hw_config)
+int dp_hw_reinit(struct dp_hw_config *hw_config)
 {
+	int ret;
+
 	/* Set system clock to OSC */
 	dp_reg_set_txclk_osc();
 	cal_log_debug(0, "set system clk to OSC: Mux(%u)\n",
 		      dp_reg_get_gfmux_status());
 
 	/* USBDP PHY Re-initialization */
-	dpphy_reg_init(hw_config, true);
+	ret = dpphy_reg_init(hw_config, true);
+	if (ret)
+		return ret;
 	cal_log_debug(0, "reconfig USBDP Combo PHY\n");
 
 	/* Wait for PHY PLL Lock */
-	dp_reg_wait_phy_pll_lock();
+	ret = dp_reg_wait_phy_pll_lock();
+	if (ret)
+		return ret;
 	cal_log_debug(0, "locked PHY PLL\n");
 
 	/* Set system clock to TXCLK */
@@ -2448,6 +2469,8 @@ void dp_hw_reinit(struct dp_hw_config *hw_config)
 	dp_reg_set_enhanced_mode(hw_config->enhanced_mode ? 1 : 0);
 	dp_reg_set_sst1_video_func_en(1);
 	cal_log_debug(0, "set sst function\n");
+
+	return 0;
 }
 
 void dp_hw_deinit(struct dp_hw_config *hw_config)

@@ -571,8 +571,10 @@ static int dp_link_configure(struct dp_device *dp)
 	return 0;
 }
 
-static void dp_init_link_training_cr(struct dp_device *dp)
+static int dp_init_link_training_cr(struct dp_device *dp)
 {
+	int ret;
+
 	/* Disable DP Training Pattern */
 	drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_DISABLE);
@@ -580,7 +582,12 @@ static void dp_init_link_training_cr(struct dp_device *dp)
 	/* Reconfigure DP HW */
 	dp_set_hwconfig_dplink(dp);
 	dp_set_hwconfig_video(dp);
-	dp_hw_reinit(&dp->hw_config);
+	ret = dp_hw_reinit(&dp->hw_config);
+	if (ret) {
+		dp_err(dp, "dp_hw_reinit() failed\n");
+		return ret;
+	}
+
 	dp_info(dp, "HW configured with Rate(%d) and Lanes(%u)\n",
 		dp->hw_config.link_rate, dp->hw_config.num_lanes);
 
@@ -597,6 +604,8 @@ static void dp_init_link_training_cr(struct dp_device *dp)
 	/* Enable DP Training Pattern */
 	drm_dp_dpcd_writeb(&dp->dp_aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_1 | DP_LINK_SCRAMBLING_DISABLE);
+
+	return 0;
 }
 
 static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
@@ -621,7 +630,8 @@ static bool dp_do_link_training_cr(struct dp_device *dp, u32 interval_us)
 		max_reach_value[i] = 0;
 	}
 
-	dp_init_link_training_cr(dp);
+	if (dp_init_link_training_cr(dp))
+		goto err;
 
 	// Voltage Swing
 	do {
@@ -914,9 +924,12 @@ static int dp_link_up(struct dp_device *dp)
 		dp_set_hwconfig_video(dp);
 
 		dp->hw_config.dp_emul = true;
-		dp_hw_reinit(&dp->hw_config);
-		dp_info(dp, "HW configured with Rate(%d) and Lanes(%u)\n",
-			dp->hw_config.link_rate, dp->hw_config.num_lanes);
+		if (!dp_hw_reinit(&dp->hw_config)) {
+			dp_info(dp, "HW configured with Rate(%d) and Lanes(%u)\n",
+				dp->hw_config.link_rate, dp->hw_config.num_lanes);
+		} else {
+			dp_err(dp, "dp_hw_reinit() failed\n");
+		}
 
 		mutex_unlock(&dp->training_lock);
 		return 0;
@@ -1724,7 +1737,11 @@ static void dp_work_hpd(struct work_struct *work)
 
 		/* PHY power on */
 		usleep_range(10000, 10030);
-		dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
+		ret = dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
+		if (ret) {
+			dp_err(dp, "dp_hw_init() failed\n");
+			goto HPD_FAIL;
+		}
 		usleep_range(10000, 11000);
 
 		ret = dp_link_up(dp);
