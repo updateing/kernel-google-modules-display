@@ -1373,6 +1373,39 @@ static const u8 dp_fake_edid[EDID_LENGTH] = {
 	0x0, 0x97,
 };
 
+static enum drm_mode_status dp_conn_mode_valid(struct drm_connector *connector,
+						struct drm_display_mode *mode);
+
+static void dp_select_bist_mode(struct dp_device *dp)
+{
+	struct drm_connector *connector = &dp->connector;
+	struct drm_display_mode *mode;
+
+	drm_mode_sort(&connector->probed_modes);
+
+	/* pick the largest @ 60 Hz mode that works */
+	list_for_each_entry(mode, &connector->probed_modes, head) {
+		if (dp_conn_mode_valid(connector, mode) == MODE_OK &&
+		    drm_mode_vrefresh(mode) == 60) {
+			goto done;
+		}
+	}
+
+	/* fallback: pick the largest mode that works */
+	list_for_each_entry(mode, &connector->probed_modes, head) {
+		if (dp_conn_mode_valid(connector, mode) == MODE_OK) {
+			goto done;
+		}
+	}
+
+	/* last resort: failsafe mode */
+	mode = (struct drm_display_mode *)failsafe_mode;
+
+done:
+	dp_info(dp, "Mode(" DRM_MODE_FMT ") is requested\n", DRM_MODE_ARG(mode));
+	drm_mode_copy(&dp->cur_mode, mode);
+}
+
 static void dp_on_by_hpd_plug(struct dp_device *dp)
 {
 	struct drm_connector *connector = &dp->connector;
@@ -1430,7 +1463,7 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 		}
 	} else {
 		/* BIST mode */
-		drm_mode_copy(&dp->cur_mode, fs_mode);
+		dp_select_bist_mode(dp);
 		dp_enable(&dp->encoder);
 		if (dp->bist_mode == DP_BIST_ON_HDCP)
 			hdcp_dplink_connect_state(DP_CONNECT);
