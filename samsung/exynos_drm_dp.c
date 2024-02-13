@@ -1768,6 +1768,8 @@ static void dp_work_hpd(struct work_struct *work)
 		dp_enable_dposc(dp);
 		pm_stay_awake(dp->dev);
 
+		dp->dp_hotplug_error_code = 0;
+
 		/* PHY power on */
 		usleep_range(10000, 10030);
 		ret = dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
