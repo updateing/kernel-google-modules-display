@@ -47,6 +47,7 @@ struct histogram_chan_state {
 	histogram_chan_callback cb;
 	struct exynos_drm_pending_histogram_event *event;
 	struct histogram_channel_config *config;
+	uint32_t user_handle;
 };
 
 struct exynos_dqe_state {
@@ -175,12 +176,14 @@ struct exynos_dqe {
 	int lhbm_gray_level;
 };
 
+struct drm_crtc_state;
+
 int histogram_request_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 int histogram_cancel_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 int histogram_channel_request_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 int histogram_channel_cancel_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 void handle_histogram_event(struct exynos_dqe *dqe);
-void histogram_flip_done(struct exynos_dqe *dqe);
+void histogram_flip_done(struct exynos_dqe *dqe, const struct drm_crtc_state *new_crtc_state);
 void exynos_dqe_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state,
 			u32 width, u32 height);
 void exynos_dqe_reset(struct exynos_dqe *dqe);

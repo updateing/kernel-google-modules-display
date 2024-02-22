@@ -1562,7 +1562,7 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 	}
 
 	if (fs_success && decon->dqe)
-		histogram_flip_done(decon->dqe);
+		histogram_flip_done(decon->dqe, new_crtc_state);
 }
 
 static const struct exynos_drm_crtc_ops decon_crtc_ops = {

@@ -396,16 +396,19 @@ void handle_histogram_event(struct exynos_dqe *dqe)
 	spin_unlock(&dqe->state.histogram_slock);
 }
 
-void histogram_flip_done(struct exynos_dqe *dqe)
+void histogram_flip_done(struct exynos_dqe *dqe, const struct drm_crtc_state *new_crtc_state)
 {
 	unsigned long flags;
 	enum exynos_histogram_id hist_id;
+	const struct exynos_drm_crtc_state *new_exynos_crtc_state =
+		to_exynos_crtc_state(new_crtc_state);
 
 	DPU_ATRACE_BEGIN(__func__);
 	spin_lock_irqsave(&dqe->state.histogram_slock, flags);
 
 	for (hist_id = 0; hist_id < HISTOGRAM_MAX; hist_id++) {
 		struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[hist_id];
+		struct drm_property_blob *blob = new_exynos_crtc_state->histogram[hist_id];
 
 		/*
 		 * For run_state is HSTATE_HIBERNATION and state is HISTOGRAM_OFF, we should keep it
@@ -421,6 +424,12 @@ void histogram_flip_done(struct exynos_dqe *dqe)
 			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_PENDING_FRAMEDONE);
 		else if (hist_chan->run_state != HSTATE_HIBERNATION)
 			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_DISABLED);
+
+		/*
+		 * Update the user_handle (config blob id) when the histogram config is really
+		 * applied to the DPU HW (shadow update completes and framestart occurs).
+		 */
+		hist_chan->user_handle = blob ? blob->base.id : 0;
 	}
 
 	spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
@@ -898,8 +907,10 @@ void exynos_dqe_reset(struct exynos_dqe *dqe)
 
 		hist_chan->config = NULL;
 		hist_chan->state = HISTOGRAM_OFF;
-		if (hist_chan->run_state != HSTATE_HIBERNATION)
+		if (hist_chan->run_state != HSTATE_HIBERNATION) {
 			histogram_chan_set_run_state_locked(dqe, i, HSTATE_DISABLED);
+			hist_chan->user_handle = 0;
+		}
 	}
 	spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
 }
