@@ -396,6 +396,37 @@ void handle_histogram_event(struct exynos_dqe *dqe)
 	spin_unlock(&dqe->state.histogram_slock);
 }
 
+void histogram_flip_done(struct exynos_dqe *dqe)
+{
+	unsigned long flags;
+	enum exynos_histogram_id hist_id;
+
+	DPU_ATRACE_BEGIN(__func__);
+	spin_lock_irqsave(&dqe->state.histogram_slock, flags);
+
+	for (hist_id = 0; hist_id < HISTOGRAM_MAX; hist_id++) {
+		struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[hist_id];
+
+		/*
+		 * For run_state is HSTATE_HIBERNATION and state is HISTOGRAM_OFF, we should keep it
+		 * as HSTATE_HIBERNATION.
+		 * 1. We already cache the histogram bins in memory (hist_chan->bins) and
+		 *    hist_chan->state is set to OFF before entering hibernation.
+		 * 2. For the first commit to exit the hibernation, the skip_update is true to avoid
+		 *    most DPU updates including exynos_histogram_update. So the histogram bins
+		 *    cache should still serve this case until we have next non-skip frame update
+		 *    that will restore the histogram config.
+		 */
+		if (hist_chan->state != HISTOGRAM_OFF)
+			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_PENDING_FRAMEDONE);
+		else if (hist_chan->run_state != HSTATE_HIBERNATION)
+			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_DISABLED);
+	}
+
+	spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
+	DPU_ATRACE_END(__func__);
+}
+
 static void exynos_degamma_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 {
 	struct degamma_debug_override *degamma = &dqe->degamma;
@@ -614,27 +645,26 @@ static void exynos_histogram_channel_update(struct exynos_dqe *dqe, struct exyno
 {
 	enum histogram_state hist_state;
 	unsigned long flags;
+	struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[hist_id];
+	bool config_changed = false;
 
 	if (hist_id >= HISTOGRAM_MAX)
 		return;
 
+	spin_lock_irqsave(&dqe->state.histogram_slock, flags);
+
 	/*
 	 * DRM framework histogram channel configuration
 	 */
-	if (dqe->state.hist_chan[hist_id].config != state->hist_chan[hist_id].config) {
+	if (hist_chan->config != state->hist_chan[hist_id].config) {
 		u32 weights, roi;
 		struct histogram_channel_config *config = state->hist_chan[hist_id].config;
-		struct histogram_chan_state *hist_chan = &dqe->state.hist_chan[hist_id];
 
-		spin_lock_irqsave(&dqe->state.histogram_slock, flags);
-
+		config_changed = true;
 		hist_chan->config = config;
 		if (!config) {
 			histogram_chan_set_state(dqe, hist_id, HISTOGRAM_OFF, NULL);
-			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_DISABLED);
-
-			spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
-			return;
+			goto update_run_state;
 		}
 
 		histogram_chan_configure(dqe, hist_id, config);
@@ -659,14 +689,20 @@ static void exynos_histogram_channel_update(struct exynos_dqe *dqe, struct exyno
 			hist_state = HISTOGRAM_OFF;
 		}
 		histogram_chan_set_state(dqe, hist_id, hist_state, NULL);
-
-		if (hist_state == HISTOGRAM_OFF)
-			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_DISABLED);
-		else
-			histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_PENDING_FRAMEDONE);
-
-		spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
 	}
+
+update_run_state:
+
+	/*
+	 * Since the framestart will happen very soon after decon_atomic_flush, we should prevent
+	 * any risk to capture the in-between frames histogram bins. Set run_state to
+	 * HSTATE_PENDING_FRAMEDONE for almost every case except no config changed and already
+	 * channel disabled. histogram_flip_done will update the run_state more accurately.
+	 */
+	if (config_changed || hist_chan->state != HISTOGRAM_OFF)
+		histogram_chan_set_run_state_locked(dqe, hist_id, HSTATE_PENDING_FRAMEDONE);
+
+	spin_unlock_irqrestore(&dqe->state.histogram_slock, flags);
 }
 
 static void exynos_histogram_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)

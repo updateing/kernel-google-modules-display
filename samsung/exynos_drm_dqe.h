@@ -180,6 +180,7 @@ int histogram_cancel_ioctl(struct drm_device *drm_dev, void *data, struct drm_fi
 int histogram_channel_request_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 int histogram_channel_cancel_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 void handle_histogram_event(struct exynos_dqe *dqe);
+void histogram_flip_done(struct exynos_dqe *dqe);
 void exynos_dqe_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state,
 			u32 width, u32 height);
 void exynos_dqe_reset(struct exynos_dqe *dqe);
