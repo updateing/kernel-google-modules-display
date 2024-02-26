@@ -1743,7 +1743,7 @@ static int dp_downstream_port_event_handler(struct dp_device *dp, int new_sink_c
 }
 
 /* Works */
-static void dp_work_hpd(struct work_struct *work)
+static void dp_work_hpd(enum hotplug_state state)
 {
 	struct dp_device *dp = get_dp_drvdata();
 	struct drm_connector *connector = &dp->connector;
@@ -1754,7 +1754,7 @@ static void dp_work_hpd(struct work_struct *work)
 
 	mutex_lock(&dp->hpd_lock);
 
-	if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
+	if (state == EXYNOS_HPD_PLUG) {
 		if (mutex_trylock(&private->dp_tui_lock) == 0) {
 			/* TUI is active, bail out */
 			dp_info(dp, "unable to handle HPD_PLUG, TUI is active\n");
@@ -1793,7 +1793,7 @@ static void dp_work_hpd(struct work_struct *work)
 			dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
 			dp_on_by_hpd_plug(dp);
 		}
-	} else if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+	} else if (state == EXYNOS_HPD_UNPLUG) {
 		if ((!pm_runtime_get_if_in_use(dp->dev)) ||
 		    (dp->state == DP_STATE_INIT)) {
 			dp_info(dp, "%s: DP is not ON\n", __func__);
@@ -1855,6 +1855,16 @@ HPD_FAIL:
 
 	mutex_unlock(&private->dp_tui_lock);
 	mutex_unlock(&dp->hpd_lock);
+}
+
+static void dp_work_hpd_plug(struct work_struct *work)
+{
+	dp_work_hpd(EXYNOS_HPD_PLUG);
+}
+
+static void dp_work_hpd_unplug(struct work_struct *work)
+{
+	dp_work_hpd(EXYNOS_HPD_UNPLUG);
 }
 
 static u8 sysfs_triggered_irq = 0;
@@ -1973,9 +1983,14 @@ static void dp_hpd_changed(struct dp_device *dp, enum hotplug_state state)
 		return;
 	}
 
-	if ((state == EXYNOS_HPD_PLUG) || (state == EXYNOS_HPD_UNPLUG)) {
+	if (state == EXYNOS_HPD_PLUG) {
 		dp_set_hpd_state(dp, state);
-		queue_work(dp->dp_wq, &dp->hpd_work);
+		if (!queue_work(dp->dp_wq, &dp->hpd_plug_work))
+			dp_warn(dp, "DP HPD PLUG work was already queued");
+	} else if (state == EXYNOS_HPD_UNPLUG) {
+		dp_set_hpd_state(dp, state);
+		if (!queue_work(dp->dp_wq, &dp->hpd_unplug_work))
+			dp_warn(dp, "DP HPD UNPLUG work was already queued");
 	} else
 		dp_err(dp, "DP HPD changed to abnormal state(%d)\n", state);
 }
@@ -2049,7 +2064,8 @@ static int usb_typec_dp_notification_locked(struct dp_device *dp, enum hotplug_s
 	} else if (hpd == EXYNOS_HPD_IRQ) {
 		if (dp_get_hpd_state(dp) == EXYNOS_HPD_PLUG) {
 			dp_info(dp, "%s: Service IRQ from sink\n", __func__);
-			queue_work(dp->dp_wq, &dp->hpd_irq_work);
+			if (!queue_work(dp->dp_wq, &dp->hpd_irq_work))
+				dp_warn(dp, "DP HPD IRQ work was already queued");
 		}
 	} else {
 		dp_info(dp, "%s: USB Type-C is HPD UNPLUG status, or not in display ALT mode\n",
@@ -2968,7 +2984,8 @@ static int dp_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	INIT_WORK(&dp->hpd_work, dp_work_hpd);
+	INIT_WORK(&dp->hpd_plug_work, dp_work_hpd_plug);
+	INIT_WORK(&dp->hpd_unplug_work, dp_work_hpd_unplug);
 	INIT_WORK(&dp->hpd_irq_work, dp_work_hpd_irq);
 
 	pm_runtime_enable(dev);
