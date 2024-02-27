@@ -1762,12 +1762,13 @@ static void dp_work_hpd(enum hotplug_state state)
 			return;
 		}
 
+		/* block suspend and increment power usage count */
+		pm_stay_awake(dp->dev);
 		pm_runtime_get_sync(dp->dev);
 		dp_debug(dp, "pm_rtm_get_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
-		dp_enable_dposc(dp);
-		pm_stay_awake(dp->dev);
 
+		dp_enable_dposc(dp);
 		dp->dp_hotplug_error_code = 0;
 
 		/* PHY power on */
@@ -1794,9 +1795,15 @@ static void dp_work_hpd(enum hotplug_state state)
 			dp_on_by_hpd_plug(dp);
 		}
 	} else if (state == EXYNOS_HPD_UNPLUG) {
-		if ((!pm_runtime_get_if_in_use(dp->dev)) ||
-		    (dp->state == DP_STATE_INIT)) {
-			dp_info(dp, "%s: DP is not ON\n", __func__);
+		if (!pm_runtime_get_if_in_use(dp->dev)) {
+			dp_info(dp, "%s: DP is already powered off\n", __func__);
+			mutex_unlock(&dp->hpd_lock);
+			return;
+		}
+
+		if (dp->state == DP_STATE_INIT) {
+			dp_info(dp, "%s: DP is already in INIT state\n", __func__);
+			pm_runtime_put(dp->dev);
 			mutex_unlock(&dp->hpd_lock);
 			return;
 		}
@@ -1810,15 +1817,15 @@ static void dp_work_hpd(enum hotplug_state state)
 		dp_hw_deinit(&dp->hw_config);
 		dp_disable_dposc(dp);
 
+		dp->state = DP_STATE_INIT;
+		dp_info(dp, "%s: DP State changed to INIT\n", __func__);
+
+		/* decrement power usage count and unblock suspend */
 		pm_runtime_put(dp->dev);
-		/* put runtime power obtained during HPD_PLUG */
-		pm_runtime_put_sync(dp->dev);
+		pm_runtime_put_sync(dp->dev);  /* obtained during HPD_PLUG */
 		dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
 			 atomic_read(&dp->dev->power.usage_count));
 		pm_relax(dp->dev);
-
-		dp->state = DP_STATE_INIT;
-		dp_info(dp, "%s: DP State changed to INIT\n", __func__);
 
 		mutex_unlock(&private->dp_tui_lock);
 	}
@@ -1834,12 +1841,7 @@ HPD_FAIL:
 	hdcp_dplink_connect_state(DP_DISCONNECT);
 	dp_hw_deinit(&dp->hw_config);
 	dp_disable_dposc(dp);
-	pm_relax(dp->dev);
-
 	dp_init_info(dp);
-	pm_runtime_put_sync(dp->dev);
-	dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
-		 atomic_read(&dp->dev->power.usage_count));
 
 	/* in error case, add delay to avoid very short interval reconnection */
 	msleep(300);
@@ -1852,6 +1854,12 @@ HPD_FAIL:
 	dp_info(dp, "HPD_FAIL, call drm_kms_helper_hotplug_event(dp_hotplug_error_code=%d)\n",
 		dp->dp_hotplug_error_code);
 	drm_kms_helper_hotplug_event(dp->connector.dev);
+
+	/* decrement power usage count and unblock suspend */
+	pm_runtime_put_sync(dp->dev);
+	dp_debug(dp, "pm_rtm_put_sync usage_cnt(%d)\n",
+		 atomic_read(&dp->dev->power.usage_count));
+	pm_relax(dp->dev);
 
 	mutex_unlock(&private->dp_tui_lock);
 	mutex_unlock(&dp->hpd_lock);
@@ -1876,12 +1884,13 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	u8 irq = 0, irq2 = 0, irq3 = 0;
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
+	mutex_lock(&dp->hpd_lock);
+
 	if (!pm_runtime_get_if_in_use(dp->dev)) {
 		dp_debug(dp, "[HPD IRQ] IRQ work skipped as power is off\n");
+		mutex_unlock(&dp->hpd_lock);
 		return;
 	}
-
-	mutex_lock(&dp->hpd_lock);
 
 	if (sysfs_triggered_irq != 0) {
 		irq = sysfs_triggered_irq;
@@ -1971,8 +1980,8 @@ process_irq:
 		dp_info(dp, "[HPD IRQ] unknown IRQ (0x%X)\n", irq);
 
 release_irq_resource:
-	mutex_unlock(&dp->hpd_lock);
 	pm_runtime_put(dp->dev);
+	mutex_unlock(&dp->hpd_lock);
 }
 
 /* Type-C Handshaking Functions */
