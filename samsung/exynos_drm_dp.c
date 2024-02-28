@@ -1801,13 +1801,6 @@ static void dp_work_hpd(enum hotplug_state state)
 			return;
 		}
 
-		if (dp->state == DP_STATE_INIT) {
-			dp_info(dp, "%s: DP is already in INIT state\n", __func__);
-			pm_runtime_put(dp->dev);
-			mutex_unlock(&dp->hpd_lock);
-			return;
-		}
-
 		if (dp->sink_count > 0) {
 			dp_off_by_hpd_plug(dp);
 			dp_link_down(dp);
