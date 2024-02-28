@@ -3043,5 +3043,6 @@ struct platform_driver dp_driver
 		      } };
 
 MODULE_AUTHOR("YongWook Shin <yongwook.shin@samsung.com>");
-MODULE_DESCRIPTION("Samusung DisplayPort driver");
+MODULE_AUTHOR("Petri Gynther <pgynther@google.com>");
+MODULE_DESCRIPTION("Samsung SoC DisplayPort driver");
 MODULE_LICENSE("GPL");
