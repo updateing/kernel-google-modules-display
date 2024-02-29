@@ -963,6 +963,25 @@ static int dp_link_up(struct dp_device *dp)
 		dp->sink.revision, dp->sink.link_rate / 100, dp->sink.num_lanes,
 		dp->sink.enhanced_frame, dp->sink.ssc, dp->sink.fec, dp->sink.dsc);
 
+	/* Sanity-check the sink's max link rate */
+	if (dp->sink.link_rate != drm_dp_bw_code_to_link_rate(DP_LINK_BW_1_62) &&
+	    dp->sink.link_rate != drm_dp_bw_code_to_link_rate(DP_LINK_BW_2_7) &&
+	    dp->sink.link_rate != drm_dp_bw_code_to_link_rate(DP_LINK_BW_5_4) &&
+	    dp->sink.link_rate != drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1)) {
+		dp_err(dp, "DP Sink: invalid max link rate\n");
+		mutex_unlock(&dp->training_lock);
+		dp->stats.dpcd_read_failures++;
+		return -EINVAL;
+	}
+
+	/* Sanity-check the sink's max lane count */
+	if (dp->sink.num_lanes != 1 && dp->sink.num_lanes != 2 && dp->sink.num_lanes != 4) {
+		dp_err(dp, "DP Sink: invalid max lane count\n");
+		mutex_unlock(&dp->training_lock);
+		dp->stats.dpcd_read_failures++;
+		return -EINVAL;
+	}
+
 	/* Power DP Sink device Up */
 	dp_sink_power_up(dp, true);
 
@@ -989,22 +1008,31 @@ static int dp_link_up(struct dp_device *dp)
 
 		dp_info(dp, "DP Branch Device: DFP count = %d, sink count = %d\n",
 			dp->dfp_count, dp->sink_count);
-	} else {
-		dp->dfp_count = 0;
-		dp_info(dp, "DP Sink: sink count = %d\n", dp->sink_count);
-	}
 
-	if (dp->sink_count == 0) {
-		if (dp->dfp_count > 0) {
-			dp_info(dp, "DP Link: training defer: DP Branch Device, sink count = 0\n");
-			mutex_unlock(&dp->training_lock);
-			return 0;
-		} else {
-			dp_err(dp, "DP Sink: invalid sink count = 0\n");
+		/* Sanity-check the sink count */
+		if (dp->sink_count > dp->dfp_count) {
+			dp_err(dp, "DP Branch Device: invalid sink count\n");
 			mutex_unlock(&dp->training_lock);
 			dp->stats.sink_count_invalid_failures++;
 			return -EINVAL;
 		}
+	} else {
+		dp->dfp_count = 0;
+		dp_info(dp, "DP Sink: sink count = %d\n", dp->sink_count);
+
+		/* Sanity-check the sink count */
+		if (dp->sink_count != 1) {
+			dp_err(dp, "DP Sink: invalid sink count\n");
+			mutex_unlock(&dp->training_lock);
+			dp->stats.sink_count_invalid_failures++;
+			return -EINVAL;
+		}
+	}
+
+	if (dp->sink_count == 0) {
+		dp_info(dp, "DP Link: training defer: DP Branch Device, sink count = 0\n");
+		mutex_unlock(&dp->training_lock);
+		return 0;
 	}
 
 	/* Pick link parameters */
@@ -1940,6 +1968,12 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	}
 
 	if (dp->dfp_count > 0) {
+		/* Sanity-check the sink count */
+		if (sink_count > dp->dfp_count) {
+			dp_err(dp, "invalid sink count, adjusting to 0\n");
+			sink_count = 0;
+		}
+
 		if ((link_status[2] & DP_DOWNSTREAM_PORT_STATUS_CHANGED) ||
 		    (dp->sink_count != sink_count)) {
 			dp_info(dp, "[HPD IRQ] DP downstream port status change\n");
