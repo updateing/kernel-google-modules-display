@@ -1783,6 +1783,8 @@ static void dp_work_hpd(enum hotplug_state state)
 	mutex_lock(&dp->hpd_lock);
 
 	if (state == EXYNOS_HPD_PLUG) {
+		dp_info(dp, "[HPD_PLUG start]\n");
+
 		if (mutex_trylock(&private->dp_tui_lock) == 0) {
 			/* TUI is active, bail out */
 			dp_info(dp, "unable to handle HPD_PLUG, TUI is active\n");
@@ -1804,7 +1806,7 @@ static void dp_work_hpd(enum hotplug_state state)
 		ret = dp_hw_init(&dp->hw_config); /* for AUX ch read/write. */
 		if (ret) {
 			dp_err(dp, "dp_hw_init() failed\n");
-			goto HPD_FAIL;
+			goto HPD_PLUG_FAIL;
 		}
 		usleep_range(10000, 11000);
 
@@ -1815,14 +1817,19 @@ static void dp_work_hpd(enum hotplug_state state)
 			else
 				link_status = LINK_TRAINING_FAILURE_SINK;
 			dp_err(dp, "failed to DP Link Up\n");
-			goto HPD_FAIL;
+			goto HPD_PLUG_FAIL;
 		}
 
 		if (dp->sink_count > 0) {
 			dp_update_link_status(dp, LINK_TRAINING_SUCCESS);
 			dp_on_by_hpd_plug(dp);
 		}
+
+		dp_info(dp, "[HPD_PLUG done]\n");
+
 	} else if (state == EXYNOS_HPD_UNPLUG) {
+		dp_info(dp, "[HPD_UNPLUG start]\n");
+
 		if (!pm_runtime_get_if_in_use(dp->dev)) {
 			dp_info(dp, "%s: DP is already powered off\n", __func__);
 			mutex_unlock(&dp->hpd_lock);
@@ -1849,16 +1856,17 @@ static void dp_work_hpd(enum hotplug_state state)
 		pm_relax(dp->dev);
 
 		mutex_unlock(&private->dp_tui_lock);
+
+		dp_info(dp, "[HPD_UNPLUG done]\n");
 	}
 
 	mutex_unlock(&dp->hpd_lock);
 
 	return;
 
-HPD_FAIL:
-	dp_err(dp, "HPD FAIL Check CCIC or USB!!\n");
+HPD_PLUG_FAIL:
+	dp_err(dp, "[HPD_PLUG fail] Check CCIC or USB!!\n");
 	dp_set_hpd_state(dp, EXYNOS_HPD_UNPLUG);
-	dp_info(dp, "DP HPD changed to EXYNOS_HPD_UNPLUG\n");
 	hdcp_dplink_connect_state(DP_DISCONNECT);
 	dp_hw_deinit(&dp->hw_config);
 	dp_disable_dposc(dp);
@@ -1872,7 +1880,7 @@ HPD_FAIL:
 
 	// TODO: We need to define more error codes, but for now use just 1 for generic error code
 	dp->dp_hotplug_error_code = 1;
-	dp_info(dp, "HPD_FAIL, call drm_kms_helper_hotplug_event(dp_hotplug_error_code=%d)\n",
+	dp_info(dp, "[HPD_PLUG fail] call drm_kms_helper_hotplug_event(dp_hotplug_error_code=%d)\n",
 		dp->dp_hotplug_error_code);
 	drm_kms_helper_hotplug_event(dp->connector.dev);
 
@@ -1883,6 +1891,7 @@ HPD_FAIL:
 	pm_relax(dp->dev);
 
 	mutex_unlock(&private->dp_tui_lock);
+	dp_info(dp, "[HPD_PLUG done]\n");
 	mutex_unlock(&dp->hpd_lock);
 }
 
@@ -1906,6 +1915,7 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
 	mutex_lock(&dp->hpd_lock);
+	dp_info(dp, "[HPD_IRQ start]\n");
 
 	if (!pm_runtime_get_if_in_use(dp->dev)) {
 		dp_debug(dp, "[HPD IRQ] IRQ work skipped as power is off\n");
@@ -1970,7 +1980,7 @@ static void dp_work_hpd_irq(struct work_struct *work)
 	if (dp->dfp_count > 0) {
 		/* Sanity-check the sink count */
 		if (sink_count > dp->dfp_count) {
-			dp_err(dp, "invalid sink count, adjusting to 0\n");
+			dp_err(dp, "[HPD IRQ] invalid sink count, adjusting to 0\n");
 			sink_count = 0;
 		}
 
@@ -2008,6 +2018,7 @@ process_irq:
 
 release_irq_resource:
 	pm_runtime_put(dp->dev);
+	dp_info(dp, "[HPD_IRQ done]\n");
 	mutex_unlock(&dp->hpd_lock);
 }
 
