@@ -160,28 +160,25 @@ int histogram_cancel_ioctl(struct drm_device *dev, void *data, struct drm_file *
 	return 0;
 }
 
-int histogram_channel_request_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+static int histogram_channel_ioctl_process_arg(struct drm_device *dev, void *data,
+					       struct drm_file *file,
+					       enum exynos_histogram_id *hist_id,
+					       struct decon_device **decon, struct exynos_dqe **dqe)
 {
 	struct drm_mode_object *obj;
 	struct exynos_drm_crtc *exynos_crtc;
-	struct decon_device *decon;
-	struct exynos_dqe *dqe;
-	unsigned long flags;
-	struct exynos_drm_pending_histogram_event *e;
-	enum exynos_histogram_id hist_id;
-	struct histogram_chan_state *hist_chan;
 	struct exynos_drm_histogram_channel_request *request = data;
 	uint32_t crtc_id;
 
 	if (!data) {
-		pr_debug("invalid histogram request\n");
+		pr_err("invalid histogram request, data is NULL\n");
 		return -EINVAL;
 	}
 
 	crtc_id = request->crtc_id;
-	hist_id = request->hist_id;
-	if (hist_id >= HISTOGRAM_MAX) {
-		pr_err("invalid histogram channel id(%d)\n", hist_id);
+	*hist_id = request->hist_id;
+	if (*hist_id >= HISTOGRAM_MAX) {
+		pr_err("invalid histogram channel id(%d)\n", *hist_id);
 		return -EINVAL;
 	}
 
@@ -194,11 +191,31 @@ int histogram_channel_request_ioctl(struct drm_device *dev, void *data, struct d
 	exynos_crtc = to_exynos_crtc(obj_to_crtc(obj));
 	drm_mode_object_put(obj);
 
-	decon = exynos_crtc->ctx;
-	dqe = decon->dqe;
-	if (!dqe) {
-		pr_err("failed to get dqe from decon%u\n", decon->id);
+	*decon = exynos_crtc->ctx;
+	*dqe = (*decon)->dqe;
+	if (!*dqe) {
+		pr_err("failed to get dqe from decon%u\n", (*decon)->id);
 		return -ENODEV;
+	}
+
+	return 0;
+}
+
+int histogram_channel_request_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
+{
+	struct decon_device *decon;
+	struct exynos_dqe *dqe;
+	unsigned long flags;
+	struct exynos_drm_pending_histogram_event *e;
+	enum exynos_histogram_id hist_id;
+	struct histogram_chan_state *hist_chan;
+	int ret;
+
+	/* validate the histogram ioctl argument */
+	ret = histogram_channel_ioctl_process_arg(dev, data, file, &hist_id, &decon, &dqe);
+	if (ret) {
+		pr_err("histogram_channel_ioctl_process_arg failed, ret(%d)\n", ret);
+		return ret;
 	}
 
 	e = create_histogram_event(dev, file);
@@ -250,42 +267,18 @@ int histogram_channel_request_ioctl(struct drm_device *dev, void *data, struct d
 
 int histogram_channel_cancel_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 {
-	struct drm_mode_object *obj;
-	struct exynos_drm_crtc *exynos_crtc;
 	struct decon_device *decon;
 	struct exynos_dqe *dqe;
 	unsigned long flags;
-	struct exynos_drm_histogram_channel_request *request = data;
-	uint32_t crtc_id;
-	uint32_t hist_id;
+	enum exynos_histogram_id hist_id;
 	struct histogram_chan_state *hist_chan;
+	int ret;
 
-	if (!data) {
-		pr_debug("invalid histogram request\n");
-		return -EINVAL;
-	}
-
-	crtc_id = request->crtc_id;
-	hist_id = request->hist_id;
-	if (hist_id >= HISTOGRAM_MAX) {
-		pr_err("invalid histogram channel id(%d)\n", hist_id);
-		return -EINVAL;
-	}
-
-	obj = drm_mode_object_find(dev, file, crtc_id, DRM_MODE_OBJECT_CRTC);
-	if (!obj) {
-		pr_err("failed to find crtc object\n");
-		return -ENOENT;
-	}
-
-	exynos_crtc = to_exynos_crtc(obj_to_crtc(obj));
-	drm_mode_object_put(obj);
-
-	decon = exynos_crtc->ctx;
-	dqe = decon->dqe;
-	if (!dqe) {
-		pr_err("failed to get dqe from decon%u\n", decon->id);
-		return -ENODEV;
+	/* validate the histogram ioctl argument */
+	ret = histogram_channel_ioctl_process_arg(dev, data, file, &hist_id, &decon, &dqe);
+	if (ret) {
+		pr_err("histogram_channel_ioctl_process_arg failed, ret(%d)\n", ret);
+		return ret;
 	}
 
 	spin_lock_irqsave(&dqe->state.histogram_slock, flags);
