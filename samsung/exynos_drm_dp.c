@@ -955,6 +955,20 @@ static int dp_link_up(struct dp_device *dp)
 		}
 	}
 
+	/*
+	 * Sanity-check DP_DPCD_REV and DP_MAX_LINK_RATE values.
+	 *
+	 * Per DP CTS test 4.2.2.2, on future sinks, these values can be
+	 * higher than 0x14 (DPCD r1.4) and 0x1E (HBR3).
+	 *
+	 * If connected to such sink, adjust the max link rate to HBR3.
+	 */
+	if (dpcd[DP_DPCD_REV] > DP_DPCD_REV_14 && dpcd[DP_MAX_LINK_RATE] > DP_LINK_BW_8_1) {
+		dp_info(dp, "DP Sink: DPCD_%X MAX_LINK_RATE 0x%X, adjust max to HBR3\n",
+			dpcd[DP_DPCD_REV], dpcd[DP_MAX_LINK_RATE]);
+		dpcd[DP_MAX_LINK_RATE] = DP_LINK_BW_8_1;
+	}
+
 	/* Fill Sink Capabilities */
 	dp_fill_sink_caps(dp, dpcd);
 
