@@ -810,6 +810,11 @@ static int dp_do_full_link_training(struct dp_device *dp, u32 interval_us)
 	bool training_done = false;
 
 	do {
+		if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+			dp_info(dp, "DP Link: detected pending HPD UNPLUG\n");
+			goto err;
+		}
+
 		// Link Training: CR (Clock Revovery)
 		if (!dp_do_link_training_cr(dp, interval_us)) {
 			if (drm_dp_link_rate_to_bw_code(dp->link.link_rate) !=
@@ -1490,6 +1495,11 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 
 	dp->state = DP_STATE_ON;
 	dp_info(dp, "%s: DP State changed to ON\n", __func__);
+
+	if (dp_get_hpd_state(dp) == EXYNOS_HPD_UNPLUG) {
+		dp_info(dp, "%s: detected pending HPD UNPLUG\n", __func__);
+		return;
+	}
 
 	if (dp->bist_mode == DP_BIST_OFF) {
 		/*
