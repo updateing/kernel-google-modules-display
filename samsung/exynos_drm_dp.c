@@ -1464,6 +1464,21 @@ done:
 	drm_mode_copy(&dp->cur_mode, mode);
 }
 
+static int dp_wait_state_change(struct dp_device *dp, int max_wait_time, enum dp_state state)
+{
+	int wait_cnt = max_wait_time;
+
+	do {
+		wait_cnt--;
+		usleep_range(1000, 1030);
+	} while ((state != dp->state) && (wait_cnt > 0));
+
+	dp_info(dp, "dp_wait_state_change: time = %d ms, state = %d\n",
+		max_wait_time - wait_cnt, state);
+
+	return (wait_cnt > 0) ? wait_cnt : -ETIME;
+}
+
 static void dp_on_by_hpd_plug(struct dp_device *dp)
 {
 	struct drm_connector *connector = &dp->connector;
@@ -1471,6 +1486,7 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 	struct edid *edid;
 	struct cea_sad *sads;
 	struct drm_display_mode *fs_mode;
+	int timeout;
 
 	edid = drm_do_get_edid(connector, dp_get_edid_block, dp);
 	if (!edid) {
@@ -1523,6 +1539,12 @@ static void dp_on_by_hpd_plug(struct dp_device *dp)
 			dp_info(dp,
 				"call drm_kms_helper_hotplug_event (connected)\n");
 			drm_kms_helper_hotplug_event(dev);
+
+			/* Wait for DRM/KMS to call dp_enable() */
+			timeout = dp_wait_state_change(dp, 1000, DP_STATE_RUN);
+			if (timeout == -ETIME) {
+				dp_warn(dp, "dp_wait_state_change: timeout for enable\n");
+			}
 		}
 	} else {
 		/* BIST mode */
@@ -1557,34 +1579,11 @@ static int dp_wait_audio_state_change(struct dp_device *dp, int max_wait_time,
 
 }
 
-static int dp_wait_state_change(struct dp_device *dp, int max_wait_time,
-				enum dp_state state)
-{
-	int ret = 0;
-	int wait_cnt = max_wait_time;
-
-	do {
-		wait_cnt--;
-		usleep_range(1000, 1030);
-	} while ((state != dp->state) && (wait_cnt > 0));
-
-	dp_info(dp, "dp_wait_state_change: time = %d ms, state = %d\n",
-		max_wait_time - wait_cnt, state);
-
-	if (wait_cnt == 0) {
-		dp_err(dp, "dp_wait_state_change: timeout\n");
-		ret = -ETIME;
-	} else
-		ret = wait_cnt;
-
-	return ret;
-}
-
 static void dp_off_by_hpd_plug(struct dp_device *dp)
 {
 	struct drm_connector *connector = &dp->connector;
 	struct drm_device *dev = connector->dev;
-	int timeout = 0;
+	int timeout;
 
 	if (dp->state >= DP_STATE_ON) {
 		if (dp->bist_mode == DP_BIST_OFF) {
@@ -1612,7 +1611,7 @@ static void dp_off_by_hpd_plug(struct dp_device *dp)
 					dp_err(dp, "dp_wait_audio_state_change: timeout for disable\n");
 			}
 
-			/* Wait DRM/KMS Stop */
+			/* Wait for DRM/KMS to call dp_disable() */
 			timeout = dp_wait_state_change(dp, 3000, DP_STATE_ON);
 			if (timeout == -ETIME) {
 				dp_err(dp, "dp_wait_state_change: timeout for disable\n");
