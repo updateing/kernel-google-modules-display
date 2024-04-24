@@ -1540,7 +1540,12 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 
 			decon_force_vblank_event(decon);
 
-			if (!recovering)
+			/*
+			 * Skip recovery on DP DECON.
+			 * Missing framestart means HPD UNPLUG just happened.
+			 * Let the DP unplug handler disable DP as usual.
+			 */
+			if (!recovering && !(decon->config.out_type & DECON_OUT_DP))
 				decon_trigger_recovery(decon);
 		} else {
 			pr_warn("decon%u scheduler late to service fs irq handle (%d fps)\n",
