@@ -1222,8 +1222,23 @@ static int dp_make_audio_infoframe_data(struct dp_device *dp,
 	for (i = 0; i < AUDIO_INFOFRAME_LENGTH; i++)
 		audio_infoframe->data[i] = 0x00;
 
-	/* Data Byte 1, PCM type and audio channel count */
-	audio_infoframe->data[0] = ((u8)dp->hw_config.num_audio_ch - 1);
+	/*
+	 * Currently, DP audio stream is always supposed to be:
+	 * PCM, 2 channels, 48 kHz, 16-bit
+	 */
+	if (dp->hw_config.num_audio_ch != 2)
+		dp_warn(dp, "%s: num_audio_ch != 2\n", __func__);
+	if (dp->hw_config.audio_fs != FS_48KHZ)
+		dp_warn(dp, "%s: audio_fs != 48 kHz\n", __func__);
+	if (dp->hw_config.audio_bit != AUDIO_16_BIT)
+		dp_warn(dp, "%s: audio_bit != 16-bit\n", __func__);
+
+	/* Data Byte 1, PCM type + audio channel count - 1 */
+	audio_infoframe->data[0] = (HDMI_AUDIO_CODING_TYPE_PCM << 4) | 0x1;
+
+	/* Data Byte 2, Sample frequency + sample size */
+	audio_infoframe->data[1] = (HDMI_AUDIO_SAMPLE_FREQUENCY_48000 << 2) |
+				   HDMI_AUDIO_SAMPLE_SIZE_16;
 
 	/* Data Byte 4, how various speaker locations are allocated */
 	if (dp->hw_config.num_audio_ch == 8)
