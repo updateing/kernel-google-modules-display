@@ -194,6 +194,10 @@ static bool dp_edid_hexdump = false;
 module_param(dp_edid_hexdump, bool, 0664);
 MODULE_PARM_DESC(dp_edid_hexdump, "Enable/disable DP EDID hexdump");
 
+static bool dp_audio = true;
+module_param(dp_audio, bool, 0664);
+MODULE_PARM_DESC(dp_audio, "Enable/disable DP audio");
+
 static int dp_emulation_mode;
 
 static void dp_fill_host_caps(struct dp_device *dp)
@@ -1400,6 +1404,11 @@ static void dp_sad_to_audio_info(struct dp_device *dp, struct cea_sad *sads)
 		dp_info(dp, "EDID: PCM audio: ch: %u, sample_rates: 0x%02x, bit_rates: 0x%02x\n",
 			dp->sink.audio_ch_num, dp->sink.audio_sample_rates,
 			dp->sink.audio_bit_rates);
+
+	if (!dp_audio) {
+		dp_info(dp, "DP audio path is disabled: dp_audio=N\n");
+		dp->sink.has_pcm_audio = false;
+	}
 }
 
 static const u8 dp_fake_edid[EDID_LENGTH] = {
