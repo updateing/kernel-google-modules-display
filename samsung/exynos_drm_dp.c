@@ -1189,11 +1189,15 @@ static int dp_set_avi_infoframe(struct dp_device *dp)
 
 static int dp_make_spd_infoframe_data(struct infoframe *spd_infoframe)
 {
-	spd_infoframe->type_code = 0x83;
-	spd_infoframe->version_number = 0x1;
-	spd_infoframe->length = 25;
+	spd_infoframe->type_code = INFOFRAME_PACKET_TYPE_SPD;
+	spd_infoframe->version_number = SPD_INFOFRAME_VERSION;
+	spd_infoframe->length = SPD_INFOFRAME_LENGTH;
 
-	strncpy(&spd_infoframe->data[0], "SEC.GED", 8);
+	/* Data bytes 1-8: vendor name */
+	strncpy(&spd_infoframe->data[0], "Google", 6);
+
+	/* Data bytes 9-24: product description */
+	strncpy(&spd_infoframe->data[8], "Pixel", 5);
 
 	return 0;
 }
