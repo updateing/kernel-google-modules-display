@@ -1152,27 +1152,44 @@ static void dp_set_video_timing(struct dp_device *dp)
 							      SYNC_POSITIVE;
 }
 
-static u8 dp_get_vic(struct dp_device *dp)
+static int dp_make_avi_infoframe_data(struct dp_device *dp, struct infoframe *avi_infoframe)
 {
-	dp->cur_mode_vic = drm_match_cea_mode(&dp->cur_mode);
-	return dp->cur_mode_vic;
-}
+	int ret;
+	struct hdmi_avi_infoframe infoframe;
+	u8 buffer[HDMI_INFOFRAME_SIZE(AVI)];
 
-static int dp_make_avi_infoframe_data(struct dp_device *dp,
-				      struct infoframe *avi_infoframe)
-{
-	int i;
+	ret = drm_hdmi_avi_infoframe_from_display_mode(&infoframe, &dp->connector, &dp->cur_mode);
+	if (ret < 0) {
+		dp_err(dp, "failed to setup AVI infoframe: %d\n", ret);
+		return ret;
+	}
 
-	avi_infoframe->type_code = INFOFRAME_PACKET_TYPE_AVI;
-	avi_infoframe->version_number = AVI_INFOFRAME_VERSION;
-	avi_infoframe->length = AVI_INFOFRAME_LENGTH;
+	/*
+	 * drm_hdmi_avi_infoframe_from_display_mode() might not always figure out
+	 * the picture aspect ratio correctly, if the current mode does not match
+	 * exactly one of the CEA VIC modes. If that's the case, then we try to
+	 * fix it here.
+	 */
+	if (infoframe.picture_aspect == HDMI_PICTURE_ASPECT_NONE) {
+		u16 hdisplay = dp->cur_mode.hdisplay;
+		u16 vdisplay = dp->cur_mode.vdisplay;
 
-	for (i = 0; i < AVI_INFOFRAME_LENGTH; i++)
-		avi_infoframe->data[i] = 0x00;
+		if (hdisplay == vdisplay * 16 / 9)
+			infoframe.picture_aspect = HDMI_PICTURE_ASPECT_16_9;
+		else if (hdisplay == vdisplay * 4 / 3)
+			infoframe.picture_aspect = HDMI_PICTURE_ASPECT_4_3;
+	}
 
-	avi_infoframe->data[0] |= ACTIVE_FORMAT_INFO_PRESENT;
-	avi_infoframe->data[1] |= ACTIVE_PORTION_ASPECT_RATIO;
-	avi_infoframe->data[3] = dp_get_vic(dp);
+	ret = hdmi_avi_infoframe_pack(&infoframe, buffer, sizeof(buffer));
+	if (ret < 0) {
+		dp_err(dp, "failed to pack AVI infoframe: %d\n", ret);
+		return ret;
+	}
+
+	avi_infoframe->type_code = buffer[0];
+	avi_infoframe->version_number = buffer[1];
+	avi_infoframe->length = buffer[2];
+	memcpy(&avi_infoframe->data[0], &buffer[4], avi_infoframe->length);
 
 	return 0;
 }
@@ -1181,8 +1198,8 @@ static int dp_set_avi_infoframe(struct dp_device *dp)
 {
 	struct infoframe avi_infoframe;
 
-	dp_make_avi_infoframe_data(dp, &avi_infoframe);
-	dp_hw_send_avi_infoframe(avi_infoframe);
+	if (!dp_make_avi_infoframe_data(dp, &avi_infoframe))
+		dp_hw_send_avi_infoframe(avi_infoframe);
 
 	return 0;
 }
